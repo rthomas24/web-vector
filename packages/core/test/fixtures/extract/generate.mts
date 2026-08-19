@@ -788,7 +788,6 @@ ${para('parserErrors')}`;
     name: 'next-data-recovery',
     gold: `<h1>Two ways to parse expressions</h1>${body}`,
     spec: {
-      expectFail: 'script-blob __NEXT_DATA__ recovery',
       url,
       type: 'Next.js page whose DOM holds only a title/skeleton while __NEXT_DATA__ carries the article HTML in a `content` field',
       minF1: 0.6,
@@ -874,7 +873,6 @@ ${siteFooter('The Example Paper')}`,
     name: 'jsonld-articlebody-free',
     gold: `<h1>Leaky buckets, gently</h1><p>${bodyText}</p>`,
     spec: {
-      expectFail: 'JSON-LD articleBody recovery',
       url,
       type: 'thin DOM (title + broken lazy-load placeholders) with a free (isAccessibleForFree:true) Article whose articleBody holds the text',
       minF1: 0.6,

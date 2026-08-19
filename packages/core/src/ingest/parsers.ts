@@ -18,6 +18,7 @@ import {
 } from './extract-ensemble.js';
 import { extractMeta } from './extract-meta.js';
 import { prepassDocument } from './extract-prepass.js';
+import { prestripScripts, recoverArticleBody, recoverFromStash } from './extract-recover.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,11 @@ export interface HtmlParserOptions {
   /** Try `defuddle` (optional peer) when the chosen extraction is still thin. */
   useDefuddle?: boolean;
   /**
+   * Use JSON-LD `articleBody` when the DOM yields too little and the page is not paywalled
+   * (`isAccessibleForFree !== false`). Default true.
+   */
+  useJsonLdBody?: boolean;
+  /**
    * `auto` (default): route by page type (Q&A/forum and docs pages use the whole main content,
    * <pre> documents are unwrapped, articles run Readability with a recall guard against the full
    * page); `readability`: classic Readability with whole-page fallback only when thin; `full`:
@@ -157,6 +163,11 @@ export class HtmlParser implements ContentParser {
     // Fragments without <html>/<body> (old rfc-editor pages start with <pre>) lose most nodes in
     // linkedom unless wrapped.
     if (!/<(?:html|body)[\s>]/i.test(html)) html = `<html><body>${html}</body></html>`;
+    // Big script blobs out before DOM parsing (SSR pages ship 400 KB–2 MB of JSON); framework
+    // payloads are stashed for content recovery. Shell detection reads the raw HTML.
+    const rawHtml = html;
+    const pre = prestripScripts(html);
+    html = pre.html;
     const { document } = parseHTML(html);
     // Meta before mutation
     const meta = extractMeta(document, url);
@@ -175,7 +186,7 @@ export class HtmlParser implements ContentParser {
     for (const el of [...document.querySelectorAll(STRIP_SELECTOR)]) el.remove();
     // JS-shell signals (empty #root, "enable JavaScript", hydration markers); decided at the end
     // against the amount of content actually extracted.
-    const js = detectJsShell(html, document);
+    const js = detectJsShell(rawHtml, document);
     // Code/table fidelity pre-pass: highlighter soup → <pre><code class="language-x">, copy
     // buttons and heading anchors removed, data tables marked so Readability keeps them.
     const prepass = prepassDocument(document);
@@ -277,9 +288,37 @@ export class HtmlParser implements ContentParser {
         /* optional */
       }
     }
+    // ── recovery when the DOM yielded too little ─────────────────────────
+    // "Too little" = under minArticleChars, or under a quarter of what the page's own data
+    // declares. JSON-LD articleBody first (paywall-guarded), then __NEXT_DATA__ / RSC / Nuxt.
+    const domTextLen = choice?.candidate.textLen ?? 0;
+    const thin = (declared: number) => domTextLen < minArticle || domTextLen * 4 < declared;
+    const withTitle = (md: string) => {
+      const t = cleanField(meta.title ?? document.title, 200);
+      return t && !/^#\s/.test(md) ? `# ${t}\n\n${md}` : md;
+    };
+    if (this.opts.useJsonLdBody !== false && meta.articleBody && thin(meta.articleBody.length)) {
+      const md = recoverArticleBody(meta.articleBody, meta.accessibleForFree, tidyMarkdown);
+      if (md && md.length > markdown.length) {
+        markdown = withTitle(md);
+        parser = 'jsonld-body';
+      }
+    }
+    if (
+      parser !== 'jsonld-body' &&
+      (pre.stash.nextData || pre.stash.nextFlight || pre.stash.nuxtData)
+    ) {
+      const r = recoverFromStash(pre.stash, tidyMarkdown);
+      if (r && thin(r.markdown.length) && r.markdown.length > markdown.length) {
+        markdown = withTitle(r.markdown);
+        parser = r.source;
+      }
+    }
     // Drop frontmatter mdream may add
     markdown = markdown.replace(/^---\n[\s\S]*?\n---(?:\n+|$)/, '').trim();
-    if (js.suspected && markdown.length < js.maxMarkdownLength) throw needsJsError(url, js);
+    const recovered = /^(jsonld-body|next-data|next-flight|nuxt-data)$/.test(parser);
+    if (!recovered && js.suspected && markdown.length < js.maxMarkdownLength)
+      throw needsJsError(url, js);
     if (markdown.length < minPage) return null;
 
     const title =

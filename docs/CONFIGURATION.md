@@ -89,6 +89,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `allowPrivateNetworks` | `false` | `WEBVECTOR_ALLOW_PRIVATE_NETWORKS` | disables the SSRF guard — only for trusted local setups |
 | `parsers` | `[html, pdf, text]` | — | |
 | `html.strategy` | `auto` | — | HTML extraction: `auto` routes by page type (Q&A/forum and docs pages → whole main content, `<pre>` documents unwrapped, articles → Readability with a recall guard against the full page); `readability` = classic Readability with whole-page fallback only when thin; `full` = always the whole page with nav/chrome removed |
+| `html.useJsonLdBody` | `true` | — | recover the article text from JSON-LD `articleBody` when the DOM yields too little — only when the page is not paywalled (`isAccessibleForFree !== false`); `__NEXT_DATA__` / RSC / Nuxt payloads are walked the same way (always on) |
 | `chunkSize` / `chunkOverlap` | `480` / `60` | `WEBVECTOR_CHUNK_SIZE` / `WEBVECTOR_CHUNK_OVERLAP` | tokens |
 | `maxChunksPerPage` / `minChunkChars` | `200` / `100` | — | |
 | `useProviderContent` | `true` | — | use page text returned by Tavily/Exa instead of fetching |

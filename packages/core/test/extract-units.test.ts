@@ -17,6 +17,12 @@ import {
 } from '../src/ingest/extract-ensemble.js';
 import { extractMeta } from '../src/ingest/extract-meta.js';
 import { detectLang, prepassDocument } from '../src/ingest/extract-prepass.js';
+import {
+  longestContentField,
+  prestripScripts,
+  recoverArticleBody,
+  recoverFromStash,
+} from '../src/ingest/extract-recover.js';
 import { parseResource } from '../src/ingest/index.js';
 import { HtmlParser, tidyMarkdown } from '../src/ingest/parsers.js';
 import { ingestDocument } from '../src/pipeline/ingest-stage.js';
@@ -549,5 +555,87 @@ describe('extract-ensemble', () => {
     const d = await new HtmlParser().parseHtml(html, 'https://ref.example/all');
     expect(d?.markdown).toContain('Section 11');
     expect(d?.markdown).not.toContain('© Foot');
+  });
+});
+
+describe('extract-recover', () => {
+  const big = `{"junk":"${'x'.repeat(20_000)}"}`;
+  it('prestripScripts removes big scripts, keeps ld+json, stashes framework payloads', () => {
+    const html = `<html><head><script type="application/ld+json">{"@type":"Article"}</script><script>${big}</script><script>var a=1;</script></head><body><div id="__next"></div><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"x":1}}}</script><script>self.__next_f.push([1,"1:\\"hello\\"\\n"])</script><script>self.__next_f.push([1,"2:T5,world"])</script></body></html>`;
+    const { html: out, stash } = prestripScripts(html);
+    expect(out).toContain('"@type":"Article"');
+    expect(out).toContain('var a=1;');
+    expect(out).not.toContain('x'.repeat(100));
+    expect(stash.nextData).toContain('pageProps');
+    expect(stash.nextFlight).toBe('1:"hello"\n2:T5,world');
+    expect(stash.strippedBytes).toBeGreaterThan(20_000);
+  });
+  it('longestContentField picks sentence-like text under content-ish keys only', () => {
+    const para = 'This is a real sentence about buckets that goes on for a while. '.repeat(12);
+    const v = {
+      a: { title: para, content: para, meta: { id: 'x'.repeat(2000) } },
+      b: [{ description: `${para}${para}` }],
+    };
+    expect(longestContentField(v)).toBe(`${para}${para}`);
+    expect(longestContentField({ token: 'a'.repeat(3000) })).toBeUndefined();
+    expect(longestContentField({ content: 'https://a.example/x '.repeat(200) })).toBeUndefined();
+  });
+  it('recoverFromStash converts HTML content fields and RSC text chunks to markdown', () => {
+    const html = `<p>${'A sentence with words that count as content here. '.repeat(15)}</p><h2>Head</h2><p>${'More sentences follow in the second paragraph now. '.repeat(10)}</p>`;
+    const r = recoverFromStash(
+      {
+        nextData: JSON.stringify({ props: { pageProps: { post: { content: html } } } }),
+        strippedBytes: 0,
+      },
+      (s) => s.trim(),
+    );
+    expect(r?.source).toBe('next-data');
+    expect(r?.markdown).toContain('## Head');
+    const text = 'Plain sentence number one about parsers. '.repeat(30);
+    const f = recoverFromStash(
+      {
+        nextFlight: `1:I["x"]\n2:T${text.length.toString(16)},${text}\n3:["$","div",null,{"children":"$L4"}]`,
+        strippedBytes: 0,
+      },
+      (s) => s.trim(),
+    );
+    expect(f?.source).toBe('next-flight');
+    expect(f?.markdown).toContain('Plain sentence number one');
+  });
+  it('recoverArticleBody honours the paywall flag strictly', () => {
+    const body = 'A long enough article body sentence to pass the threshold easily. '.repeat(15);
+    expect(recoverArticleBody(body, undefined, (s) => s)).toBeTruthy();
+    expect(recoverArticleBody(body, true, (s) => s)).toBeTruthy();
+    expect(recoverArticleBody(body, false, (s) => s)).toBeUndefined();
+    expect(recoverArticleBody('short', true, (s) => s)).toBeUndefined();
+  });
+  it('HtmlParser recovers from __NEXT_DATA__ only when the DOM is thin, never for paywalled JSON-LD', async () => {
+    const content = `<p>${'The recovered article explains everything in full sentences here. '.repeat(20)}</p>`;
+    const thinHtml = `<!doctype html><html><head><title>Post</title></head><body><div id="__next"><main><h1>Post</h1><div class="skeleton"></div></main></div><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: { post: { content } } } })}</script></body></html>`;
+    const thin = await new HtmlParser().parseHtml(thinHtml, 'https://n.example/p');
+    expect(thin?.parser).toBe('next-data');
+    expect(thin?.markdown).toContain('The recovered article');
+    expect(thin?.markdown.startsWith('# Post')).toBe(true);
+    const richHtml = thinHtml.replace(
+      '<div class="skeleton"></div>',
+      `<article><p>${'Visible server-rendered text that is the real page content. '.repeat(20)}</p></article>`,
+    );
+    const rich = await new HtmlParser().parseHtml(richHtml, 'https://n.example/p');
+    expect(rich?.parser).not.toBe('next-data');
+    expect(rich?.markdown).toContain('Visible server-rendered');
+    const paidHtml = `<!doctype html><html><head><title>Paid</title><script type="application/ld+json">{"@type":"NewsArticle","isAccessibleForFree":false,"articleBody":"${'Secret paragraph sentence that must never surface. '.repeat(20)}"}</script></head><body><main><h1>Paid</h1><p>Teaser only here, subscribe to read the rest of this story today.</p></main></body></html>`;
+    const paid = await new HtmlParser().parseHtml(paidHtml, 'https://p.example/a');
+    expect(paid === null || !paid.markdown.includes('Secret paragraph')).toBe(true);
+    const freeHtml = paidHtml
+      .replace('"isAccessibleForFree":false', '"isAccessibleForFree":true')
+      .replace('Secret paragraph', 'Free paragraph');
+    const free = await new HtmlParser().parseHtml(freeHtml, 'https://p.example/a');
+    expect(free?.parser).toBe('jsonld-body');
+    expect(free?.markdown).toContain('Free paragraph');
+    const off = await new HtmlParser({ useJsonLdBody: false }).parseHtml(
+      freeHtml,
+      'https://p.example/a',
+    );
+    expect(off === null || off.parser !== 'jsonld-body').toBe(true);
   });
 });

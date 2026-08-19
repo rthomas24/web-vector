@@ -122,7 +122,10 @@ export async function buildComponents(
   });
 
   const fetcher = new Fetcher({ ...cfg.ingestion, fetch: fetchImpl, logger });
-  const parsers = createParsers(cfg.ingestion.parsers, { strategy: cfg.ingestion.html.strategy });
+  const parsers = createParsers(cfg.ingestion.parsers, {
+    strategy: cfg.ingestion.html.strategy,
+    useJsonLdBody: cfg.ingestion.html.useJsonLdBody,
+  });
   const pageCache = new PageCache(cfg.ingestion.cache);
 
   const llm = code.retrieval?.llm;

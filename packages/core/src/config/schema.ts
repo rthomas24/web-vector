@@ -230,8 +230,13 @@ export const ingestionConfigSchema = z.object({
        * `full`: always the whole page with navigation/chrome removed.
        */
       strategy: z.enum(['auto', 'readability', 'full']).default('auto'),
+      /**
+       * Use the JSON-LD `articleBody` when the DOM yields too little text and the page is not
+       * paywalled (`isAccessibleForFree !== false`, including `hasPart`). Never overrides good DOM output.
+       */
+      useJsonLdBody: z.boolean().default(true),
     })
-    .default({ strategy: 'auto' }),
+    .default({ strategy: 'auto', useJsonLdBody: true }),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
