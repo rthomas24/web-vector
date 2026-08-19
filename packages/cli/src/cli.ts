@@ -43,6 +43,32 @@ function globalOverrides(): { overrides: WebVectorConfig; configFile: string | f
   return { overrides, configFile: o.config === false ? false : o.config };
 }
 
+/** Parse durations like `90s`, `15m`, `2h`, `7d` (or plain ms) into milliseconds. */
+export function parseDuration(v: string): number {
+  const m = /^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d|w)?\s*$/i.exec(v);
+  if (!m)
+    throw new WebVectorError(`Invalid duration "${v}" (use e.g. 30s, 15m, 2h, 7d)`, {
+      code: 'INVALID_CONFIG',
+    });
+  const n = Number(m[1]);
+  const unit = (m[2] ?? 'ms').toLowerCase();
+  const mult =
+    { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 }[unit] ?? 1;
+  return Math.round(n * mult);
+}
+
+/** Cache flags shared by search/fetch: --max-age <dur>, --no-cache (bypass), --cache-only. */
+function cacheOptions(opts: { maxAge?: string; cache?: boolean; cacheOnly?: boolean }) {
+  return {
+    maxAgeMs: opts.maxAge ? parseDuration(opts.maxAge) : undefined,
+    cacheMode: opts.cacheOnly
+      ? ('readOnly' as const)
+      : opts.cache === false
+        ? ('bypass' as const)
+        : undefined,
+  };
+}
+
 function fail(err: unknown): never {
   const e = WebVectorError.from(err, { code: 'INTERNAL' });
   console.error(`\n✖ ${e.code}: ${e.message}`);
@@ -69,6 +95,9 @@ program
   .option('--md', 'print markdown (default)')
   .option('--stats', 'print stage timings')
   .option('--explain', 'print a per-passage ranking breakdown (bm25/vector ranks, fused score)')
+  .option('--max-age <duration>', 'accept cached pages at most this old (e.g. 2h, 7d)')
+  .option('--no-cache', 'ignore cached pages (still fills the cache)')
+  .option('--cache-only', 'serve only from the page cache, never fetch')
   .option('-q, --quiet', 'no progress output')
   .action(async (query: string, opts) => {
     const { overrides, configFile } = globalOverrides();
@@ -107,6 +136,7 @@ program
         sessionId: opts.session,
         rerank: opts.rerank !== undefined ? true : undefined,
         explain: opts.explain,
+        ...cacheOptions(opts),
       });
       if (!opts.quiet && !opts.json) process.stderr.write('\n');
       if (opts.json) console.log(JSON.stringify(res, null, 2));
@@ -126,6 +156,11 @@ program
         console.error(
           `\n— search ${s.search.provider} ${s.search.ms}ms · pages ${s.ingest.ok}/${s.ingest.requested} ${s.ingest.ms}ms · embed ${s.embed.chunks} chunks (${s.embed.provider}/${s.embed.model}) ${s.embed.ms}ms · retrieve ${s.retrieve.candidates} cands ${s.retrieve.ms}ms · total ${Date.now() - t0}ms`,
         );
+        const u = s.usage;
+        if (u)
+          console.error(
+            `  usage: search ${u.search.calls} call(s) · embed ${u.embed.requests} req / ${u.embed.texts} texts (${u.embed.cached} cached) · http ${u.http.requests} req, ${u.http.cacheHits} cache hits, ${u.http.notModified} 304, ${u.http.coalesced} coalesced, ${Math.round(u.http.bytes / 1024)} KiB${u.estimatedCostUsd !== undefined ? ` · est. $${u.estimatedCostUsd.toFixed(4)} (${u.pricingNote})` : ''}`,
+          );
         if (s.warnings.length) console.error(`  warnings: ${s.warnings.join(' | ')}`);
       }
       await wv.close();
@@ -139,16 +174,20 @@ program
   .description('Fetch one URL as Markdown (optionally only passages relevant to --query)')
   .option('-q, --query <text>', 'return passages relevant to this query')
   .option('-k, --top-k <n>', 'passages', (v) => Number(v))
+  .option('--max-age <duration>', 'accept a cached copy at most this old (e.g. 2h, 7d)')
+  .option('--no-cache', 'ignore the cached copy (still fills the cache)')
+  .option('--cache-only', 'serve only from the page cache, never fetch')
   .option('--json', 'print JSON')
   .action(async (url: string, opts) => {
     const { overrides, configFile } = globalOverrides();
     try {
       const wv = await WebVector.create(overrides, { configFile });
+      const cache = cacheOptions(opts);
       if (opts.query) {
-        const res = await wv.fetchAndRetrieve(url, opts.query, { topK: opts.topK });
+        const res = await wv.fetchAndRetrieve(url, opts.query, { topK: opts.topK, ...cache });
         console.log(opts.json ? JSON.stringify(res, null, 2) : res.markdown);
       } else {
-        const doc = await wv.fetch(url);
+        const doc = await wv.fetch(url, cache);
         console.log(
           opts.json
             ? JSON.stringify(doc, null, 2)

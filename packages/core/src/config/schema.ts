@@ -279,6 +279,29 @@ export const loggingConfigSchema = z.object({
   level: z.enum(['silent', 'error', 'warn', 'info', 'debug']).default('warn'),
 });
 
+const priceTableSchema = z.object({
+  embed: z.record(z.string(), z.number().min(0)).optional(),
+  search: z.record(z.string(), z.number().min(0)).optional(),
+  rerank: z.record(z.string(), z.number().min(0)).optional(),
+});
+
+/** Observability. Nothing here ever sends data anywhere by itself. */
+export const telemetryConfigSchema = z.object({
+  /**
+   * Add `stats.usage.estimatedCostUsd` from a static list-price table (an ESTIMATE, clearly
+   * labelled). `true` uses the bundled table; an object overrides entries
+   * (`{ embed: { 'openai/text-embedding-3-small': 0.02 }, search: { brave: 5 } }`).
+   */
+  pricing: z.union([z.boolean(), priceTableSchema]).default(false),
+  /**
+   * Emit OpenTelemetry spans through `@opentelemetry/api` (optional peer; a no-op without an SDK
+   * registered by the host application). Env: WEBVECTOR_OTEL=1.
+   */
+  otel: z.boolean().default(false),
+  /** Include query text / passage excerpts in span attributes (off: counts and ids only). */
+  captureContent: z.boolean().default(false),
+});
+
 export const webVectorFileConfigSchema = z.object({
   search: searchConfigSchema.default(searchConfigSchema.parse({})),
   embeddings: embeddingsConfigSchema.default(embeddingsConfigSchema.parse({})),
@@ -287,6 +310,7 @@ export const webVectorFileConfigSchema = z.object({
   ingestion: ingestionConfigSchema.default(ingestionConfigSchema.parse({})),
   output: outputConfigSchema.default(outputConfigSchema.parse({})),
   logging: loggingConfigSchema.default(loggingConfigSchema.parse({})),
+  telemetry: telemetryConfigSchema.default(telemetryConfigSchema.parse({})),
 });
 
 export type WebVectorFileConfig = z.infer<typeof webVectorFileConfigSchema>;

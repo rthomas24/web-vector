@@ -137,6 +137,10 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): WebVectorCo
       cache: env.WEBVECTOR_CACHE_DIR ? { dir: cacheDir(env.WEBVECTOR_CACHE_DIR) } : undefined,
     },
     output: { markdown: bool(env.WEBVECTOR_OUTPUT_MARKDOWN) },
+    telemetry: {
+      otel: bool(env.WEBVECTOR_OTEL),
+      pricing: bool(env.WEBVECTOR_PRICING),
+    },
     logging: {
       level: env.WEBVECTOR_LOG_LEVEL as 'silent' | 'error' | 'warn' | 'info' | 'debug' | undefined,
     },

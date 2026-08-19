@@ -6,6 +6,7 @@
 
 export type { CacheDbOptions, CacheStats, PageRow } from './cache/db.js';
 export { CACHE_DB_FILENAME, CacheDb, openCacheDb, resolveCacheDir } from './cache/db.js';
+export { FetchCoordinator, isNegativeCacheable, SingleFlight } from './cache/single-flight.js';
 export type {
   DeepPartial,
   LoadConfigOptions,
@@ -79,7 +80,7 @@ export {
   webSearchInputSchema,
   webSearchToolDefinition,
 } from './pipeline/tool.js';
-export type { WebVectorInitOptions } from './pipeline/webvector.js';
+export type { FetchOptions, WebVectorInitOptions } from './pipeline/webvector.js';
 export { mergeSearchResults, WebVector } from './pipeline/webvector.js';
 export {
   createReranker,
@@ -113,6 +114,14 @@ export {
   registerVectorStore,
 } from './stores/index.js';
 export type * from './types.js';
+export { currentUsage, UsageMeter } from './usage/meter.js';
+export type { PriceTable } from './usage/pricing.js';
+export {
+  DEFAULT_PRICING,
+  estimateCostUsd,
+  PRICING_AS_OF,
+  resolvePricing,
+} from './usage/pricing.js';
 export type { WebVectorEvents } from './util/events.js';
 export { contentHash, sha256, uuidFromString } from './util/hash.js';
 export { createLogger, silentLogger } from './util/logger.js';

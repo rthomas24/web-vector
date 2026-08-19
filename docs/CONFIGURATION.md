@@ -94,6 +94,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `cache.enabled` / `cache.ttlMs` / `cache.maxPages` | `true` / `900000` (15 min) / `500` | — | page cache: in-process LRU (`maxPages`) in front of the disk layer; past `ttlMs` a page is revalidated (ETag / Last-Modified → 304 = hit) or refetched. `0` = never expires. A longer `Cache-Control: max-age` from the origin extends freshness |
 | `cache.dir` | `auto` | `WEBVECTOR_CACHE_DIR` (`auto`, a path, or `false`) | `auto` → `pages.sqlite` in `$XDG_CACHE_HOME/webvector` (`~/.cache/webvector`); a path → `pages.sqlite` there; `false` → memory only. Needs `node:sqlite` (Node ≥ 22.13, feature-detected); explicit dirs fall back to one JSON file per URL without it, `auto` falls back to memory. WAL + busy timeout: several processes (CLI + MCP) can share the file |
 | `cache.maxDiskPages` / `cache.maxDiskBytes` | `20000` / `1073741824` (1 GiB) | — | disk budgets; least-recently-used pages are evicted first (`webvector cache stats\|prune\|clear` to inspect) |
+| `cache.negativeTtlMs` | `15000` | — | remember robots-blocked / SSRF-blocked / 4xx URLs for this long (0 = off) |
 
 ## output / logging
 
@@ -106,6 +107,34 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 
 Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation).
 
+## telemetry
+
+Nothing here sends data anywhere by itself.
+
+| key | default | env | notes |
+|---|---|---|---|
+| `telemetry.pricing` | `false` | `WEBVECTOR_PRICING` | `true` adds `stats.usage.estimatedCostUsd` from a bundled list-price table (an **estimate**, labelled as such via `pricingNote`); an object overrides entries: `{ embed: { 'openai/text-embedding-3-small': 0.02 }, search: { brave: 5 }, rerank: { cohere: 2 } }` (USD per 1M tokens / per 1 000 calls). Table: `docs/pricing.json` |
+| `telemetry.otel` | `false` | `WEBVECTOR_OTEL` | emit OpenTelemetry spans via `@opentelemetry/api` (optional peer; no-op without an SDK) |
+| `telemetry.captureContent` | `false` | — | include query text / passage excerpts in span attributes |
+
+### `stats.usage` and the `usage` event
+
+Every `research()` / `fetchAndRetrieve()` result carries `stats.usage` (also emitted as `wv.on('usage', …)`):
+`search: { provider, calls }`, `embed: { provider, model, requests, texts, tokens (≈ chars/4), cached }`, `rerank?: { provider, requests, documents }`,
+`http: { requests, bytes, cacheHits, notModified, coalesced, negativeHits }` (also available as `stats.http`), and `estimatedCostUsd` / `pricingNote` when pricing is on.
+`sources[].fromCache` / `sources[].revalidated` say where each page came from. `webvector search --stats` prints a one-line summary.
+
 ## Per-call options (`research(query, opts)` / tool arguments)
 
-`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens`. Numeric limits are capped by the configured values above.
+`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens`, `explain`. Numeric limits are capped by the configured values above.
+
+Cache policy per call (`research()`, `fetch()`, `fetchAndRetrieve()`; CLI `--max-age 2d`, `--no-cache`, `--cache-only`):
+
+| option | effect |
+|---|---|
+| `maxAgeMs` | accept cached pages at most this old — overrides `ingestion.cache.ttlMs` and any `Cache-Control: max-age`; older copies are revalidated (ETag / Last-Modified → 304 reuses the parsed page) or refetched |
+| `cacheMode: 'default'` | cache, revalidate when stale (default) |
+| `cacheMode: 'bypass'` | always fetch (still writes the fresh page and skips the negative cache) |
+| `cacheMode: 'readOnly'` | serve only from the cache, never touch the network; stale copies are fine, misses fail with `CACHE_MISS` (research degrades to search snippets) |
+
+Concurrent identical page fetches (by canonical URL) and searches (provider + query + options) are coalesced into one request (`stats.usage.http.coalesced`); robots-blocked / SSRF-blocked / 4xx URLs are remembered for `ingestion.cache.negativeTtlMs` (default 15 s) so bursts of retries cost nothing.

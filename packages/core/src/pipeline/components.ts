@@ -3,6 +3,7 @@
  * fetcher, parsers, caches, expander, reranker) from the resolved configuration.
  */
 
+import { FetchCoordinator } from '../cache/single-flight.js';
 import type { WebVectorConfig, WebVectorFileConfig } from '../config/index.js';
 import { autoEmbeddingProviderName, createEmbeddingProvider } from '../embeddings/index.js';
 import { WebVectorError } from '../errors.js';
@@ -24,6 +25,7 @@ import type {
   Reranker,
   VectorStore,
 } from '../types.js';
+import { meteredEmbedder, meteredReranker } from '../usage/meter.js';
 import { SessionRegistry } from './session.js';
 
 export interface Components {
@@ -36,6 +38,8 @@ export interface Components {
   fetcher: Fetcher;
   parsers: ContentParser[];
   pageCache: PageCache;
+  /** Single-flight coalescing + negative cache for page fetches and searches. */
+  coordinator: FetchCoordinator;
   expander: QueryExpander;
   reranker?: Reranker;
   countTokens: TokenCounter;
@@ -84,8 +88,10 @@ export async function buildComponents(
     logger,
   });
 
-  const embedder = code.embeddings?.instance ?? (await resolveEmbedder(cfg, code, logger));
-  await embedder?.init?.();
+  const rawEmbedder = code.embeddings?.instance ?? (await resolveEmbedder(cfg, code, logger));
+  await rawEmbedder?.init?.();
+  // Metered wrapper: attributes embed() requests to the calling research()/fetch() (stats.usage).
+  const embedder = rawEmbedder ? meteredEmbedder(rawEmbedder) : undefined;
   const dimensions = embedder ? await embedder.dimensions() : 0;
 
   let sharedStore = code.store?.instance;
@@ -125,11 +131,13 @@ export async function buildComponents(
   const parsers = createParsers(cfg.ingestion.parsers);
   const pageCache = await PageCache.create(cfg.ingestion.cache, logger);
   if (pageCache.backend === 'sqlite') logger.debug(`page cache: sqlite at ${pageCache.location}`);
+  const coordinator = new FetchCoordinator({ negativeTtlMs: cfg.ingestion.cache.negativeTtlMs });
 
   const llm = code.retrieval?.llm;
   const expander =
     code.retrieval?.expander ?? (llm ? new LlmExpander(llm) : new HeuristicExpander());
-  const reranker = code.retrieval?.reranker ?? resolveReranker(cfg, llm, logger);
+  const rawReranker = code.retrieval?.reranker ?? resolveReranker(cfg, llm, logger);
+  const reranker = rawReranker ? meteredReranker(rawReranker) : undefined;
   const countTokens = await loadTokenCounter();
 
   logger.info(
@@ -143,6 +151,7 @@ export async function buildComponents(
     fetcher,
     parsers,
     pageCache,
+    coordinator,
     expander,
     reranker,
     countTokens,

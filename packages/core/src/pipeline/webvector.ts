@@ -25,8 +25,14 @@ import {
 } from '../config/index.js';
 import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
-import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
+import {
+  type CachedPage,
+  type CachePolicy,
+  documentFromProviderContent,
+  ingestUrl,
+} from '../ingest/index.js';
 import type {
+  CacheMode,
   Failure,
   Logger,
   ParsedDocument,
@@ -38,10 +44,12 @@ import type {
   SearchResult,
   SourceSummary,
   Stage,
+  UsageStats,
 } from '../types.js';
+import { UsageMeter } from '../usage/meter.js';
+import { estimateCostUsd, PRICING_NOTE, resolvePricing } from '../usage/pricing.js';
 import { settleWithDeadline } from '../util/concurrency.js';
 import { TypedEmitter, type WebVectorEvents } from '../util/events.js';
-import { sha256 } from '../util/hash.js';
 import { createLogger } from '../util/logger.js';
 import { canonicalizeUrl } from '../util/url.js';
 import { buildComponents, type Components } from './components.js';
@@ -137,18 +145,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   }
 
   /** Fetch + parse one URL with the same guards as the pipeline. */
-  async fetch(
-    url: string,
-    opts: { signal?: AbortSignal; useCache?: boolean } = {},
-  ): Promise<ParsedDocument> {
-    const c = await this.ensure();
-    const outcome = await ingestUrl(url, {
-      fetcher: c.fetcher,
-      parsers: c.parsers,
-      cache: opts.useCache === false ? undefined : c.pageCache,
-      logger: this.logger,
-      signal: opts.signal,
-    });
+  async fetch(url: string, opts: FetchOptions = {}): Promise<ParsedDocument> {
+    const outcome = await this.fetchOutcome(url, opts);
     if (!outcome.ok || !outcome.page) {
       const f = outcome.failure as Failure;
       throw new WebVectorError(f.message, {
@@ -159,25 +157,67 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return outcome.page.doc;
   }
 
+  /** ingestUrl through the page cache (per-call policy) and the single-flight coordinator. */
+  private async fetchOutcome(url: string, opts: FetchOptions) {
+    const c = await this.ensure();
+    const policy = cachePolicyOf(opts);
+    const canonical = canonicalizeUrl(url);
+    return c.coordinator.ingest(
+      canonical,
+      () =>
+        ingestUrl(url, {
+          fetcher: c.fetcher,
+          parsers: c.parsers,
+          cache: opts.useCache === false ? undefined : c.pageCache,
+          cachePolicy: policy,
+          logger: this.logger,
+          signal: opts.signal,
+        }),
+      { bypassNegative: policy?.mode === 'bypass' },
+    );
+  }
+
   /** Fetch one URL and return only the passages relevant to `query`. */
   async fetchAndRetrieve(
     url: string,
     query: string,
-    opts: { topK?: number; signal?: AbortSignal; explain?: boolean } = {},
+    opts: FetchOptions & { topK?: number; explain?: boolean } = {},
   ): Promise<ResearchResult> {
     const c = await this.ensure();
+    const meter = this.newMeter(c);
+    return meter.run(() => this.doFetchAndRetrieve(c, meter, url, query, opts));
+  }
+
+  private async doFetchAndRetrieve(
+    c: Components,
+    meter: UsageMeter,
+    url: string,
+    query: string,
+    opts: FetchOptions & { topK?: number; explain?: boolean },
+  ): Promise<ResearchResult> {
     const t0 = Date.now();
-    const doc = await this.fetch(url, { signal: opts.signal });
+    const outcome = await this.fetchOutcome(url, opts);
+    if (!outcome.ok || !outcome.page) {
+      const f = outcome.failure as Failure;
+      throw new WebVectorError(f.message, {
+        code: f.code as WebVectorError['code'],
+        stage: 'ingest',
+      });
+    }
+    const page = outcome.page;
+    const doc = page.doc;
+    this.countHttp(meter, outcome);
     const session = ephemeralSession(undefined, c.bm25Options);
     if (c.embedder) await session.store.init?.(c.dimensions, c.embedder.model);
     const { chunks, stats } = await ingestDocument(c, this.embeddingCache, {
       doc,
-      page: { pageHash: sha256(doc.markdown), fetchedAt: new Date().toISOString() },
+      page,
       query,
       session,
       chunking: this.chunkingOptions(),
       signal: opts.signal,
     });
+    meter.usage.embed.cached += stats.cached;
     const warnings: string[] = [];
     const r = await runRetrieveStage(c, this.config.retrieval, {
       session,
@@ -197,21 +237,35 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         {
           url: doc.url,
           title: doc.title,
-          status: 'ok',
+          status: outcome.cached ? 'cached' : 'ok',
           chunks: chunks.length,
           passageIndices: r.passages.map((p) => p.index),
           searchRank: 1,
           contentType: doc.contentType,
+          fetchedAt: page.fetchedAt,
+          bytes: page.bytes,
+          fromCache: !!outcome.cached,
+          revalidated: !!outcome.revalidated,
         },
       ],
       failures: [],
       stats: {
         search: { provider: 'none', attempts: [], resultCount: 0, ms: 0 },
-        ingest: { requested: 1, fetched: 1, ok: 1, failed: 0, cached: 0, bytes: 0, ms: 0 },
+        ingest: {
+          requested: 1,
+          fetched: outcome.cached ? 0 : 1,
+          ok: 1,
+          failed: 0,
+          cached: outcome.cached ? 1 : 0,
+          bytes: page.bytes,
+          ms: outcome.ms,
+        },
         embed: this.embedStats(c, stats),
         retrieve: { candidates: r.candidates, queries: 1, reranked: r.reranked, ms: 0 },
         totalMs: Date.now() - t0,
         warnings,
+        http: meter.usage.http,
+        usage: this.finishUsage(meter),
       },
     };
     result.markdown = renderMarkdown(result, {
@@ -236,10 +290,20 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       throw new WebVectorError('WebVector instance is closed.', { code: 'INTERNAL' });
     query = query.trim();
     if (!query) throw new WebVectorError('Query must not be empty.', { code: 'INVALID_CONFIG' });
-
-    const t0 = Date.now();
     const c = await this.ensure();
+    const meter = this.newMeter(c);
+    return meter.run(() => this.doResearch(c, meter, query, opts));
+  }
+
+  private async doResearch(
+    c: Components,
+    meter: UsageMeter,
+    query: string,
+    opts: ResearchOptions,
+  ): Promise<ResearchResult> {
+    const t0 = Date.now();
     const cfg = this.config;
+    const cachePolicy = cachePolicyOf(opts);
     // Internal controller so the run deadline really cancels in-flight fetch/parse/embed work.
     const runAbort = new AbortController();
     const signal = opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal;
@@ -279,6 +343,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       },
     });
     const results = searched.results;
+    meter.usage.search.calls += searched.attempts.length;
     const searchMs = Date.now() - ts;
     stageDone('search', searchMs);
     this.emit('search:complete', { results, ms: searchMs, provider: c.search.id });
@@ -339,7 +404,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           return;
         }
         this.emit('page:start', { url: r.url });
-        const fetched = await this.fetchPage(c, r, signal);
+        const fetched = await this.fetchPage(c, r, signal, cachePolicy, meter);
         if ('failure' in fetched) {
           failures.push(fetched.failure);
           summary.failure = fetched.failure;
@@ -347,7 +412,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           this.emit('page:error', { url: r.url, failure: fetched.failure });
           return;
         }
-        const { page, cachedHit, ms } = fetched;
+        const { page, cachedHit, revalidated, ms } = fetched;
         bytes += page.bytes;
         Object.assign(summary, {
           contentType: page.doc.contentType,
@@ -355,6 +420,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           bytes: page.bytes,
           title: page.doc.title || r.title,
           ms,
+          fromCache: cachedHit,
+          revalidated,
         });
 
         const { chunks, embedded, stats } = await ingestDocument(c, this.embeddingCache, {
@@ -381,6 +448,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         embedTotals.cached += stats.cached;
         embedTotals.batches += stats.batches;
         embedTotals.ms += stats.ms;
+        meter.usage.embed.cached += stats.cached;
         summary.status = cachedHit ? 'cached' : 'ok';
         summary.chunks = chunks.length;
         okPages++;
@@ -531,6 +599,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         retrieve: { candidates, queries: queries.length, reranked, ms: retrieveMs },
         totalMs: Date.now() - t0,
         warnings,
+        http: meter.usage.http,
+        usage: this.finishUsage(meter),
       },
       degraded,
       sessionId: opts.sessionId,
@@ -551,9 +621,12 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   private async fetchPage(
     c: Components,
     r: SearchResult,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    cachePolicy: CachePolicy | undefined,
+    meter: UsageMeter,
   ): Promise<
-    { page: CachedPage; cachedHit: boolean; ms: number } | { failure: Failure; ms: number }
+    | { page: CachedPage; cachedHit: boolean; revalidated: boolean; ms: number }
+    | { failure: Failure; ms: number }
   > {
     const content =
       this.config.ingestion.useProviderContent && typeof r.extra?.content === 'string'
@@ -563,19 +636,69 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       return {
         page: documentFromProviderContent(r.url, r.title, content),
         cachedHit: false,
+        revalidated: false,
         ms: 0,
       };
     }
-    const outcome = await ingestUrl(r.url, {
-      fetcher: c.fetcher,
-      parsers: c.parsers,
-      cache: c.pageCache,
-      logger: this.logger,
-      signal,
-    });
+    const outcome = await c.coordinator.ingest(
+      canonicalizeUrl(r.url),
+      () =>
+        ingestUrl(r.url, {
+          fetcher: c.fetcher,
+          parsers: c.parsers,
+          cache: c.pageCache,
+          cachePolicy,
+          logger: this.logger,
+          signal,
+        }),
+      { bypassNegative: cachePolicy?.mode === 'bypass' },
+    );
+    this.countHttp(meter, outcome);
     if (!outcome.ok || !outcome.page)
       return { failure: outcome.failure as Failure, ms: outcome.ms };
-    return { page: outcome.page, cachedHit: !!outcome.cached, ms: outcome.ms };
+    return {
+      page: outcome.page,
+      cachedHit: !!outcome.cached,
+      revalidated: !!outcome.revalidated,
+      ms: outcome.ms,
+    };
+  }
+
+  private newMeter(c: Components): UsageMeter {
+    return new UsageMeter({
+      search: c.search.id,
+      embedProvider: c.embedder?.id ?? 'none',
+      embedModel: c.embedder?.model ?? 'bm25',
+    });
+  }
+
+  /** Attribute one ingest outcome to the call's HTTP counters. */
+  private countHttp(meter: UsageMeter, o: Awaited<ReturnType<typeof ingestUrl>>): void {
+    const h = meter.usage.http;
+    if (o.coalesced) return; // the request belongs to the call that started it
+    if (o.revalidated) {
+      h.requests++;
+      h.notModified++;
+    } else if (o.cached) h.cacheHits++;
+    else if (o.ok || (o.failure && o.failure.code !== 'CACHE_MISS')) {
+      h.requests++;
+      if (o.page) h.bytes += o.page.bytes;
+    }
+  }
+
+  /** Finalise a call's usage: optional cost estimate, then emit `usage`. */
+  private finishUsage(meter: UsageMeter): UsageStats {
+    const u = meter.usage;
+    const pricing = this.config.telemetry.pricing;
+    if (pricing) {
+      const usd = estimateCostUsd(u, resolvePricing(pricing));
+      if (usd !== undefined) {
+        u.estimatedCostUsd = usd;
+        u.pricingNote = PRICING_NOTE;
+      }
+    }
+    this.emit('usage', u);
+    return u;
   }
 
   private resolveSession(sessionId: string | undefined, c: Components): Session {
@@ -615,6 +738,21 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       ...s,
     };
   }
+}
+
+/** Options for `fetch()` / `fetchAndRetrieve()`. */
+export interface FetchOptions {
+  signal?: AbortSignal;
+  /** `false` disables the page cache for this call entirely (no read, no write). */
+  useCache?: boolean;
+  /** Accept cached pages at most this old (ms); see `ResearchOptions.maxAgeMs`. */
+  maxAgeMs?: number;
+  cacheMode?: CacheMode;
+}
+
+function cachePolicyOf(o: { maxAgeMs?: number; cacheMode?: CacheMode }): CachePolicy | undefined {
+  if (o.maxAgeMs === undefined && !o.cacheMode) return undefined;
+  return { maxAgeMs: o.maxAgeMs, mode: o.cacheMode };
 }
 
 /** Degraded output when nothing could be fetched: the search snippets themselves. */

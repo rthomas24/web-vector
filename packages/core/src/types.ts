@@ -279,6 +279,52 @@ export interface SourceSummary {
   bytes?: number;
   ms?: number;
   failure?: Failure;
+  /** Page came from the page cache (fresh hit, or a stale copy confirmed by 304). */
+  fromCache?: boolean;
+  /** The cached copy was revalidated with a conditional request (304 Not Modified). */
+  revalidated?: boolean;
+}
+
+/** HTTP-level counters for one call (page fetches; searches/embeddings are counted separately). */
+export interface HttpUsage {
+  /** Network requests made for pages (including conditional revalidations). */
+  requests: number;
+  /** Response bytes read. */
+  bytes: number;
+  /** Pages served from the page cache without a request. */
+  cacheHits: number;
+  /** Conditional requests answered 304 (cached copy reused). */
+  notModified: number;
+  /** Fetches that joined an identical in-flight request instead of starting their own. */
+  coalesced: number;
+  /** URLs skipped because a recent robots/4xx failure was remembered (negative cache). */
+  negativeHits: number;
+}
+
+/**
+ * Cost/quota accounting for one call: what was actually spent on providers and the network.
+ * Also emitted as the `usage` event. `estimatedCostUsd` is only present when `telemetry.pricing`
+ * is enabled and is an ESTIMATE from a static list-price table — never a bill.
+ */
+export interface UsageStats {
+  search: { provider: string; calls: number };
+  embed: {
+    provider: string;
+    model: string;
+    /** embed() requests actually sent (cache hits do not count). */
+    requests: number;
+    /** Texts embedded (documents + queries). */
+    texts: number;
+    /** Approximate input tokens (chars / 4) — an estimate unless the provider reports usage. */
+    tokens?: number;
+    /** Chunk embeddings served from the in-memory / persistent embedding cache. */
+    cached: number;
+  };
+  rerank?: { provider: string; requests: number; documents: number };
+  http: HttpUsage;
+  estimatedCostUsd?: number;
+  /** Always set alongside `estimatedCostUsd`. */
+  pricingNote?: string;
 }
 
 export interface ResearchStats {
@@ -309,6 +355,10 @@ export interface ResearchStats {
   retrieve: { candidates: number; queries: number; reranked: boolean; ms: number };
   totalMs: number;
   warnings: string[];
+  /** HTTP counters (same object as `usage.http`). */
+  http?: HttpUsage;
+  /** Provider/network usage for this call (see `UsageStats`). */
+  usage?: UsageStats;
 }
 
 export interface ResearchResult {
@@ -348,7 +398,19 @@ export interface ResearchOptions {
   maxOutputTokens?: number;
   /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
   explain?: boolean;
+  /**
+   * Accept cached pages at most this old (ms). Overrides `ingestion.cache.ttlMs` and any
+   * `Cache-Control: max-age` for this call; older copies are revalidated or refetched.
+   */
+  maxAgeMs?: number;
+  /**
+   * `default` (cache, revalidate when stale) · `bypass` (always fetch, still fills the cache) ·
+   * `readOnly` (serve only from cache, never touch the network — stale copies allowed).
+   */
+  cacheMode?: CacheMode;
 }
+
+export type CacheMode = 'default' | 'bypass' | 'readOnly';
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 

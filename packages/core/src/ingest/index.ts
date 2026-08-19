@@ -472,6 +472,8 @@ export interface IngestOutcome {
   cached?: boolean;
   /** True when a stale cached copy was confirmed by a 304 Not Modified. */
   revalidated?: boolean;
+  /** True when this call joined an identical in-flight fetch (single-flight coalescing). */
+  coalesced?: boolean;
   failure?: Failure;
   ms: number;
 }
