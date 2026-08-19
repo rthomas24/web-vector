@@ -469,11 +469,17 @@ export class PdfParser implements ContentParser {
         () => {},
       );
     }
-    const markdown = tidyMarkdown(
-      used
-        .map((p, i) => `${normalizePdfPage(p)}${i < used.length - 1 ? '\n\n---\n\n' : ''}`)
-        .join(''),
-    );
+    // Pages are tidied one by one so the recorded page offsets stay exact; empty pages (scans,
+    // figures) are skipped. `pages` lets the ingest stage cite `url#page=N`.
+    let markdown = '';
+    const pages: { start: number; page: number }[] = [];
+    used.forEach((p, i) => {
+      const md = tidyMarkdown(normalizePdfPage(p));
+      if (!md) return;
+      if (markdown) markdown += '\n\n---\n\n';
+      pages.push({ start: markdown.length, page: i + 1 });
+      markdown += md;
+    });
     if (markdown.replace(/[-\s]/g, '').length < 40) return null;
     if (!title) {
       // Heuristic: first short line without terminal punctuation among the opening lines (paper titles).
@@ -499,6 +505,8 @@ export class PdfParser implements ContentParser {
       text: markdownToText(markdown),
       byline,
       publishedAt,
+      pages,
+      wordCount: countWords(markdown),
       contentType: 'application/pdf',
       parser: `unpdf(${totalPages}p)`,
     };

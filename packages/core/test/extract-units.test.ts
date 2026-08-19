@@ -25,8 +25,9 @@ import {
   recoverFromStash,
 } from '../src/ingest/extract-recover.js';
 import { parseResource } from '../src/ingest/index.js';
-import { HtmlParser, tidyMarkdown } from '../src/ingest/parsers.js';
-import { ingestDocument } from '../src/pipeline/ingest-stage.js';
+import { HtmlParser, PdfParser, tidyMarkdown } from '../src/ingest/parsers.js';
+import { citationFor } from '../src/pipeline/format.js';
+import { ingestDocument, pageAt } from '../src/pipeline/ingest-stage.js';
 import { ephemeralSession } from '../src/pipeline/session.js';
 import { contentHash } from '../src/util/hash.js';
 
@@ -743,5 +744,94 @@ describe('same-host boilerplate suppression', () => {
     await ingestOff(1);
     const off = await ingestOff(2);
     expect(off.chunks.some((ch) => ch.text.includes('Subscribe to our newsletter'))).toBe(true);
+  });
+});
+
+/** Minimal multi-page PDF (uncompressed content streams) — enough for pdf.js text extraction. */
+function makePdf(pages: string[][]): Uint8Array {
+  const objects: string[] = [];
+  const add = (body: string) => {
+    objects.push(body);
+    return objects.length;
+  };
+  const fontId = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  const pageIds: number[] = [];
+  const pagesId = objects.length + 1 + pages.length * 2; // reserved after page+content objects
+  for (const lines of pages) {
+    const stream = `BT /F1 12 Tf 50 750 Td 14 TL ${lines
+      .map((l) => `(${l.replace(/[()\\]/g, (m) => `\\${m}`)}) Tj T*`)
+      .join(' ')} ET`;
+    const contentId = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+    const pageId = add(
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 612 792] /Contents ${contentId} 0 R /Resources << /Font << /F1 ${fontId} 0 R >> >> >>`,
+    );
+    pageIds.push(pageId);
+  }
+  const realPagesId = add(
+    `<< /Type /Pages /Kids [${pageIds.map((i) => `${i} 0 R`).join(' ')}] /Count ${pageIds.length} >>`,
+  );
+  if (realPagesId !== pagesId) throw new Error('object numbering mismatch');
+  const catalogId = add(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`);
+  let out = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const o of offsets) out += `${String(o).padStart(10, '0')} 00000 n \n`;
+  out += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return new TextEncoder().encode(out);
+}
+
+describe('PDF page-aware chunks', () => {
+  it('records page offsets and cites url#page=N', async () => {
+    const pdf = makePdf([
+      Array.from(
+        { length: 12 },
+        (_, i) => `Page one line ${i} about token buckets and refill rates in detail.`,
+      ),
+      Array.from(
+        { length: 12 },
+        (_, i) => `Page two line ${i} about leaky buckets and smoothing of bursty traffic.`,
+      ),
+      Array.from(
+        { length: 12 },
+        (_, i) => `Page three line ${i} about sliding windows and shared counters in Redis.`,
+      ),
+    ]);
+    const doc = await new PdfParser().parse(pdf, {
+      url: 'https://x.example/paper.pdf',
+      contentType: 'application/pdf',
+    });
+    expect(doc).not.toBeNull();
+    expect(doc!.pages?.map((p) => p.page)).toEqual([1, 2, 3]);
+    expect(doc!.markdown.slice(doc!.pages![1]!.start, doc!.pages![1]!.start + 8)).toBe('Page two');
+    expect(pageAt(doc!.pages, 0)).toBe(1);
+    expect(pageAt(doc!.pages, doc!.pages![2]!.start + 5)).toBe(3);
+    expect(pageAt(undefined, 10)).toBeUndefined();
+    const session = ephemeralSession();
+    const { chunks } = await ingestDocument(
+      { embedder: undefined } as any,
+      { get: () => undefined, set: () => {} } as any,
+      {
+        doc: doc!,
+        page: { pageHash: 'h', fetchedAt: 'now' },
+        query: 'leaky buckets',
+        session,
+        chunking: { chunkSize: 120, chunkOverlap: 0, maxChunks: 50, minChunkChars: 20 },
+      },
+    );
+    const two = chunks.find((ch) => ch.text.startsWith('Page two'));
+    expect(two?.metadata.page).toBe(2);
+    expect(chunks[0]!.metadata.page).toBe(1);
+    expect(citationFor(1, 'T', 'https://x.example/paper.pdf', 2)).toBe(
+      '[1] T — https://x.example/paper.pdf#page=2',
+    );
+    expect(citationFor(1, 'T', 'https://x.example/paper.pdf#old', 3)).toBe(
+      '[1] T — https://x.example/paper.pdf#page=3',
+    );
+    expect(citationFor(1, 'T', 'https://x.example/page')).toBe('[1] T — https://x.example/page');
   });
 });
