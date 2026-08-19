@@ -57,6 +57,7 @@ d('webvector-mcp stdio', () => {
       'webvector_research',
       'webvector_search',
       'webvector_status',
+      'webvector_verify',
     ]);
     const research = tools.result.tools.find((t: any) => t.name === 'webvector_research');
     expect(research.inputSchema.properties.query).toBeDefined();

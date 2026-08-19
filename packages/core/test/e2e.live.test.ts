@@ -53,7 +53,10 @@ d('zero-config end-to-end (DuckDuckGo + local MiniLM + memory)', () => {
       'multi-head attention formula',
       { topK: 3 },
     );
-    expect(rr.passages.length).toBe(3);
+    // Adjacent chunks merge into one passage and the cutoff drops weak ones: 1–3 passages.
+    expect(rr.passages.length).toBeGreaterThanOrEqual(1);
+    expect(rr.passages.length).toBeLessThanOrEqual(3);
+    expect(rr.passages[0]!.text.toLowerCase()).toMatch(/attention/);
     await wv.close();
   }, 120_000);
 });
