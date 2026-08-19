@@ -14,6 +14,8 @@ import {
   autocut,
   dedupeChunks,
   diversifyBySource,
+  groupAdjacent,
+  joinAdjacentText,
   minMaxNormalize,
   mmr,
   type Ranked,
@@ -52,7 +54,11 @@ export interface RetrieveOutput {
   lexicalOnly: boolean;
 }
 
-type Candidate = ScoredChunk & { fused: number };
+type Candidate = ScoredChunk & {
+  fused: number;
+  /** Set on a passage assembled from neighbouring chunks (see `mergeAdjacentCandidates`). */
+  parts?: Candidate[];
+};
 
 export async function runRetrieveStage(
   c: Components,
@@ -261,13 +267,13 @@ export async function runRetrieveStage(
   }
 
   // MMR/diversification decide *which* chunks make the cut; display order is by score.
-  const cut = pool.slice(0, topK);
-  const norm = minMaxNormalize(
-    cut.map((x) => ({
-      id: x.id,
-      score: reranked && x.rerankScore !== undefined ? x.rerankScore : x.fused,
-    })),
-  );
+  let cut: Candidate[] = pool.slice(0, topK);
+  const rankScore = (x: Candidate) =>
+    reranked && x.rerankScore !== undefined ? x.rerankScore : x.fused;
+  // Neighbouring chunks of one page (answers straddling a chunk boundary) come back as a single
+  // passage; the freed slots are backfilled from the pool so the caller still gets ~topK passages.
+  if (rc.mergeAdjacent) cut = mergeAdjacentCandidates(cut, pool, topK, rc.maxPerSource, rankScore);
+  const norm = minMaxNormalize(cut.map((x) => ({ id: x.id, score: rankScore(x) })));
   const normById = new Map(norm.map((n) => [n.id, n.score]));
   cut.sort((a, b) => (normById.get(b.id) ?? 0) - (normById.get(a.id) ?? 0));
   if (rc.autocut > 0 && cut.length > 1) {
@@ -306,6 +312,7 @@ export async function runRetrieveStage(
       vectorRank: best('vector'),
       poolRank: poolRank.get(id) ?? 0,
       lists: entries,
+      ...(x.parts ? { mergedChunks: x.parts.map((p) => p.metadata.chunkIndex) } : {}),
     };
   };
 
@@ -321,17 +328,93 @@ export async function runRetrieveStage(
       bm25: bm25Best.has(x.id) ? round(bm25Best.get(x.id) as number, 3) : undefined,
       rerankScore: x.rerankScore === undefined ? undefined : round(x.rerankScore),
       chunkIndex: x.metadata.chunkIndex,
+      ...(x.parts ? { chunkCount: x.parts.length } : {}),
       startOffset: x.metadata.startOffset,
       endOffset: x.metadata.endOffset,
       siteName: x.metadata.siteName,
       publishedAt: x.metadata.publishedAt,
       fetchedAt: x.metadata.fetchedAt,
-      matchedQueries: [...(matched.get(x.id) ?? [query])],
+      matchedQueries: matchedFor(x, matched, query),
       citation: citationFor(i + 1, x.metadata.title, x.metadata.url),
       ...(input.explain ? { explain: explainFor(x.id, x) } : {}),
     };
   });
   return { passages, candidates, reranked, lexicalOnly };
+}
+
+/**
+ * Merge neighbouring chunks of the same page (chunkIndex ±1) among the selected candidates into one
+ * candidate whose text spans both (overlap removed via page offsets). The merged item keeps the id
+ * and scores of its best-scoring part, so score/explain lookups keep working. A merged passage
+ * counts once toward `maxPerSource`, so freed slots are backfilled from `pool` (which may in turn
+ * create new neighbours — hence the small loop).
+ */
+function mergeAdjacentCandidates(
+  cut: Candidate[],
+  pool: Candidate[],
+  topK: number,
+  maxPerSource: number,
+  rankScore: (x: Candidate) => number,
+): Candidate[] {
+  let selected = cut;
+  for (let round = 0; round < 3; round++) {
+    // Work on the flat chunks so a backfilled neighbour can join an already-merged group.
+    const groups = groupAdjacent(selected.flatMap((x) => x.parts ?? [x]));
+    selected = groups.map((parts) => {
+      if (parts.length === 1) return parts[0] as Candidate;
+      const best = parts.reduce((m, x) => (rankScore(x) > rankScore(m) ? x : m));
+      const first = parts[0] as Candidate;
+      let acc: Candidate = first;
+      for (const p of parts.slice(1)) {
+        acc = {
+          ...acc,
+          text: joinAdjacentText(acc, p),
+          metadata: {
+            ...acc.metadata,
+            endOffset: Math.max(acc.metadata.endOffset, p.metadata.endOffset),
+          },
+        };
+      }
+      const text = acc.text;
+      return {
+        ...best,
+        text,
+        parts,
+        metadata: {
+          ...best.metadata,
+          chunkIndex: first.metadata.chunkIndex,
+          startOffset: first.metadata.startOffset,
+          endOffset: Math.max(...parts.map((p) => p.metadata.endOffset)),
+        },
+      };
+    });
+    if (selected.length >= topK) break;
+    // Backfill: next pool items not already used, honouring the per-source cap (merged = 1).
+    const used = new Set(selected.flatMap((x) => (x.parts ?? [x]).map((p) => p.id)));
+    const perSource = new Map<string, number>();
+    for (const x of selected)
+      perSource.set(x.metadata.canonicalUrl, (perSource.get(x.metadata.canonicalUrl) ?? 0) + 1);
+    let added = 0;
+    for (const p of pool) {
+      if (selected.length >= topK) break;
+      if (used.has(p.id)) continue;
+      const n = perSource.get(p.metadata.canonicalUrl) ?? 0;
+      if (n >= maxPerSource) continue;
+      perSource.set(p.metadata.canonicalUrl, n + 1);
+      used.add(p.id);
+      selected.push(p);
+      added++;
+    }
+    if (added === 0) break;
+  }
+  return selected;
+}
+
+/** matchedQueries of a passage = union over its merged parts (or the chunk itself). */
+function matchedFor(x: Candidate, matched: Map<string, Set<string>>, query: string): string[] {
+  const out = new Set<string>();
+  for (const p of x.parts ?? [x]) for (const q of matched.get(p.id) ?? []) out.add(q);
+  return out.size ? [...out] : [query];
 }
 
 /** Registrable-ish domain (last two labels, three for common ccSLDs like co.uk). */

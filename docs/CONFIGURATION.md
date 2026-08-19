@@ -69,6 +69,7 @@ Code-only: `store.instance` (a `VectorStore`).
 | `minScore` | `null` | — | absolute cosine floor |
 | `relativeCutoff` | `0.6` | — | drop candidates below 0.6 × the best cosine (0 disables) |
 | `nearDuplicateThreshold` | `0.9` | — | shingle-Jaccard dedupe |
+| `mergeAdjacent` | `true` | — | neighbouring chunks of one page that both make the cut are returned as one passage (`chunkCount` ≥ 2); counts once toward `maxPerSource`, freed slots are backfilled |
 | `rerank` | `false` | `WEBVECTOR_RERANK` | `local` `cohere` `voyage` `jina` `llm` (or `true` = local) |
 | `rerankModel` / `rerankApiKey` / `rerankTopN` | provider default / — / `50` | `WEBVECTOR_RERANK_MODEL` / `WEBVECTOR_RERANK_API_KEY` | |
 | `fallbackToLexical` | `true` | — | if embedding fails mid-run, return BM25 results (`degraded: 'partial'`) instead of throwing |

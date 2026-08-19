@@ -238,6 +238,8 @@ export interface Passage {
   bm25?: number;
   rerankScore?: number;
   chunkIndex: number;
+  /** Number of neighbouring chunks merged into this passage (≥ 2 when merged; absent otherwise). */
+  chunkCount?: number;
   startOffset: number;
   endOffset: number;
   siteName?: string;
@@ -264,6 +266,8 @@ export interface PassageExplain {
   poolRank: number;
   /** Every ranked list this chunk appeared in. */
   lists: { kind: 'bm25' | 'vector'; query: string; rank: number; score: number; weight: number }[];
+  /** Chunk indices merged into this passage (`retrieval.mergeAdjacent`). */
+  mergedChunks?: number[];
 }
 
 export interface SourceSummary {

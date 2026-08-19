@@ -150,6 +150,12 @@ export const retrievalConfigSchema = z.object({
   /** Cut the final list after this many score "jumps" (gap > 3× mean gap); 0 = off. */
   autocut: z.number().int().min(0).default(0),
   nearDuplicateThreshold: z.number().min(0).max(1).default(0.9),
+  /**
+   * Return neighbouring chunks of one page (chunkIndex ±1) that both made the cut as a single
+   * passage, so an answer straddling a chunk boundary comes back whole. Counts once toward
+   * `maxPerSource`; freed slots are backfilled.
+   */
+  mergeAdjacent: z.boolean().default(true),
   rerank: z.union([z.boolean(), z.string()]).default(false),
   rerankModel: z.string().optional(),
   rerankApiKey: z.string().optional(),

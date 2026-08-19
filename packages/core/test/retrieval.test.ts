@@ -566,3 +566,42 @@ describe('registrableDomain', () => {
     expect(registrableDomain('https://example.com')).toBe('example.com');
   });
 });
+
+describe('adjacent-chunk merge', () => {
+  it('groupAdjacent groups consecutive chunks of one page, preserving score order', async () => {
+    const { groupAdjacent } = await import('../src/retrieval/fusion.js');
+    const mk = (id: string, url: string, ci: number) => {
+      const c = chunk(id, `text ${id}`, url);
+      c.metadata.chunkIndex = ci;
+      return c;
+    };
+    const items = [
+      mk('a4', 'https://a', 4),
+      mk('b1', 'https://b', 1),
+      mk('a3', 'https://a', 3),
+      mk('a9', 'https://a', 9),
+      mk('b2', 'https://b', 2),
+    ];
+    const groups = groupAdjacent(items).map((g) => g.map((x) => x.id));
+    expect(groups).toEqual([['a3', 'a4'], ['b1', 'b2'], ['a9']]);
+  });
+  it('joinAdjacentText removes chunker overlap via offsets, by scan, or joins with a break', async () => {
+    const { joinAdjacentText } = await import('../src/retrieval/fusion.js');
+    const page = 'The quick brown fox jumps over the lazy dog. Then it ran away into the forest.';
+    const meta = (start: number, end: number, ci: number) => ({
+      canonicalUrl: 'https://p',
+      chunkIndex: ci,
+      startOffset: start,
+      endOffset: end,
+    });
+    const a = { text: page.slice(0, 44), metadata: meta(0, 44, 0) };
+    const b = { text: page.slice(20), metadata: meta(20, page.length, 1) }; // overlaps a by 24 chars
+    expect(joinAdjacentText(a, b)).toBe(page);
+    // Offsets slightly off (chunker gap): the suffix/prefix scan still finds the overlap.
+    const bOff = { ...b, metadata: meta(22, page.length + 2, 1) };
+    expect(joinAdjacentText(a, bOff)).toBe(page);
+    // No textual overlap at all: paragraph break.
+    const c = { text: 'Unrelated continuation text here.', metadata: meta(60, 90, 1) };
+    expect(joinAdjacentText(a, c)).toBe(`${a.text}\n\nUnrelated continuation text here.`);
+  });
+});

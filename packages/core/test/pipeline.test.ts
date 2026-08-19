@@ -138,11 +138,17 @@ describe('WebVector pipeline (mocked)', () => {
       domainsAllow: ['fruit.example'],
       relatedQueries: ['banana crops weather'],
     });
-    expect(res.passages).toHaveLength(2);
+    // The two banana chunks are neighbours on one page → merged into a single passage.
+    expect(res.passages).toHaveLength(1);
+    expect(res.passages[0]!.chunkCount).toBe(2);
     expect(res.passages.every((p) => p.url.includes('fruit.example'))).toBe(true);
     expect(res.stats.ingest.requested).toBe(1);
     expect(res.queries).toContain('banana crops weather');
     await wv.close();
+    const plain = make({ retrieval: { mergeAdjacent: false, mmr: false, relativeCutoff: 0 } });
+    const res2 = await plain.research('banana', { topK: 2, domainsAllow: ['fruit.example'] });
+    expect(res2.passages).toHaveLength(2);
+    await plain.close();
   });
   it('degrades to search snippets when all fetches fail', async () => {
     server.use(

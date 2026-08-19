@@ -213,3 +213,65 @@ export function dedupeChunks<T extends ScoredChunk>(chunks: T[], threshold = 0.9
   }
   return out;
 }
+
+// ─── Adjacent-chunk merge ────────────────────────────────────────────────────
+
+/** The minimum a chunk needs to carry for `groupAdjacent` / `joinAdjacentText`. */
+export interface Adjacent {
+  text: string;
+  metadata: { canonicalUrl: string; chunkIndex: number; startOffset: number; endOffset: number };
+}
+
+/**
+ * Group items that are neighbours on the same page (same canonical URL, consecutive `chunkIndex`)
+ * so they can be returned as one passage. Each group is sorted by chunkIndex; the outer order
+ * follows the first appearance of each group in `items` (i.e. score order is preserved).
+ */
+export function groupAdjacent<T extends Adjacent>(items: T[]): T[][] {
+  const byUrl = new Map<string, T[]>();
+  for (const it of items) {
+    const arr = byUrl.get(it.metadata.canonicalUrl);
+    if (arr) arr.push(it);
+    else byUrl.set(it.metadata.canonicalUrl, [it]);
+  }
+  const groupOf = new Map<T, T[]>();
+  for (const arr of byUrl.values()) {
+    const sorted = [...arr].sort((a, b) => a.metadata.chunkIndex - b.metadata.chunkIndex);
+    let cur: T[] = [];
+    for (const it of sorted) {
+      const prev = cur.at(-1);
+      if (prev && it.metadata.chunkIndex === prev.metadata.chunkIndex + 1) cur.push(it);
+      else {
+        cur = [it];
+      }
+      groupOf.set(it, cur);
+    }
+  }
+  const out: T[][] = [];
+  const seen = new Set<T[]>();
+  for (const it of items) {
+    const g = groupOf.get(it) as T[];
+    if (seen.has(g)) continue;
+    seen.add(g);
+    out.push(g);
+  }
+  return out;
+}
+
+/**
+ * Join the text of two consecutive chunks without repeating the chunker's overlap.
+ * Uses the page offsets when they agree with the text (B starts inside A), otherwise looks for the
+ * longest suffix of A that B starts with, and finally falls back to a paragraph break.
+ */
+export function joinAdjacentText(a: Adjacent, b: Adjacent): string {
+  const ov = a.metadata.endOffset - b.metadata.startOffset;
+  if (ov > 0 && ov <= b.text.length && ov <= a.text.length) {
+    if (a.text.slice(-ov) === b.text.slice(0, ov)) return a.text + b.text.slice(ov);
+  }
+  // Offsets are a couple of chars off at times (chunker overlap across a paragraph gap): scan.
+  const max = Math.min(a.text.length, b.text.length, 2000);
+  for (let k = max; k >= 20; k--) {
+    if (a.text.endsWith(b.text.slice(0, k))) return a.text + b.text.slice(k);
+  }
+  return `${a.text}\n\n${b.text}`;
+}

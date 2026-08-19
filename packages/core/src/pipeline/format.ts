@@ -18,7 +18,9 @@ function trimText(text: string, max: number): string {
 }
 
 export function renderPassage(p: Passage, maxChars: number): string {
-  const body = trimText(p.text.replace(/\s+\n/g, '\n').trim(), maxChars)
+  // A passage merged from neighbouring chunks may run to ~2× the single-chunk limit.
+  const limit = p.chunkCount && p.chunkCount > 1 ? maxChars * 2 : maxChars;
+  const body = trimText(p.text.replace(/\s+\n/g, '\n').trim(), limit)
     .split('\n')
     .map((l) => `> ${l}`)
     .join('\n');
