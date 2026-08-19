@@ -11,6 +11,7 @@
  * ```
  */
 import { importOptional } from '../errors.js';
+import { runFetchTool } from '../pipeline/fetch-tool.js';
 import { renderMarkdown } from '../pipeline/format.js';
 import {
   canonicalToolName,
@@ -77,9 +78,8 @@ export async function langchainTools(
             });
             return [res.markdown ?? renderMarkdown(res), res];
           }
-          const doc = await wv.fetch(input.url, { signal: runtime?.signal });
-          const max = input.max_chars ?? 40_000;
-          return [`# ${doc.title}\n<${doc.url}>\n\n${doc.markdown.slice(0, max)}`, doc];
+          const out = await runFetchTool(wv, input, { signal: runtime?.signal });
+          return [out.text, out.structured];
         },
         {
           name: WEB_FETCH_TOOL_NAME,

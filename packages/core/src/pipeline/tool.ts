@@ -147,13 +147,49 @@ export const webFetchInputSchema = z.object({
     .max(50)
     .optional()
     .describe('Passages to return when query is given (default 8).'),
+  max_length: z
+    .number()
+    .int()
+    .min(500)
+    .max(200_000)
+    .optional()
+    .describe(
+      'Max characters of Markdown to return (default 20000). Longer pages are cut on a paragraph boundary; the result tells you the start_index to continue from.',
+    ),
+  start_index: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      'Character offset to start from (default 0). Use the value from a truncated result to continue reading.',
+    ),
+  /** @deprecated alias of max_length (pre-0.2). */
   max_chars: z
     .number()
     .int()
     .min(500)
     .max(200_000)
     .optional()
-    .describe('Truncate the returned Markdown to this many characters (default 40000).'),
+    .describe('Deprecated alias of max_length.'),
+  include_links: z
+    .boolean()
+    .optional()
+    .describe(
+      "Append the page's links (deduped, same-host first, max 150) — a navigation map for the next call.",
+    ),
+  selector: z
+    .string()
+    .max(300)
+    .optional()
+    .describe(
+      'CSS selector: convert only the matching element(s) instead of the auto-detected main content (e.g. "main article", "#changelog").',
+    ),
+  exclude_selectors: z
+    .array(z.string().max(300))
+    .max(20)
+    .optional()
+    .describe('CSS selectors to remove before extraction (cookie banners, nav, comments).'),
   response_format: z
     .enum(['concise', 'detailed'])
     .optional()

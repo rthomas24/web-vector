@@ -168,3 +168,67 @@ describe('research output shape', () => {
     );
   });
 });
+
+describe('webvector_fetch pagination, links, selectors', () => {
+  it('paginates with max_length/start_index, continuation sentence, and token accounting', async () => {
+    client = await connect(createWebVectorMcpServer({ webvector: makeWebVector() }));
+    const list = await client.call('tools/list');
+    const fetchTool = list.result.tools.find((t: any) => t.name === 'webvector_fetch');
+    expect(fetchTool._meta['anthropic/maxResultSizeChars']).toBe(250_000);
+    for (const k of ['max_length', 'start_index', 'include_links', 'selector', 'exclude_selectors'])
+      expect(fetchTool.inputSchema.properties[k], k).toBeDefined();
+    const r = await client.call('tools/call', {
+      name: 'webvector_fetch',
+      arguments: { url: 'https://rrf.example/intro', max_length: 600 },
+    });
+    expect(r.result.isError).toBeUndefined();
+    const text: string = r.result.content[0].text;
+    expect(text).toMatch(/^# RRF intro\n<https:\/\/rrf\.example\/intro>/);
+    const sc = r.result.structuredContent;
+    expect(sc.truncated).toBe(true);
+    expect(sc.chars).toBeLessThanOrEqual(600);
+    expect(sc.nextStartIndex).toBe(sc.startIndex + sc.chars);
+    expect(sc.totalChars).toBeGreaterThan(600);
+    expect(sc.approxTokens).toBeGreaterThan(0);
+    expect(text).toContain(
+      `_Content truncated at char ${sc.nextStartIndex} of ${sc.totalChars}. Call webvector_fetch with start_index=${sc.nextStartIndex} to continue, or pass \`query\` to get only relevant passages._`,
+    );
+    const r2 = await client.call('tools/call', {
+      name: 'webvector_fetch',
+      arguments: { url: 'https://rrf.example/intro', start_index: sc.nextStartIndex },
+    });
+    const sc2 = r2.result.structuredContent;
+    expect(sc2.startIndex).toBe(sc.nextStartIndex);
+    expect(sc2.truncated).toBe(false);
+    expect(sc2.nextStartIndex).toBeUndefined();
+    expect(sc.chars + sc2.chars).toBe(sc.totalChars);
+    expect(r2.result.content[0].text).toContain(
+      `_(continuing from char ${sc.nextStartIndex} of ${sc.totalChars})_`,
+    );
+  });
+  it('include_links appends a deduped, same-host-first link list; selector/exclude_selectors filter the DOM', async () => {
+    client = await connect(createWebVectorMcpServer({ webvector: makeWebVector() }));
+    const r = await client.call('tools/call', {
+      name: 'webvector_fetch',
+      arguments: { url: 'https://rrf.example/intro', include_links: true },
+    });
+    expect(r.result.content[0].text).toContain('## Links (2)');
+    expect(r.result.structuredContent.links.map((l: any) => l.url)).toEqual([
+      'https://rrf.example/paper',
+      'https://other.example/x',
+    ]);
+    const sel = await client.call('tools/call', {
+      name: 'webvector_fetch',
+      arguments: { url: 'https://rrf.example/intro', selector: 'h1' },
+    });
+    expect(sel.result.structuredContent.parser).toBe('selector');
+    expect(sel.result.content[0].text.trim().endsWith('# RRF intro')).toBe(true);
+    const miss = await client.call('tools/call', {
+      name: 'webvector_fetch',
+      arguments: { url: 'https://rrf.example/intro', selector: '#nope', exclude_selectors: ['h1'] },
+    });
+    expect(miss.result.isError).toBeUndefined();
+    expect(miss.result.structuredContent.warnings[0]).toMatch(/matched nothing/);
+    expect(miss.result.content[0].text).toContain('Reciprocal rank fusion combines');
+  });
+});

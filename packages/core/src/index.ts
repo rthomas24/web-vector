@@ -51,6 +51,24 @@ export {
   WebVectorError,
 } from './errors.js';
 export type {
+  FetchedDocument,
+  FetchOptions,
+  PageLink,
+  SliceResult,
+} from './pipeline/fetch-options.js';
+export {
+  excludeFromHtml,
+  extractLinks,
+  selectFromHtml,
+  slicePage,
+} from './pipeline/fetch-options.js';
+export type { FetchToolOutput, FetchToolStructured } from './pipeline/fetch-tool.js';
+export {
+  continuationSentence,
+  DEFAULT_FETCH_MAX_LENGTH,
+  runFetchTool,
+} from './pipeline/fetch-tool.js';
+export type {
   LinkMode,
   MarkdownRenderOptions,
   RenderedMarkdown,

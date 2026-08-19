@@ -27,6 +27,7 @@ Usage:
   --default-response-format concise|detailed   markdown shape unless the call passes response_format (default concise)
   --structured off|slim|full    how much structuredContent to return next to the text (default slim)
   --max-tokens N                default token budget per result, 500–20000 (default 4000; env WEBVECTOR_MCP_MAX_TOKENS)
+  --fetch-max-length N          default max_length for webvector_fetch in chars (default 20000)
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …
@@ -53,6 +54,10 @@ const enumFlag = <T extends string>(
   }
   return v as T;
 };
+const numFlag = (name: string, env?: string): number | undefined => {
+  const v = flag(name) ?? (env ? process.env[env] : undefined);
+  return v && v !== 'true' && Number.isFinite(Number(v)) ? Number(v) : undefined;
+};
 const maxTokensRaw = flag('--max-tokens') ?? process.env.WEBVECTOR_MCP_MAX_TOKENS;
 const serverOptions: CreateServerOptions = {
   legacyToolNames: args.includes('--legacy-tool-names'),
@@ -70,6 +75,7 @@ const serverOptions: CreateServerOptions = {
     maxTokensRaw && maxTokensRaw !== 'true' && Number.isFinite(Number(maxTokensRaw))
       ? Number(maxTokensRaw)
       : undefined,
+  fetchMaxLength: numFlag('--fetch-max-length', 'WEBVECTOR_MCP_FETCH_MAX_LENGTH'),
   instructions: args.includes('--no-instructions')
     ? false
     : instructionsFile && instructionsFile !== 'true'

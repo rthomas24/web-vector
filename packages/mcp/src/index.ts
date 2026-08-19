@@ -18,11 +18,13 @@ import {
 } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import {
+  DEFAULT_FETCH_MAX_LENGTH,
   LEGACY_TOOL_NAMES,
   type ResearchResult,
   type ResponseFormat,
   redactConfig,
   renderResearch,
+  runFetchTool,
   suggestedQueriesFor,
   toResearchOptions,
   toSlimOutput,
@@ -56,6 +58,8 @@ export {
 export const VERSION = '0.1.0';
 
 export type StructuredMode = 'off' | 'slim' | 'full';
+/** `_meta["anthropic/maxResultSizeChars"]` for webvector_fetch (Claude Code caps at 500k). */
+export const FETCH_MAX_RESULT_SIZE_CHARS = 250_000;
 export const DEFAULT_MAX_TOKENS = 4000;
 export const MIN_MAX_TOKENS = 500;
 export const MAX_MAX_TOKENS = 20_000;
@@ -92,6 +96,8 @@ export interface CreateServerOptions {
    * Code's 10k-token output warning by default.
    */
   maxOutputTokens?: number;
+  /** Default `max_length` for webvector_fetch when the call omits it (default 20000 chars). */
+  fetchMaxLength?: number;
   /** Default `response_format` for research/fetch results (default `concise`). */
   defaultResponseFormat?: ResponseFormat;
   /**
@@ -292,6 +298,9 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
         title: 'Fetch a URL as Markdown',
         description: WEB_FETCH_DESCRIPTION,
         inputSchema: webFetchInputSchema,
+        // Claude Code: raise this tool's persist-to-disk threshold so paginated pages land in
+        // context instead of a file (max_length ≤ 200k chars + link list). Harmless elsewhere.
+        _meta: { 'anthropic/maxResultSizeChars': FETCH_MAX_RESULT_SIZE_CHARS },
         annotations: {
           readOnlyHint: true,
           openWorldHint: true,
@@ -317,24 +326,14 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
               ...structuredResearch(structured, res, { omitted: rendered.omitted }),
             };
           }
-          const doc = await wv.fetch(args.url, { signal: ctx.mcpReq.signal });
-          const max = args.max_chars ?? 40_000;
-          const md =
-            doc.markdown.length > max
-              ? `${doc.markdown.slice(0, max)}\n\n…(truncated, ${doc.markdown.length} chars total)`
-              : doc.markdown;
+          const out = await runFetchTool(wv, args, {
+            signal: ctx.mcpReq.signal,
+            defaultMaxLength: opts.fetchMaxLength ?? DEFAULT_FETCH_MAX_LENGTH,
+            fetchToolName: WEB_FETCH_TOOL_NAME,
+          });
           return {
-            content: [{ type: 'text', text: `# ${doc.title}\n<${doc.url}>\n\n${md}` }],
-            structuredContent: {
-              url: doc.url,
-              title: doc.title,
-              contentType: doc.contentType,
-              publishedAt: doc.publishedAt,
-              siteName: doc.siteName,
-              lang: doc.lang,
-              chars: doc.markdown.length,
-              truncated: doc.markdown.length > max,
-            },
+            content: [{ type: 'text', text: out.text }],
+            ...(structured === 'off' ? {} : { structuredContent: out.structured }),
           };
         } catch (err) {
           return errorResult(err);

@@ -143,7 +143,7 @@ const res = await wv.research('How does Node 24 handle AbortSignal.any?', {
 });
 ```
 
-Other calls: `wv.search(query)` (results only), `wv.fetch(url)` (one page → Markdown), `wv.fetchAndRetrieve(url, query)` (one page → relevant passages), `wv.listSessions()`, `wv.clearSession(id)`.
+Other calls: `wv.search(query)` (results only), `wv.fetch(url, { selector?, excludeSelectors?, includeLinks? })` (one page → Markdown, optionally a CSS-selected subtree, plus `links[]`), `wv.fetchAndRetrieve(url, query)` (one page → relevant passages), `wv.listSessions()`, `wv.clearSession(id)`.
 
 **Give it to a model as a tool** — bindings for the popular SDKs are one import away:
 

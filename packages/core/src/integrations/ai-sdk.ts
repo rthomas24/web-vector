@@ -19,6 +19,7 @@
  */
 import type { EmbeddingModel, LanguageModel, RerankingModel, Tool } from 'ai';
 import { importOptional } from '../errors.js';
+import { runFetchTool } from '../pipeline/fetch-tool.js';
 import { renderMarkdown } from '../pipeline/format.js';
 import {
   toResearchOptions,
@@ -105,19 +106,8 @@ export async function webFetchTool(wv: WebVector): Promise<Tool<WebFetchInput, u
           topK: input.top_k,
           signal: abortSignal,
         });
-      const doc = await wv.fetch(input.url, { signal: abortSignal });
-      const max = input.max_chars ?? 40_000;
-      return {
-        url: doc.url,
-        title: doc.title,
-        markdown:
-          doc.markdown.length > max
-            ? `${doc.markdown.slice(0, max)}\n\n…(truncated)`
-            : doc.markdown,
-        contentType: doc.contentType,
-        publishedAt: doc.publishedAt,
-        siteName: doc.siteName,
-      };
+      const out = await runFetchTool(wv, input, { signal: abortSignal });
+      return { ...out.structured, markdown: out.text };
     },
     toModelOutput: ({ output }: { output: any }) => ({
       type: 'text' as const,

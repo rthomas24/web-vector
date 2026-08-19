@@ -28,8 +28,10 @@ import { WebVectorError } from '../errors.js';
 import {
   approxTokens,
   type CachedPage,
+  decodeBytes,
   documentFromProviderContent,
   ingestUrl,
+  parseResource,
 } from '../ingest/index.js';
 import type {
   Failure,
@@ -50,6 +52,13 @@ import { sha256 } from '../util/hash.js';
 import { createLogger } from '../util/logger.js';
 import { canonicalizeUrl } from '../util/url.js';
 import { buildComponents, type Components } from './components.js';
+import {
+  excludeFromHtml,
+  extractLinks,
+  type FetchedDocument,
+  type FetchOptions,
+  selectFromHtml,
+} from './fetch-options.js';
 import { citationFor, type MarkdownRenderOptions, renderMarkdown } from './format.js';
 import {
   type EmbedStats,
@@ -140,27 +149,62 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return c.search.search(query, { ...this.defaultSearchOptions(), ...opts });
   }
 
-  /** Fetch + parse one URL with the same guards as the pipeline. */
-  async fetch(
-    url: string,
-    opts: { signal?: AbortSignal; useCache?: boolean } = {},
-  ): Promise<ParsedDocument> {
+  /**
+   * Fetch + parse one URL with the same guards as the pipeline. With `selector` /
+   * `excludeSelectors` / `includeLinks` the raw HTML is fetched (page cache bypassed) and the DOM
+   * is filtered before conversion; `links` is filled when requested.
+   */
+  async fetch(url: string, opts: FetchOptions = {}): Promise<FetchedDocument> {
     const c = await this.ensure();
-    const outcome = await ingestUrl(url, {
-      fetcher: c.fetcher,
-      parsers: c.parsers,
-      cache: opts.useCache === false ? undefined : c.pageCache,
-      logger: this.logger,
-      signal: opts.signal,
-    });
-    if (!outcome.ok || !outcome.page) {
-      const f = outcome.failure as Failure;
-      throw new WebVectorError(f.message, {
-        code: f.code as WebVectorError['code'],
-        stage: 'ingest',
+    const wantsRaw = !!(opts.selector || opts.excludeSelectors?.length || opts.includeLinks);
+    if (!wantsRaw) {
+      const outcome = await ingestUrl(url, {
+        fetcher: c.fetcher,
+        parsers: c.parsers,
+        cache: opts.useCache === false ? undefined : c.pageCache,
+        logger: this.logger,
+        signal: opts.signal,
       });
+      if (!outcome.ok || !outcome.page) throw failureError(outcome.failure as Failure);
+      return outcome.page.doc;
     }
-    return outcome.page.doc;
+    // Raw path: fetch, then filter/convert the HTML ourselves.
+    const res = await c.fetcher.fetch(url, opts.signal);
+    const isHtml =
+      /^(text\/html|application\/xhtml\+xml)/.test(res.contentType) || res.contentType === '';
+    let html: string | undefined;
+    if (isHtml) html = decodeBytes(res.bytes, res.charset);
+    let doc: ParsedDocument | undefined;
+    if (html && opts.selector) {
+      doc =
+        selectFromHtml(html, res.finalUrl, opts.selector, {
+          excludeSelectors: opts.excludeSelectors,
+          contentType: res.contentType || 'text/html',
+        }) ?? undefined;
+      if (!doc)
+        this.logger.debug(`selector "${opts.selector}" matched nothing on ${url}; falling back`);
+    }
+    if (!doc) {
+      const filtered =
+        html && opts.excludeSelectors?.length
+          ? {
+              ...res,
+              bytes: new TextEncoder().encode(excludeFromHtml(html, opts.excludeSelectors)),
+              charset: 'utf-8',
+            }
+          : res;
+      const outcome = await parseResource(filtered, {
+        parsers: c.parsers,
+        cache: opts.excludeSelectors?.length ? undefined : c.pageCache,
+        logger: this.logger,
+      });
+      if (!outcome.ok || !outcome.page) throw failureError(outcome.failure as Failure);
+      doc = outcome.page.doc;
+    }
+    const out: FetchedDocument = { ...doc, url: res.url };
+    if (opts.includeLinks && html) out.links = extractLinks(html, res.finalUrl, opts.maxLinks);
+    else if (opts.includeLinks) out.links = [];
+    return out;
   }
 
   /** Fetch one URL and return only the passages relevant to `query`. */
@@ -633,6 +677,10 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       ...s,
     };
   }
+}
+
+function failureError(f: Failure): WebVectorError {
+  return new WebVectorError(f.message, { code: f.code as WebVectorError['code'], stage: 'ingest' });
 }
 
 /** Degraded output when nothing could be fetched: the search snippets themselves. */

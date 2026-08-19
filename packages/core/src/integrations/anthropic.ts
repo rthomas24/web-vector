@@ -21,6 +21,7 @@
  * ```
  */
 import { WebVectorError } from '../errors.js';
+import { runFetchTool } from '../pipeline/fetch-tool.js';
 import { renderMarkdown } from '../pipeline/format.js';
 import {
   canonicalToolName,
@@ -116,11 +117,8 @@ export async function runTool(
         });
         return { content: res.markdown ?? renderMarkdown(res), data: res };
       }
-      const doc = await wv.fetch(parsed.url, { signal: opts.signal });
-      const max = parsed.max_chars ?? 40_000;
-      const md =
-        doc.markdown.length > max ? `${doc.markdown.slice(0, max)}\n\n…(truncated)` : doc.markdown;
-      return { content: `# ${doc.title}\n<${doc.url}>\n\n${md}`, data: doc };
+      const out = await runFetchTool(wv, parsed, { signal: opts.signal });
+      return { content: out.text, data: out.structured };
     }
     if (name === WEB_SEARCH_TOOL_NAME) {
       const parsed = webSearchInputSchema.parse(input);
