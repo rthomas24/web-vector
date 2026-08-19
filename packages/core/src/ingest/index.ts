@@ -267,6 +267,56 @@ export async function parseResource(
   }
 }
 
+// ─── Provider-supplied content (Tavily raw_content, Exa text) ────────────────
+
+export interface ProviderContentAssessment {
+  ok: boolean;
+  /** Why the content was rejected (`short` | `html` | `truncated` | `boilerplate`). */
+  reason?: 'short' | 'html' | 'truncated' | 'boilerplate';
+  chars: number;
+}
+
+/**
+ * Quality gate for provider-returned page text before trusting it instead of fetching:
+ * long enough (`minChars`, default 300), not raw HTML, not cut off at a round provider cap
+ * (…1000/2000/4000/8000 chars mid-sentence, or a trailing ellipsis), not mostly links/nav lines.
+ */
+export function assessProviderContent(
+  content: string,
+  opts: { minChars?: number } = {},
+): ProviderContentAssessment {
+  const text = content.replace(/\r\n?/g, '\n').trim();
+  const chars = text.length;
+  const minChars = opts.minChars ?? 300;
+  if (chars < minChars) return { ok: false, reason: 'short', chars };
+  // Raw HTML rather than text/markdown.
+  const tags = (
+    text.match(/<\/?(?:html|body|div|p|span|a|li|ul|script|style|br|h[1-6]|table|td)\b[^>]*>/gi) ??
+    []
+  ).length;
+  if (/^\s*<(?:!doctype|html|body)/i.test(text) || tags >= 8)
+    return { ok: false, reason: 'html', chars };
+  // Truncated at a round cap: exact multiple of 500 chars (1000, 2000, 4000, 8000…) or a trailing
+  // ellipsis, and the text does not end at a sentence/block boundary.
+  const tail = text.slice(-1);
+  const endsClean =
+    /[.!?)\]"'”’`>*_|-]$/.test(tail) || /```\s*$/.test(text) || /\n\s*$/.test(content);
+  const rawChars = content.length;
+  const roundCap = chars >= 900 && (chars % 500 === 0 || rawChars % 500 === 0);
+  const ellipsis = /(?:\.\.\.|…)$/.test(text) && chars >= 900;
+  if ((roundCap && !endsClean) || ellipsis) return { ok: false, reason: 'truncated', chars };
+  // Boilerplate: mostly links, or a wall of short nav-like lines.
+  const lines = text.split('\n').filter((l) => l.trim());
+  const linkChars = (text.match(/\[[^\]]*\]\([^)]*\)|https?:\/\/\S+/g) ?? []).reduce(
+    (n, m) => n + m.length,
+    0,
+  );
+  if (linkChars / chars > 0.5) return { ok: false, reason: 'boilerplate', chars };
+  if (lines.length >= 12 && lines.filter((l) => l.trim().length < 40).length / lines.length > 0.8)
+    return { ok: false, reason: 'boilerplate', chars };
+  return { ok: true, chars };
+}
+
 /** Build a ParsedDocument from provider-supplied page content (Tavily raw_content, Exa text). */
 export function documentFromProviderContent(
   url: string,
@@ -286,6 +336,7 @@ export function documentFromProviderContent(
       text: markdownToText(markdown),
       contentType,
       parser: 'provider',
+      fetchedFrom: 'provider',
     },
     pageHash: sha256(markdown),
     fetchedAt: new Date().toISOString(),

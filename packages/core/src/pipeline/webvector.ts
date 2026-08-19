@@ -25,7 +25,12 @@ import {
 } from '../config/index.js';
 import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
-import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
+import {
+  assessProviderContent,
+  type CachedPage,
+  documentFromProviderContent,
+  ingestUrl,
+} from '../ingest/index.js';
 import type {
   Failure,
   Logger,
@@ -555,16 +560,26 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   ): Promise<
     { page: CachedPage; cachedHit: boolean; ms: number } | { failure: Failure; ms: number }
   > {
-    const content =
-      this.config.ingestion.useProviderContent && typeof r.extra?.content === 'string'
-        ? r.extra.content
-        : undefined;
-    if (content && content.length > 400) {
-      return {
-        page: documentFromProviderContent(r.url, r.title, content),
-        cachedHit: false,
-        ms: 0,
-      };
+    const mode = this.config.ingestion.useProviderContent;
+    const content = mode && typeof r.extra?.content === 'string' ? r.extra.content : undefined;
+    let providerRejected = false;
+    if (content) {
+      // 'auto': quality gate (length, raw HTML, round-cap truncation, boilerplate); true: legacy length check.
+      const verdict =
+        mode === 'auto'
+          ? assessProviderContent(content)
+          : { ok: content.length > 400, reason: 'short' as const, chars: content.length };
+      if (verdict.ok) {
+        return {
+          page: documentFromProviderContent(r.url, r.title, content),
+          cachedHit: false,
+          ms: 0,
+        };
+      }
+      providerRejected = true;
+      this.logger.debug(
+        `provider content for ${r.url} rejected (${verdict.reason}, ${verdict.chars} chars); fetching`,
+      );
     }
     const outcome = await ingestUrl(r.url, {
       fetcher: c.fetcher,
@@ -576,7 +591,18 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     });
     if (!outcome.ok || !outcome.page)
       return { failure: outcome.failure as Failure, ms: outcome.ms };
-    return { page: outcome.page, cachedHit: !!outcome.cached, ms: outcome.ms };
+    let page = outcome.page;
+    if (providerRejected) {
+      page = {
+        ...page,
+        doc: {
+          ...page.doc,
+          parser: 'provider→fetch',
+          metadata: { ...page.doc.metadata, fetchParser: page.doc.parser },
+        },
+      };
+    }
+    return { page, cachedHit: !!outcome.cached, ms: outcome.ms };
   }
 
   private resolveSession(sessionId: string | undefined, c: Components): Session {

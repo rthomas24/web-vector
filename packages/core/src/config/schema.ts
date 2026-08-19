@@ -254,8 +254,13 @@ export const ingestionConfigSchema = z.object({
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
   minChunkChars: z.number().int().min(1).default(100),
-  /** Use provider-returned page content (Tavily raw_content / Exa text) instead of fetching when available. */
-  useProviderContent: z.boolean().default(true),
+  /**
+   * Use provider-returned page content (Tavily raw_content / Exa text) instead of fetching:
+   * `'auto'` (default) only when it passes a quality gate (≥ 300 chars, not raw HTML, not cut off
+   * at a round provider cap, not mostly links/nav) and falls through to a fetch otherwise
+   * (`parser: 'provider'` vs `'provider→fetch'`); `true` always (when > 400 chars); `false` never.
+   */
+  useProviderContent: z.union([z.boolean(), z.literal('auto')]).default('auto'),
   cache: z
     .object({
       enabled: z.boolean().default(true),

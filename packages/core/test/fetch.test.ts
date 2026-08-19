@@ -13,13 +13,16 @@ import {
   stackExchangeSite,
 } from '../src/ingest/fast-paths.js';
 import { acceptHeaderFor, Fetcher, parseContentSignal } from '../src/ingest/fetcher.js';
-import { ingestUrl, parseResource } from '../src/ingest/index.js';
+import { assessProviderContent, ingestUrl, parseResource } from '../src/ingest/index.js';
 import {
   cleanServedMarkdown,
   isServedMarkdown,
   parseServedMarkdown,
 } from '../src/ingest/markdown-clean.js';
 import { contentSignalFor, parseContentSignalGroups } from '../src/ingest/robots.js';
+import { WebVector } from '../src/pipeline/webvector.js';
+import { customSearchProvider } from '../src/search/providers.js';
+import { silentLogger } from '../src/util/logger.js';
 import { canonicalizeUrl, cleanUrl, normalizeUrl } from '../src/util/url.js';
 
 const server = setupServer();
@@ -883,5 +886,105 @@ describe('fast paths', () => {
     const r = await ingestUrl('https://custom.example/thing', { fetcher: fetcher() });
     expect(r.page?.doc.title).toBe('Custom');
     expect(r.page?.doc.metadata?.fastPath).toBe('custom-test');
+  });
+});
+
+// ─── C7 provider-content quality gate ────────────────────────────────────────
+
+describe('provider-content quality gate', () => {
+  const good = `${'A proper paragraph of extracted article text that reads like prose. '.repeat(12)}\n\nAnd a second paragraph that ends cleanly.`;
+  it('assessProviderContent accepts prose and rejects short / html / truncated / boilerplate', () => {
+    expect(assessProviderContent(good).ok).toBe(true);
+    expect(assessProviderContent('too short')).toMatchObject({ ok: false, reason: 'short' });
+    expect(
+      assessProviderContent(
+        `<html><body><div><p>${'x '.repeat(200)}</p><div><span>a</span><a href="#">b</a></div><br><li>c</li><li>d</li></div></body></html>`,
+      ),
+    ).toMatchObject({ ok: false, reason: 'html' });
+    // exactly 2000 chars, cut mid-sentence
+    const truncated = 'The quick brown fox jumps over the lazy dog and keeps running '
+      .repeat(40)
+      .slice(0, 2000);
+    expect(truncated.length).toBe(2000);
+    expect(assessProviderContent(truncated)).toMatchObject({ ok: false, reason: 'truncated' });
+    // 2000 chars but ending at a sentence boundary is fine
+    const clean = `${'Sentence one is here. '.repeat(100).slice(0, 1999)}.`;
+    expect(clean.length).toBe(2000);
+    expect(assessProviderContent(clean).ok).toBe(true);
+    expect(assessProviderContent(`${'Words in a sentence '.repeat(60)}...`)).toMatchObject({
+      ok: false,
+      reason: 'truncated',
+    });
+    const nav = Array.from({ length: 30 }, (_, i) => `[Link ${i}](https://x.example/${i})`).join(
+      '\n',
+    );
+    expect(assessProviderContent(nav)).toMatchObject({ ok: false, reason: 'boilerplate' });
+    const shortLines = Array.from({ length: 30 }, (_, i) => `Menu item ${i}`).join('\n');
+    expect(assessProviderContent(shortLines)).toMatchObject({ ok: false, reason: 'boilerplate' });
+  });
+
+  it('auto: trusts good provider content, falls through to a fetch for truncated content (parser provider→fetch)', async () => {
+    let fetched = 0;
+    server.use(
+      http.get('https://prov.example/good', () => {
+        fetched++;
+        return HttpResponse.html(
+          `<html><head><title>Good page</title></head><body><article><h1>Good page</h1><p>${'Fetched copy of the good page. '.repeat(15)}</p></article></body></html>`,
+        );
+      }),
+      http.get('https://prov.example/truncated', () => {
+        fetched++;
+        return HttpResponse.html(
+          `<html><head><title>Full page</title></head><body><article><h1>Full page</h1><p>${'The complete fetched article text, not the truncated provider copy. '.repeat(15)}</p></article></body></html>`,
+        );
+      }),
+    );
+    const truncated = 'Provider text that stops mid sentence without any punctuation at all '
+      .repeat(60)
+      .slice(0, 4000);
+    const provider = customSearchProvider('prov', async () => [
+      { url: 'https://prov.example/good', title: 'Good', rank: 1, extra: { content: good } },
+      {
+        url: 'https://prov.example/truncated',
+        title: 'Truncated',
+        rank: 2,
+        extra: { content: truncated },
+      },
+    ]);
+    const make = (useProviderContent: boolean | 'auto') =>
+      new WebVector(
+        {
+          search: { instance: provider, fallbackProviders: [] },
+          embeddings: { provider: 'none' },
+          ingestion: {
+            respectRobotsTxt: false,
+            perHostMinIntervalMs: 0,
+            retries: 0,
+            allowPrivateNetworks: true,
+            useProviderContent,
+            cache: { enabled: false },
+          },
+          logger: silentLogger,
+        },
+        { env: {} },
+      );
+    const parsers = new Map<string, string>();
+    const wv = make('auto');
+    wv.on('page:complete', ({ url, doc }) => parsers.set(url, doc.parser));
+    const auto = await wv.research('article text');
+    const good1 = auto.sources.find((s) => s.url.endsWith('/good'));
+    const trunc = auto.sources.find((s) => s.url.endsWith('/truncated'));
+    expect(good1?.status).toBe('ok');
+    expect(trunc?.status).toBe('ok');
+    expect(fetched).toBe(1); // only the truncated one was fetched
+    expect(parsers.get('https://prov.example/good')).toBe('provider');
+    expect(parsers.get('https://prov.example/truncated')).toBe('provider→fetch');
+    // legacy true: provider content trusted blindly (no fetch)
+    fetched = 0;
+    await make(true).research('article text');
+    expect(fetched).toBe(0);
+    // false: always fetch
+    await make(false).research('article text');
+    expect(fetched).toBe(2);
   });
 });
