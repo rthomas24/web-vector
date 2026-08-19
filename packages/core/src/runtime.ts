@@ -38,28 +38,41 @@ let sqlitePromise: Promise<SqliteModule | undefined> | undefined;
  */
 export function importNodeSqlite(): Promise<SqliteModule | undefined> {
   if (!sqlitePromise) {
-    sqlitePromise = (async () => {
-      const original = process.emitWarning;
-      const filtered: typeof process.emitWarning = function (this: unknown, warning, ...rest) {
-        const type = typeof rest[0] === 'string' ? rest[0] : (rest[0] as { type?: string })?.type;
-        const msg = typeof warning === 'string' ? warning : warning?.message;
-        const name = typeof warning === 'string' ? type : (warning?.name ?? type);
-        if (name === 'ExperimentalWarning' && /sqlite/i.test(msg ?? '')) return;
-        return (original as any).call(process, warning, ...rest);
-      };
+    sqlitePromise = withSqliteWarningFilter(async () => {
       try {
-        process.emitWarning = filtered;
         const mod = (await import('node:sqlite')) as SqliteModule;
         if (typeof mod?.DatabaseSync !== 'function') return undefined;
         return mod;
       } catch {
         return undefined;
-      } finally {
-        if (process.emitWarning === filtered) process.emitWarning = original;
       }
-    })();
+    });
   }
   return sqlitePromise;
+}
+
+/**
+ * Run `fn` with `process.emitWarning` filtered so that only the Node 22.x
+ * `ExperimentalWarning: SQLite is an experimental feature` is dropped; every other warning still
+ * surfaces. Node calls emitWarning synchronously while evaluating `node:sqlite`, so wrapping the
+ * import is enough. Restored afterwards (even if `fn` throws).
+ */
+export async function withSqliteWarningFilter<T>(fn: () => Promise<T>): Promise<T> {
+  const original = process.emitWarning;
+  const filtered: typeof process.emitWarning = function (this: unknown, warning, ...rest) {
+    const first = rest[0] as string | { type?: string } | undefined;
+    const type = typeof first === 'string' ? first : first?.type;
+    const msg = typeof warning === 'string' ? warning : warning?.message;
+    const name = typeof warning === 'string' ? type : (warning?.name ?? type);
+    if (name === 'ExperimentalWarning' && /sqlite/i.test(msg ?? '')) return;
+    return (original as any).call(process, warning, ...rest);
+  };
+  process.emitWarning = filtered;
+  try {
+    return await fn();
+  } finally {
+    if (process.emitWarning === filtered) process.emitWarning = original;
+  }
 }
 
 function detectRuntime(): RuntimeCapabilities['runtime'] {

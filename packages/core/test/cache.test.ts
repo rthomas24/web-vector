@@ -10,7 +10,12 @@ import {
   PageCache,
   pageValidatorsFrom,
 } from '../src/ingest/index.js';
-import { defaultCacheDir, defaultDataDir, probeRuntime } from '../src/runtime.js';
+import {
+  defaultCacheDir,
+  defaultDataDir,
+  probeRuntime,
+  withSqliteWarningFilter,
+} from '../src/runtime.js';
 
 const caps = await probeRuntime();
 const sqliteIt = caps.sqlite ? it : it.skip;
@@ -57,6 +62,30 @@ describe('runtime / XDG', () => {
   it('probe reports node:sqlite and SSRF mode', () => {
     expect(typeof caps.sqlite).toBe('boolean');
     expect(['connect-time', 'resolve-then-check', 'hostname-only']).toContain(caps.ssrfMode);
+  });
+  it('filters only the node:sqlite ExperimentalWarning (Node 22.x) and restores emitWarning', async () => {
+    const seen: string[] = [];
+    const onWarning = (w: Error) => {
+      seen.push(`${w.name}:${w.message}`);
+    };
+    process.on('warning', onWarning);
+    const original = process.emitWarning;
+    await withSqliteWarningFilter(async () => {
+      process.emitWarning(
+        'SQLite is an experimental feature and might change at any time',
+        'ExperimentalWarning',
+      );
+      process.emitWarning('something else', 'ExperimentalWarning');
+      process.emitWarning('SQLite mentioned but not experimental', 'DeprecationWarning');
+    });
+    expect(process.emitWarning).toBe(original);
+    process.emitWarning('SQLite is an experimental feature (after)', 'ExperimentalWarning');
+    await new Promise((r) => setImmediate(r));
+    process.off('warning', onWarning);
+    expect(seen).toContain('ExperimentalWarning:something else');
+    expect(seen).toContain('DeprecationWarning:SQLite mentioned but not experimental');
+    expect(seen).toContain('ExperimentalWarning:SQLite is an experimental feature (after)');
+    expect(seen.some((s) => s.includes('might change at any time'))).toBe(false);
   });
 });
 
