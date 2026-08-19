@@ -217,3 +217,12 @@ export function vectorStoreConformance(
     },
   ];
 }
+
+export {
+  type HttpFixture,
+  type RecordingFetch,
+  type RecordingFetchOptions,
+  type RecordingFetchStats,
+  type RecordingMode,
+  recordingFetch,
+} from './recording-fetch.js';

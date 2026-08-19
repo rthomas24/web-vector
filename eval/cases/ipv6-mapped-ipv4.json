@@ -1,0 +1,15 @@
+{
+  "id": "ipv6-mapped-ipv4",
+  "query": "IPv4-mapped IPv6 address ::ffff prefix",
+  "urls": [
+    "https://en.wikipedia.org/wiki/IPv6_address",
+    "https://en.wikipedia.org/wiki/IPv6",
+    "https://en.wikipedia.org/wiki/IPv4",
+    "https://en.wikipedia.org/wiki/Link-local_address",
+    "https://en.wikipedia.org/wiki/Network_address_translation"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/IPv6_address", "https://en.wikipedia.org/wiki/IPv6"],
+    "phrases": ["::ffff:", "ipv4-mapped"]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "node-abortsignal-any",
+  "query": "AbortSignal.any combine multiple abort signals Node.js",
+  "urls": [
+    "https://nodejs.org/api/globals.html",
+    "https://nodejs.org/api/events.html",
+    "https://nodejs.org/api/timers.html",
+    "https://nodejs.org/api/stream.html"
+  ],
+  "relevant": {
+    "urls": ["https://nodejs.org/api/globals.html"],
+    "phrases": ["abortsignal.any", "signals"]
+  }
+}

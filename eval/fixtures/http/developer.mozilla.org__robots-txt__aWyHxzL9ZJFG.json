@@ -1,0 +1,20 @@
+{
+  "key": "GET https://developer.mozilla.org/robots.txt",
+  "url": "https://developer.mozilla.org/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "cache-control": "public, max-age=3600",
+    "content-encoding": "br",
+    "content-length": "83",
+    "content-type": "text/plain",
+    "etag": "\"435773ff2b284f28a3739a24f8d4a849\"",
+    "last-modified": "Tue, 19 Aug 2025 16:24:09 GMT",
+    "server": "Google Frontend",
+    "vary": "Accept-Encoding"
+  },
+  "recordedAt": "2026-08-19T02:39:34.195Z",
+  "body": "H4sIAAAAAAAAE1XKMQqAMAxA0b2n6Fyw2Tt7A/EAgUYNJLY0RcXTO7jo+B9/NmoDrrT35IObuJNiTX7rvVoCyHSQlEotarlZBGNpK9i7xUvFuZENRcqZPGBl+HaAhYXsZ0qZ0T2tK5ipdwAAAA==",
+  "bodyEncoding": "gzip-base64"
+}

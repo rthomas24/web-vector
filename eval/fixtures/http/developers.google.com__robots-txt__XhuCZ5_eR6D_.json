@@ -1,0 +1,18 @@
+{
+  "key": "GET https://developers.google.com/robots.txt",
+  "url": "https://developers.google.com/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "cache-control": "no-cache, must-revalidate",
+    "content-encoding": "gzip",
+    "content-type": "text/plain",
+    "last-modified": "Thu, 04 Sep 2025 12:04:01 GMT",
+    "server": "Google Frontend",
+    "vary": "Cookie, Accept-Encoding"
+  },
+  "recordedAt": "2026-08-19T02:39:57.750Z",
+  "body": "H4sIAAAAAAAAEyXKPQ6AIAwG0J1TMJtId2ZvYDwA6hc0KZbQ+nd7B9/8JkXrU8Zh0Xdu2DUxyx09vXLaOYNqanagkRt3Q0k1+s2saiRacYGlomnIIpkRFimkfwtPYfcBj20Xn10AAAA=",
+  "bodyEncoding": "gzip-base64"
+}

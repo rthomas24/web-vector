@@ -1,0 +1,15 @@
+{
+  "id": "cosine-similarity-def",
+  "query": "cosine similarity formula dot product magnitude",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Cosine_similarity",
+    "https://en.wikipedia.org/wiki/Euclidean_distance",
+    "https://en.wikipedia.org/wiki/Dot_product",
+    "https://en.wikipedia.org/wiki/Jaccard_index",
+    "https://en.wikipedia.org/wiki/Pearson_correlation_coefficient"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/Cosine_similarity"],
+    "phrases": ["cosine similarity", "dot product"]
+  }
+}

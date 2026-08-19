@@ -1,0 +1,17 @@
+{
+  "id": "rrf-k-constant",
+  "query": "reciprocal rank fusion k constant",
+  "urls": [
+    "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+    "https://en.wikipedia.org/wiki/Learning_to_rank",
+    "https://en.wikipedia.org/wiki/Mean_reciprocal_rank",
+    "https://en.wikipedia.org/wiki/Okapi_BM25",
+    "https://en.wikipedia.org/wiki/Discounted_cumulative_gain"
+  ],
+  "relevant": {
+    "urls": [
+      "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion"
+    ],
+    "phrases": ["reciprocal rank fusion", "rank_constant"]
+  }
+}

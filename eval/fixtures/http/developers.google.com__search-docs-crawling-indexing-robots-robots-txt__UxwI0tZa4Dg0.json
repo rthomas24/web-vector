@@ -1,0 +1,18 @@
+{
+  "key": "GET https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+  "url": "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt",
+  "method": "GET",
+  "status": 301,
+  "statusText": "Moved Permanently",
+  "headers": {
+    "cache-control": "private, max-age=2592000",
+    "content-encoding": "gzip",
+    "content-type": "text/html; charset=utf-8",
+    "location": "/crawling/docs/robots-txt/robots-txt-spec",
+    "server": "Google Frontend",
+    "vary": "Cookie, Accept-Encoding"
+  },
+  "recordedAt": "2026-08-19T02:39:58.198Z",
+  "body": "H4sIAAAAAAAAE42Ouw7CMBAEe3/FkZrYSosc90hUkSgojX3EFocvci4C/h7xKJBoqHa1M8XaVeQg9wkhyYWcss8A8mXssThlJQuhGzDmikFyGbXW1rxXZVP3g1LnlJ3cgReYEy8U4YhQPxJG8IvwxUsOnugOwiAJQXwdUWA/7DZgPaSKp74xofor5TKayGE2lY8scys3+artPGFo3N+qNd5p2J6gsKwhUA7n1wHK5azVA4Sf15ENAQAA",
+  "bodyEncoding": "gzip-base64"
+}

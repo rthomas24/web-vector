@@ -1,0 +1,15 @@
+{
+  "id": "mmr-diversity",
+  "query": "maximal marginal relevance diversity re-ranking lambda",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Learning_to_rank",
+    "https://en.wikipedia.org/wiki/Automatic_summarization",
+    "https://en.wikipedia.org/wiki/Recommender_system",
+    "https://en.wikipedia.org/wiki/Search_engine_indexing",
+    "https://en.wikipedia.org/wiki/Relevance_(information_retrieval)"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/Automatic_summarization"],
+    "phrases": ["maximal marginal relevance"]
+  }
+}

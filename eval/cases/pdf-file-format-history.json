@@ -1,0 +1,15 @@
+{
+  "id": "pdf-file-format-history",
+  "query": "who created the PDF format and when",
+  "urls": [
+    "https://en.wikipedia.org/wiki/PDF",
+    "https://en.wikipedia.org/wiki/PostScript",
+    "https://en.wikipedia.org/wiki/Adobe_Inc.",
+    "https://en.wikipedia.org/wiki/Portable_Network_Graphics",
+    "https://en.wikipedia.org/wiki/DjVu"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/PDF"],
+    "phrases": ["adobe", "1993"]
+  }
+}

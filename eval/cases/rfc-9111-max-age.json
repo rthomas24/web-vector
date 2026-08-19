@@ -1,0 +1,13 @@
+{
+  "id": "rfc-9111-max-age",
+  "query": "HTTP caching max-age directive freshness lifetime RFC 9111",
+  "urls": [
+    "https://www.rfc-editor.org/rfc/rfc9111.html",
+    "https://www.rfc-editor.org/rfc/rfc9110.html",
+    "https://www.rfc-editor.org/rfc/rfc9112.html"
+  ],
+  "relevant": {
+    "urls": ["https://www.rfc-editor.org/rfc/rfc9111.html"],
+    "phrases": ["max-age", "freshness lifetime"]
+  }
+}

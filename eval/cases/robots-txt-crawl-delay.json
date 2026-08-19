@@ -1,0 +1,15 @@
+{
+  "id": "robots-txt-crawl-delay",
+  "query": "robots.txt Crawl-delay directive support",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Robots.txt",
+    "https://en.wikipedia.org/wiki/Web_crawler",
+    "https://en.wikipedia.org/wiki/Sitemaps",
+    "https://en.wikipedia.org/wiki/Meta_element",
+    "https://developers.google.com/search/docs/crawling-indexing/robots/robots_txt"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/Robots.txt"],
+    "phrases": ["crawl-delay"]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "pep8-line-length",
+  "query": "PEP 8 maximum line length 79 characters",
+  "urls": [
+    "https://peps.python.org/pep-0008/",
+    "https://peps.python.org/pep-0020/",
+    "https://peps.python.org/pep-0257/",
+    "https://peps.python.org/pep-0484/"
+  ],
+  "relevant": {
+    "urls": ["https://peps.python.org/pep-0008/"],
+    "phrases": ["79 characters"]
+  }
+}

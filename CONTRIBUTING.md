@@ -36,3 +36,10 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — it maps every directory an
 ## Reporting security issues
 
 See [SECURITY.md](SECURITY.md) — private advisory, not a public issue.
+
+## Retrieval eval
+
+Ranking and extraction changes must not regress the offline eval (`npm run eval`, see
+[`eval/README.md`](eval/README.md)). It replays recorded HTTP fixtures, so it needs no network and
+runs in CI. If a change intentionally moves the numbers, run `npm run eval -- --update-baseline` and
+commit `eval/baseline.json` in the same PR with a note on why.

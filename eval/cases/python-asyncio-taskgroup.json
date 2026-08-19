@@ -1,0 +1,14 @@
+{
+  "id": "python-asyncio-taskgroup",
+  "query": "asyncio TaskGroup structured concurrency exceptions",
+  "urls": [
+    "https://docs.python.org/3/library/asyncio-task.html",
+    "https://docs.python.org/3/library/asyncio-eventloop.html",
+    "https://docs.python.org/3/library/threading.html",
+    "https://docs.python.org/3/library/concurrent.futures.html"
+  ],
+  "relevant": {
+    "urls": ["https://docs.python.org/3/library/asyncio-task.html"],
+    "phrases": ["taskgroup"]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "key": "GET https://docs.python.org/robots.txt",
+  "url": "https://docs.python.org/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "content-encoding": "gzip",
+    "content-length": "218",
+    "content-type": "text/plain",
+    "etag": "\"6a851698-1f4\"",
+    "last-modified": "Wed, 19 Aug 2026 02:36:08 GMT",
+    "server": "nginx",
+    "vary": "Accept-Encoding"
+  },
+  "recordedAt": "2026-08-19T02:39:46.759Z",
+  "body": "H4sIAAAAAAAAE2XNwUrEMBDG8XueYmBvgonuuK72rDdBQXyA0IxtIM2ETNquby9FhN3Z2/yGD/6fsdHkSwdja0U65wL3YstPGzlbroOTv4E9TcmYHXxUWig3CLRQ4jJtt88BOAUI3M/bw7fIGb4rTyAjrzEPMBeIGYR87UeoJHNqYs2XUL31A+XWwY15ieJT4rUDF2g5Z6VEXmjr/3/h9f0NFqoSOcv5du8uZO+U75X1HpUflA/Kj8rHC6Pqo+qj6qPqo+qj6qPq41X/SfnZmV8lq9uy9AEAAA==",
+  "bodyEncoding": "gzip-base64"
+}

@@ -1,0 +1,19 @@
+{
+  "key": "GET https://arxiv.org/robots.txt",
+  "url": "https://arxiv.org/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "content-encoding": "gzip",
+    "content-length": "705",
+    "content-type": "text/plain; charset=utf-8",
+    "etag": "\"4b55ce9-16de-5fbc01a7e0caa\"",
+    "last-modified": "Mon, 15 May 2023 19:03:00 GMT",
+    "server": "Apache",
+    "vary": "Accept-Encoding"
+  },
+  "recordedAt": "2026-08-19T02:38:50.397Z",
+  "body": "H4sIAAAAAAAAE+3YTW/TQBAG4Ht+xaDcKjnbVsAht5ZKqAcQKPTQkzXeHcdLbc8yO07af4+SlNTrFFCpBKLyze96vFlvHq8/piBcsMaZ3iqULFCphrkxKLd+NWNZGsDWQeNFWCB6pfij5Gj2UDSZwmXrfLTiG9+iEmCn3KCSA8frtmZ0EUrhBrTycdsRoBC0rBBIGq9KbjKFBRFgHXl+OJCK6mB2o51MriJJhktqdQ5Hk3eC6zpzVOPdHE7eTM7qmtdzMCi28iva5ztC2YfaR32oLOJ+O7hyv11pU++DRbVVFyYXPuJ9UxdJ+pmyIL7VflMU248h9pNb+X60zDeekoqSpUmyb10/rzytk/2aDFCoTLqzXg+6x2S8nxa5RVtRv22hmB4WiW4ybF3mKKrwXX/f5bJloQ9JB4z+tJ+x06qftUhTJmQpnUcVtDcF2ptkNoVWLd0mhTZJGHw68A2KtEXzzXBYcp/MbKx4nVGDvk69vWde1lSwjs5GZ79xlsC5xor5FSzqTsJgzRopjZSeQqnw7XKzAk3h9Pj0JDs5zk5eQwZCDa/IgX3Atb2rn+/KZ/CRyEVQhoJAKEPnyIEvQSuS3R0Z2zsIwkVNTZz1+j99Cxns6rdnNPod/f6533P0rovBO5KBpOOR0kjpKZS+cKceeTFiGjE9G9Pi89XlRW65Lf2yE3I5xtzR5r222ATNd6+hJX4zu5n5mbdfkuqP6d5lr2lLs5e38PonNdp7kfausXV0e876756t7t2YARyTyhnE0i/TJrfy5hFOZviHmyEoMxRlBqTM0JQZojr4EdTBQUsfNb1aYlc0XtOqUKNN6FjhmNj7KpRcyQEDSR4wxnV6Ij8kmwPK5jmWu7D9qvbf8D4LYffVZHxzeGGrpHmE0V++bVMjXaw2a2evcvId55eh9d4WAAA=",
+  "bodyEncoding": "gzip-base64"
+}

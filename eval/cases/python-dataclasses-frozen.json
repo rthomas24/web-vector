@@ -1,0 +1,15 @@
+{
+  "id": "python-dataclasses-frozen",
+  "query": "python dataclass frozen immutable field default_factory",
+  "urls": [
+    "https://docs.python.org/3/library/dataclasses.html",
+    "https://docs.python.org/3/library/typing.html",
+    "https://docs.python.org/3/library/collections.html",
+    "https://docs.python.org/3/library/enum.html",
+    "https://docs.python.org/3/library/functools.html"
+  ],
+  "relevant": {
+    "urls": ["https://docs.python.org/3/library/dataclasses.html"],
+    "phrases": ["frozen", "default_factory"]
+  }
+}

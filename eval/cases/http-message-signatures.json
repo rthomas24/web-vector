@@ -1,0 +1,13 @@
+{
+  "id": "http-message-signatures",
+  "query": "HTTP message signatures Signature-Input header RFC 9421",
+  "urls": [
+    "https://www.rfc-editor.org/rfc/rfc9421.html",
+    "https://www.rfc-editor.org/rfc/rfc9110.html",
+    "https://www.rfc-editor.org/rfc/rfc7235.html"
+  ],
+  "relevant": {
+    "urls": ["https://www.rfc-editor.org/rfc/rfc9421.html"],
+    "phrases": ["signature-input"]
+  }
+}

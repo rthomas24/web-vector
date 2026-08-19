@@ -1,0 +1,18 @@
+{
+  "key": "GET https://nodejs.org/robots.txt",
+  "url": "https://nodejs.org/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "cache-control": "public, max-age=0, must-revalidate",
+    "content-encoding": "br",
+    "content-type": "text/plain; charset=utf-8",
+    "etag": "W/\"a1ce249f92297cd6058a66c68fa0ff47\"",
+    "last-modified": "Mon, 17 Aug 2026 17:13:14 GMT",
+    "server": "cloudflare"
+  },
+  "recordedAt": "2026-08-19T02:39:38.291Z",
+  "body": "H4sIAAAAAAAAE32LQQqEMAxF9z1F1wOafXeCNxAPEGyoldiWJqDHH0YXKsgs/3vvj0K16QIldfZjOua8OQs+igKjkii8Qp8nASzxssfoo+C9foDfxZghKq1YnJ1ViziAlD0t0uYaQE7X7iv/7Ziwpkf9BZWCMyPHAAAA",
+  "bodyEncoding": "gzip-base64"
+}

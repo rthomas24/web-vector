@@ -20,6 +20,8 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm test
+      # Offline retrieval eval over recorded fixtures; fails on ranking regressions vs eval/baseline.json.
+      - run: npm run eval
   live:
     # Real network + local model; runs nightly and on manual dispatch.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'

@@ -1,0 +1,15 @@
+{
+  "id": "bm25-saturation",
+  "query": "BM25 free parameters k1 and b average document length",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Tf%E2%80%93idf",
+    "https://en.wikipedia.org/wiki/Okapi_BM25",
+    "https://en.wikipedia.org/wiki/Vector_space_model",
+    "https://en.wikipedia.org/wiki/Latent_semantic_analysis",
+    "https://en.wikipedia.org/wiki/Information_retrieval"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/Okapi_BM25"],
+    "phrases": ["free parameters", "average document length"]
+  }
+}

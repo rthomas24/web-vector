@@ -1,0 +1,18 @@
+{
+  "id": "http-304-not-modified",
+  "query": "HTTP 304 Not Modified If-None-Match ETag",
+  "urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/304",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/200",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404"
+  ],
+  "relevant": {
+    "urls": [
+      "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/304",
+      "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/ETag"
+    ],
+    "phrases": ["not modified", "if-none-match"]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "ssrf-definition",
+  "query": "server-side request forgery attack internal network",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Server-side_request_forgery",
+    "https://en.wikipedia.org/wiki/Cross-site_request_forgery",
+    "https://en.wikipedia.org/wiki/Cross-site_scripting",
+    "https://en.wikipedia.org/wiki/SQL_injection",
+    "https://en.wikipedia.org/wiki/Directory_traversal_attack"
+  ],
+  "relevant": {
+    "urls": ["https://en.wikipedia.org/wiki/Server-side_request_forgery"],
+    "phrases": ["server-side request forgery"]
+  }
+}

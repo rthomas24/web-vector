@@ -1,0 +1,18 @@
+{
+  "key": "GET https://peps.python.org/robots.txt",
+  "url": "https://peps.python.org/robots.txt",
+  "method": "GET",
+  "status": 404,
+  "statusText": "Not Found",
+  "headers": {
+    "content-encoding": "gzip",
+    "content-length": "1649",
+    "content-type": "text/html; charset=utf-8",
+    "etag": "W/\"6a830d74-1542\"",
+    "server": "GitHub.com",
+    "vary": "Accept-Encoding"
+  },
+  "recordedAt": "2026-08-19T02:39:43.002Z",
+  "body": "H4sIAAAAAAAAE61XTW/jNhC9+1dMuUCToJXppEG3cCUfmuZQYIEa2PTQU0BTY4kIRWrJkW0B++MLUv6Q7Tg2kp4sjeZLM+89yoP0hz//fnj6d/oIJVV6MkjDD2hhioyhYcGAIp8MAADSCkmALIXzSBlraJ78xvqPjKgwYwuFy9o6YiCtITSUsaXKqcxyXCiJSbz5GZRRpIROvBQas9vh6JVU0mrrEi9LrLCXTquiJMiFe9nEkCKNk6koEIwlmNvG5PAdaqz9sG6ptGZoXZHyzq+L0cq8gEOdMV9aR7IhUNIaBqXDecb4sydBSvK6HdamYEdRUhhrlBR6E1ES1X7M+UFVfj+658fhnlqNvkSkbcVaFDhXJt9eJNJWtTVoKGnUUHrPgNoaM0a4Ih7uL0m7eZH46MNZqm8fTlG3RYWG/KuJoMJciYxd1w7n6HzSB8EY4u5vGKg8Y3VbJPH+XdWfA4De00KI63XQx+GuAaEJnRGEm+yirrWSgpQ13Hn/06rSDCIeM/ZFEHqC6ePUnwNTvHe7gUe21M7W6KjNmC3GMeeOLVfnWHF1MlOOXjpVh5Z77Hujclv3abrEmVeEp/0bp3vul9DnOEeo8BzUopdpGoPh0ZTCSAzLhqmztfVCe7gOU745nVBVosAL2trAyRZJDOmLxImsY6HpuM249TOBUTN7oXej0bmQEiMzTsd0EnvBjjtHCuDvmNBz/PTL58+/ilk4KHh3UqQzm7dd+GAAkHLfVjOrgyXtLiNz/KJIKhuKhvPiD7vK2AhGcHcPd/cMaqsMoUtwEZga2KT3pf4rapSEeSQjhK4aBx1B91T+TAe++XAD3WF0YQcp94tinaeb+yTl64u1FWXYRacuWCfhKEjWxnUH0S8MG93O0BlvIRckku35oQpjHU7eIkTKy9uDNI0GqYX3GZs5FLl0TTXzbN9pLXeTVBwI1nK57NNkq3FPJcIG8c4WTlSVMgV8EaZoAuPWTaZcTOBHJ7419ndIuVZnyn7aFriI9dPHKfxlclxdWGdfPI/9Ut7oA8usIVovsEPF+uBIZCs1OgbWPGglXzLmkR6ix9focG1wtW+4uXll6u8wpL4WZrPThfKN0LpNSpXn4RvvyRaFxjWQeccoDqIhu4E1dagOWQ5fv3vbHjD5ITJ3j3K1iGOp7EzpgGrhZFC1rq89axIURiiD7mAC6RbbnePMrqBUOSbbj7h49Gdsbg0lc1Ep3Y5BmRKdIjZJ+XF8v/lcLV7rvBLq4M33m4rz3adekM6MRWyO91HEDjyXUakzdjtiJ3d0iMNXVlHeHnkFZg/+MXPrqAnfIrqFJYK0jc7NFUGoHna7kXNobQNLdAja2pfAzrl1w950dmNI+VqT3haz/9+a8u58SXn8w/IfQZWiosEMAAA=",
+  "bodyEncoding": "gzip-base64"
+}

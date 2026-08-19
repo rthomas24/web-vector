@@ -1,0 +1,18 @@
+{
+  "id": "attention-is-all-you-need",
+  "query": "transformer architecture multi-head attention paper",
+  "urls": [
+    "https://arxiv.org/abs/1706.03762",
+    "https://arxiv.org/abs/1810.04805",
+    "https://arxiv.org/abs/1409.0473",
+    "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)",
+    "https://en.wikipedia.org/wiki/Recurrent_neural_network"
+  ],
+  "relevant": {
+    "urls": [
+      "https://arxiv.org/abs/1706.03762",
+      "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)"
+    ],
+    "phrases": ["attention is all you need", "multi-head"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "key": "GET https://www.sqlite.org/robots.txt",
+  "url": "https://www.sqlite.org/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "cache-control": "max-age=120",
+    "content-length": "100",
+    "content-type": "text/plain; charset=utf-8",
+    "etag": "\"m69862e8ds64\"",
+    "last-modified": "Fri, 06 Feb 2026 18:10:21 GMT"
+  },
+  "recordedAt": "2026-08-19T02:40:01.282Z",
+  "body": "H4sIAAAAAAAAEwstTi3STUxPzSuxUtDicsksTszJyS+3UtBPLisuKUpMRhYqLkLhpuQno4kkp2eicPPzSooyk7gAWNAmC2QAAAA=",
+  "bodyEncoding": "gzip-base64"
+}

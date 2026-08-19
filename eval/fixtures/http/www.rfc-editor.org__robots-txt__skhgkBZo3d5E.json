@@ -1,0 +1,16 @@
+{
+  "key": "GET https://www.rfc-editor.org/robots.txt",
+  "url": "https://www.rfc-editor.org/robots.txt",
+  "method": "GET",
+  "status": 200,
+  "statusText": "OK",
+  "headers": {
+    "content-encoding": "gzip",
+    "content-type": "text/plain;charset=utf-8",
+    "etag": "\"b6f9795a5c7fe8ad892ea465a92dcbf6\"",
+    "server": "cloudflare"
+  },
+  "recordedAt": "2026-08-19T02:39:51.927Z",
+  "body": "H4sIAAAAAAAAE2XKMQ6DMBBE0Z5TuI6Et0jnOjdAOYCFB7BkMJrdYI5PQUfa//5XwT7O2Cy4V/fJGkupLTjhNEr82VKp8uwEsSUQ6Y+Ot0FNuiEb1rgHt5jtGkRaa57T2CNlq/SVs+j9+HMtF94+DYWHAAAA",
+  "bodyEncoding": "gzip-base64"
+}

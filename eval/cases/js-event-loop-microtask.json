@@ -1,0 +1,17 @@
+{
+  "id": "js-event-loop-microtask",
+  "query": "JavaScript event loop microtask queue vs macrotask",
+  "urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model",
+    "https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide",
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises",
+    "https://developer.mozilla.org/en-US/docs/Web/API/Window/setTimeout"
+  ],
+  "relevant": {
+    "urls": [
+      "https://developer.mozilla.org/en-US/docs/Web/API/HTML_DOM_API/Microtask_guide",
+      "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Execution_model"
+    ],
+    "phrases": ["microtask"]
+  }
+}

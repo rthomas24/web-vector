@@ -1,0 +1,14 @@
+{
+  "id": "sqlite-wal-mode",
+  "query": "SQLite write-ahead logging WAL mode concurrent readers",
+  "urls": [
+    "https://www.sqlite.org/wal.html",
+    "https://www.sqlite.org/lockingv3.html",
+    "https://www.sqlite.org/atomiccommit.html",
+    "https://en.wikipedia.org/wiki/SQLite"
+  ],
+  "relevant": {
+    "urls": ["https://www.sqlite.org/wal.html"],
+    "phrases": ["write-ahead log", "wal"]
+  }
+}
