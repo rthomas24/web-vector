@@ -438,10 +438,19 @@ export async function runRetrieveStage(
       endOffset: x.metadata.endOffset,
       siteName: x.metadata.siteName,
       publishedAt: x.metadata.publishedAt,
+      updatedAt: x.metadata.updatedAt,
+      kind: x.metadata.kind,
+      page: x.metadata.page,
       fetchedAt: x.metadata.fetchedAt,
       matchedQueries: matchedFor(x, matched, query),
       corroboration: x.corroboration ?? corroborationOf(x),
-      citation: citationFor(i + 1, x.metadata.title, x.metadata.url, x.metadata.publishedAt),
+      citation: citationFor(
+        i + 1,
+        x.metadata.title,
+        x.metadata.url,
+        x.metadata.publishedAt,
+        x.metadata.page,
+      ),
       ...(input.explain ? { explain: explainFor(x.id, x) } : {}),
     };
   });

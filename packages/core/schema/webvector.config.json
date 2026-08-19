@@ -646,10 +646,20 @@
         "acceptMarkdown": "prefer",
         "fastPaths": true,
         "archiveFallback": false,
+        "html": {
+          "strategy": "auto",
+          "useJsonLdBody": true
+        },
+        "render": {
+          "when": "never",
+          "maxPerRun": 5,
+          "timeoutMs": 30000
+        },
         "chunkSize": 480,
         "chunkOverlap": 60,
         "maxChunksPerPage": 200,
         "minChunkChars": 100,
+        "dropSharedBoilerplate": true,
         "useProviderContent": "auto",
         "cache": {
           "enabled": true,
@@ -808,6 +818,76 @@
             }
           ]
         },
+        "html": {
+          "default": {
+            "strategy": "auto",
+            "useJsonLdBody": true
+          },
+          "type": "object",
+          "properties": {
+            "strategy": {
+              "default": "auto",
+              "type": "string",
+              "enum": [
+                "auto",
+                "readability",
+                "full"
+              ]
+            },
+            "useJsonLdBody": {
+              "default": true,
+              "type": "boolean"
+            }
+          }
+        },
+        "render": {
+          "default": {
+            "when": "never",
+            "maxPerRun": 5,
+            "timeoutMs": 30000
+          },
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "cloudflare",
+                "browserless",
+                "custom"
+              ]
+            },
+            "when": {
+              "default": "never",
+              "type": "string",
+              "enum": [
+                "needs-js",
+                "blocked",
+                "never"
+              ]
+            },
+            "maxPerRun": {
+              "default": 5,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "timeoutMs": {
+              "default": 30000,
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 9007199254740991
+            },
+            "accountId": {
+              "type": "string"
+            },
+            "baseUrl": {
+              "type": "string"
+            },
+            "apiToken": {
+              "type": "string"
+            }
+          }
+        },
         "chunkSize": {
           "default": 480,
           "type": "integer",
@@ -831,6 +911,10 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
+        },
+        "dropSharedBoilerplate": {
+          "default": true,
+          "type": "boolean"
         },
         "useProviderContent": {
           "default": "auto",

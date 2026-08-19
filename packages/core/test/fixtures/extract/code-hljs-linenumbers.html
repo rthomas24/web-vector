@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sliding window rate limiter in Redis - Example Wiki</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Example Wiki</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header><div id="content"><h1 id="firstHeading">Sliding window rate limiter in Redis</h1><div id="bodyContent"><p>Sliding window counters approximate a true rolling window by weighting the previous fixed window by how much of it still overlaps the current one. They need only two counters per client, which makes them cheap to store in a shared cache such as Redis.</p><div class="highlight-wrapper"><table class="highlighttable"><tbody><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span>
+<span class="normal">9</span>
+<span class="normal">10</span></pre></div></td><td class="code"><div class="highlight"><pre><code class="hljs language-lua"><span class="hljs-keyword">local</span> key = KEYS[1]
+<span class="hljs-keyword">local</span> now = tonumber(ARGV[1])
+<span class="hljs-keyword">local</span> window = tonumber(ARGV[2])
+redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
+<span class="hljs-keyword">local</span> count = redis.call('ZCARD', key)
+<span class="hljs-keyword">if</span> count < tonumber(ARGV[3]) <span class="hljs-keyword">then</span>
+  redis.call('ZADD', key, now, now)
+  <span class="hljs-keyword">return</span> 1
+<span class="hljs-keyword">end</span>
+<span class="hljs-keyword">return</span> 0</code></pre></div></td></tr></tbody></table><button class="copy-to-clipboard" data-clipboard-target="#code">Copy to clipboard</button></div><p>In a distributed deployment the counters must be shared, otherwise each instance enforces its own limit and the effective limit becomes the sum across instances. A central store introduces a network round trip per request, so many systems combine a local pre-filter with a periodic sync to the shared counter.</p></div></div>
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Example Wiki</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Example Wiki Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

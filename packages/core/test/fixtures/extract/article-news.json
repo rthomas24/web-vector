@@ -1,0 +1,26 @@
+{
+  "url": "https://news.example.com/2026/03/14/rate-limiting-explained",
+  "type": "news article with JSON-LD NewsArticle, OG tags, dates, nav/footer/aside/share chrome",
+  "minF1": 0.9,
+  "mustContain": [
+    "token bucket algorithm",
+    "RateLimit-Remaining",
+    "Tell the client when it may try again"
+  ],
+  "mustNotContain": [
+    "FOOTER-MARKER-TEXT",
+    "RELATED-ASIDE-MARKER",
+    "SHARE-BAR-MARKER",
+    "Start free trial"
+  ],
+  "meta": {
+    "title": "Rate limiting, explained for busy engineers",
+    "publishedAt": "2026-03-14T09:30:00Z",
+    "updatedAt": "2026-03-15T11:00:00Z",
+    "siteName": "Example News",
+    "byline": "Dana Whitfield",
+    "kind": "news",
+    "canonicalUrl": "https://news.example.com/2026/03/14/rate-limiting-explained",
+    "accessibleForFree": true
+  }
+}

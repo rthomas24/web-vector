@@ -1,0 +1,5 @@
+{
+  "url": "https://ng.example.com/",
+  "type": "Angular shell: <app-root> with ng-version and a Loading… placeholder",
+  "failure": "PARSE_NEEDS_JS"
+}

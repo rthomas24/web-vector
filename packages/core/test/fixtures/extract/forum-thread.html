@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Parsers: recursive descent vs Pratt - Compilers - Example Forum</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"DiscussionForumPosting","headline":"Parsers: recursive descent vs Pratt","datePublished":"2025-09-30T08:00:00Z","author":{"@type":"Person","name":"ada"},"interactionStatistic":{"@type":"InteractionCounter","userInteractionCount":4}}</script>
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Example Forum</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header>
+<div id="main-outlet" class="wrap">
+<div id="topic-title"><h1><a href="https://forum.example.org/t/parsers-recursive-descent-vs-pratt/9921">Parsers: recursive descent vs Pratt</a></h1><div class="topic-category"><a href="/c/compilers">Compilers</a> <a class="tag" href="/tag/parsing">parsing</a></div></div>
+<div class="post-stream">
+<article class="topic-post post boxed" id="post_1" data-post-id="1">
+<div class="topic-avatar"><img alt="" src="/avatars/ada.png" width="45" height="45"></div>
+<div class="topic-body"><div class="topic-meta-data"><span class="username"><a href="/u/ada">ada</a></span><span class="post-date"><a href="/t/9921/1">Sep 30, 2025</a></span></div>
+<div class="cooked"><p>Starting a thread on parser design. A tokenizer turns a stream of characters into tokens such as identifiers, numbers and punctuation. The parser then consumes those tokens and builds a tree that reflects the grammar of the language, reporting an error at the first token that cannot continue any valid production.</p><p>Recursive descent parsers implement one function per grammar rule. Each function consumes the tokens that rule expects and calls the functions of the rules it references, so the call stack mirrors the shape of the parse tree while it is being built.</p></div>
+<div class="post-controls"><button class="like" aria-label="like this post">♥ 3</button><button class="share">Share</button><button class="reply">Reply</button><button class="bookmark">Bookmark</button></div>
+</div></article>
+<article class="topic-post post boxed" id="post_2" data-post-id="2">
+<div class="topic-avatar"><img alt="" src="/avatars/brendan.png" width="45" height="45"></div>
+<div class="topic-body"><div class="topic-meta-data"><span class="username"><a href="/u/brendan">brendan</a></span><span class="post-date"><a href="/t/9921/2">Sep 31, 2025</a></span></div>
+<div class="cooked"><p>Pratt parsing handles operator precedence by giving each operator a binding power. A loop keeps extending the current expression while the next operator binds more tightly than the surrounding context allows, which avoids one grammar rule per precedence level. I switched our expression parser to this last year and deleted eleven grammar rules.</p></div>
+<div class="post-controls"><button class="like" aria-label="like this post">♥ 2</button><button class="share">Share</button><button class="reply">Reply</button><button class="bookmark">Bookmark</button></div>
+</div></article>
+<article class="topic-post post boxed" id="post_3" data-post-id="3">
+<div class="topic-avatar"><img alt="" src="/avatars/chen.png" width="45" height="45"></div>
+<div class="topic-body"><div class="topic-meta-data"><span class="username"><a href="/u/chen">chen</a></span><span class="post-date"><a href="/t/9921/3">Sep 32, 2025</a></span></div>
+<div class="cooked"><p>Neither approach helps if you ignore recovery. Good error recovery matters more than speed for interactive tools. A common strategy is to synchronise on statement boundaries: after an error the parser skips tokens until it sees a semicolon or a keyword that starts a statement, then continues so that one typo does not hide every later error.</p></div>
+<div class="post-controls"><button class="like" aria-label="like this post">♥ 1</button><button class="share">Share</button><button class="reply">Reply</button><button class="bookmark">Bookmark</button></div>
+</div></article>
+<article class="topic-post post boxed" id="post_4" data-post-id="4">
+<div class="topic-avatar"><img alt="" src="/avatars/ada.png" width="45" height="45"></div>
+<div class="topic-body"><div class="topic-meta-data"><span class="username"><a href="/u/ada">ada</a></span><span class="post-date"><a href="/t/9921/4">Sep 33, 2025</a></span></div>
+<div class="cooked"><p>Agreed on recovery. For what it is worth the Pratt loop composes fine with statement-level synchronisation.</p></div>
+<div class="post-controls"><button class="like" aria-label="like this post">♥ 3</button><button class="share">Share</button><button class="reply">Reply</button><button class="bookmark">Bookmark</button></div>
+</div></article>
+</div>
+<div class="topic-map"><span>created Sep 30, 2025</span> <span>last reply Oct 3, 2025</span> <span>4 replies</span> <span>212 views</span></div>
+<div id="suggested-topics"><h3>Suggested Topics SUGGESTED-TOPICS-MARKER</h3><table><tr><td><a href="/t/1">Incremental parsing in editors</a></td><td>Compilers</td><td>7</td></tr><tr><td><a href="/t/2">Error messages people actually read</a></td><td>Compilers</td><td>12</td></tr><tr><td><a href="/t/3">Show HN: a Pratt parser in 100 lines</a></td><td>Show</td><td>3</td></tr></table></div>
+</div>
+
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Example Forum</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Example Forum Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

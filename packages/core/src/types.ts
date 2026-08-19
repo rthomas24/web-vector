@@ -105,8 +105,14 @@ export interface ChunkMetadata {
   sessionId?: string;
   siteName?: string;
   publishedAt?: string;
+  /** Last-modified date declared by the page (article:modified_time, dateModified, …). */
+  updatedAt?: string;
   lang?: string;
   breadcrumb?: string;
+  /** Page kind from og:type / JSON-LD (article, news, blog, qa, docs, product, video, other). */
+  kind?: string;
+  /** 1-based PDF page the chunk starts on (PDF documents only). */
+  page?: number;
   [k: string]: unknown;
 }
 
@@ -184,8 +190,26 @@ export interface ParsedDocument {
   byline?: string;
   siteName?: string;
   publishedAt?: string;
+  /** Last-modified date declared by the page (article:modified_time, og:updated_time, dateModified, …). */
+  updatedAt?: string;
+  /** BCP-47-ish language tag from <html lang> / Content-Language / JSON-LD / script heuristic. */
   lang?: string;
   excerpt?: string;
+  /**
+   * Absolute canonical URL (<link rel=canonical> / og:url) when declared and sane; the ingest
+   * stage uses it as the dedupe key so AMP/mobile/tracking variants merge.
+   */
+  canonicalUrl?: string;
+  /** hreflang alternates. */
+  alternates?: { lang: string; url: string }[];
+  /** Page kind from og:type / JSON-LD @type / generator / URL path. */
+  kind?: 'article' | 'news' | 'blog' | 'qa' | 'docs' | 'product' | 'video' | 'other';
+  /** schema.org isAccessibleForFree (false = paywalled); undefined when the page does not say. */
+  accessibleForFree?: boolean;
+  /** Whitespace-token count of `text`. */
+  wordCount?: number;
+  /** PDF only: 1-based page number at each markdown char offset boundary (`{ start, page }`). */
+  pages?: { start: number; page: number }[];
   contentType: string;
   /** Parser id that produced the document. */
   parser: string;
@@ -218,6 +242,8 @@ export interface ParseContext {
   url: string;
   contentType: string;
   charset?: string;
+  /** `Content-Language` response header, when the server sent one (language fallback). */
+  contentLanguage?: string;
 }
 
 export interface ContentParser {
@@ -276,6 +302,11 @@ export interface Passage {
   endOffset: number;
   siteName?: string;
   publishedAt?: string;
+  updatedAt?: string;
+  /** Page kind (article, news, blog, qa, docs, product, video, other) when the page declared one. */
+  kind?: string;
+  /** PDF page the passage starts on (1-based); the citation then carries `#page=N`. */
+  page?: number;
   fetchedAt: string;
   matchedQueries: string[];
   /** Ready-to-print citation, e.g. "[3] Title — https://…". */

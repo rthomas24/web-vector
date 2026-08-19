@@ -34,6 +34,7 @@ import {
   ingestUrl,
   parseResource,
 } from '../ingest/index.js';
+import { RenderBudget, type RenderHook } from '../ingest/render.js';
 import { assessEvidence } from '../retrieval/evidence.js';
 import { sourcesFromPassages, type VerifyResult, verifyCitations } from '../retrieval/verify.js';
 import { hostOf } from '../telemetry/otel.js';
@@ -231,6 +232,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           signal: opts.signal,
           fastPaths: this.config.ingestion.fastPaths,
           archiveFallback: this.config.ingestion.archiveFallback,
+          render: this.renderHook(c),
         }),
       { bypassNegative: policy?.mode === 'bypass' },
     );
@@ -551,6 +553,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       message: `Fetching ${targets.length} pages`,
     });
 
+    const renderHook = this.renderHook(c);
     const ingestOne = async (r: SearchResult): Promise<void> => {
       const canonical = canonicalizeUrl(r.url);
       const summary: SourceSummary = {
@@ -574,7 +577,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           return;
         }
         this.emit('page:start', { url: r.url });
-        const fetched = await this.fetchPage(c, r, signal, cachePolicy, meter);
+        const fetched = await this.fetchPage(c, r, signal, cachePolicy, meter, renderHook);
         if ('failure' in fetched) {
           failures.push(fetched.failure);
           summary.failure = fetched.failure;
@@ -926,12 +929,26 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   // ─── internals ─────────────────────────────────────────────────────────
 
   /** Get page content: provider-supplied text (Tavily/Exa) when allowed, else fetch + parse. */
+  /** Render hook with a fresh per-run budget (undefined when ingestion.render is off). */
+  private renderHook(c: Components): RenderHook | undefined {
+    if (!c.render) return undefined;
+    const rc = this.config.ingestion.render;
+    return {
+      provider: c.render,
+      when: rc.when,
+      budget: new RenderBudget(rc.maxPerRun),
+      timeoutMs: rc.timeoutMs,
+      allowPrivateNetworks: this.config.ingestion.allowPrivateNetworks,
+    };
+  }
+
   private async fetchPage(
     c: Components,
     r: SearchResult,
     signal: AbortSignal | undefined,
     cachePolicy: CachePolicy | undefined,
     meter: UsageMeter,
+    render?: RenderHook,
   ): Promise<
     | { page: CachedPage; cachedHit: boolean; revalidated: boolean; ms: number }
     | { failure: Failure; ms: number }
@@ -977,6 +994,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
               signal,
               fastPaths: this.config.ingestion.fastPaths,
               archiveFallback: this.config.ingestion.archiveFallback,
+              render,
             }),
           { bypassNegative: cachePolicy?.mode === 'bypass' },
         );
@@ -1090,6 +1108,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       chunkOverlap: i.chunkOverlap,
       maxChunks: i.maxChunksPerPage,
       minChunkChars: i.minChunkChars,
+      dropSharedBoilerplate: i.dropSharedBoilerplate,
     };
   }
 

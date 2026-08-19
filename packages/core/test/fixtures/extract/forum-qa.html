@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>throttling - How does a token bucket handle bursts? - Example Q&A</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"QAPage","mainEntity":{"@type":"Question","name":"How does a token bucket handle bursts?","dateCreated":"2026-01-08T14:02:00Z","answerCount":3,"author":{"@type":"Person","name":"mira_k"}}}</script><meta property="og:type" content="website">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Example Q&A</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header>
+<div class="container">
+<div id="mainbar">
+<div id="question-header"><h1><a href="https://qa.example.com/questions/48213/how-does-a-token-bucket-handle-bursts" class="question-hyperlink">How does a token bucket handle bursts?</a></h1></div>
+<div class="question-stats">Asked <time datetime="2026-01-08T14:02:00Z">Jan 8 at 14:02</time> · Viewed 2k times</div>
+<div id="question" class="question post-layout">
+<div class="votecell"><button aria-label="Up vote">▲</button><div class="js-vote-count">14</div><button aria-label="Down vote">▼</button><button aria-label="Save">☆</button></div>
+<div class="postcell"><div class="question-body"><p>I am implementing throttling for an internal API and cannot decide between a token bucket and a fixed window counter. The docs I read say the bucket "tolerates bursts", but I do not understand how a burst is different from simply exceeding the limit. Could someone explain with numbers?</p></div><div class="post-taglist"><a class="post-tag" href="/questions/tagged/throttling">throttling</a> <a class="post-tag" href="/questions/tagged/api-design">api-design</a></div><div class="post-menu"><a href="/q/48213/share">Share</a> <a href="/posts/48213/edit">Edit</a> <a href="#">Follow</a></div><div class="user-info">asked Jan 8 by <a href="/users/1">mira_k</a> 1,204 · 3 · 11</div></div>
+</div>
+<div id="answers"><h2 class="answers-subheader">3 Answers</h2>
+<div class="sort-tabs"><a href="?answertab=scoredesc">Highest score (default)</a> <a href="?answertab=trending">Trending</a> <a href="?answertab=modifieddesc">Date modified</a></div>
+<div class="answer accepted-answer post-layout" id="answer-1" data-answerid="1">
+<div class="votecell"><button aria-label="Up vote">▲</button><div class="js-vote-count">31</div><button aria-label="Down vote">▼</button><div class="accepted" aria-label="accepted">✓</div></div>
+<div class="answercell"><div class="s-prose js-post-body"><p>The difference is what the limit is measured against. The token bucket algorithm keeps a counter of available tokens that refills at a fixed rate up to a maximum capacity. Each request consumes one token; when the bucket is empty the request is rejected. Because tokens accumulate while the service is idle, the bucket tolerates short bursts without exceeding the long-term average rate. With capacity 100 and refill 10 per second, a client that was idle for ten seconds may send 100 requests at once and only then is it held to 10 per second.</p><pre><code>capacity = 100
+refill   = 10 / s
+idle 10s  -> 100 tokens available -> burst of 100 allowed
+after     -> 10 requests per second sustained</code></pre></div><div class="post-menu"><a href="/a/1/share">Share</a> <a href="/posts/1/edit">Edit</a> <a href="#">Follow</a></div><div class="user-info">answered Jan 8 by <a href="/users/2">user2</a></div>
+<div class="comments"><ul><li class="comment"><div class="comment-body"><span class="comment-copy">Thanks, the worked example with capacity 100 made it click.</span> – <a href="/users/9" class="comment-user">commenter0</a> <span class="comment-date">Jan 9</span></div></li><li class="comment"><div class="comment-body"><span class="comment-copy">Worth adding that many CDNs expose exactly these two knobs as burst and rate.</span> – <a href="/users/10" class="comment-user">commenter1</a> <span class="comment-date">Jan 9</span></div></li></ul><a class="js-add-link" href="#">Add a comment</a></div>
+</div></div>
+<div class="answer post-layout" id="answer-2" data-answerid="2">
+<div class="votecell"><button aria-label="Up vote">▲</button><div class="js-vote-count">9</div><button aria-label="Down vote">▼</button></div>
+<div class="answercell"><div class="s-prose js-post-body"><p>A leaky bucket smooths traffic instead of tolerating bursts: requests enter a queue that drains at a constant rate, and requests arriving when the queue is full are dropped. It produces a very even output rate at the cost of added latency for bursty clients. So if you want smoothing rather than tolerance, pick the leaky bucket; if you want to sell a monthly quota with occasional spikes, pick the token bucket.</p></div><div class="post-menu"><a href="/a/2/share">Share</a> <a href="/posts/2/edit">Edit</a> <a href="#">Follow</a></div><div class="user-info">answered Jan 8 by <a href="/users/3">user3</a></div>
+
+</div></div>
+<div class="answer post-layout" id="answer-3" data-answerid="3">
+<div class="votecell"><button aria-label="Up vote">▲</button><div class="js-vote-count">4</div><button aria-label="Down vote">▼</button></div>
+<div class="answercell"><div class="s-prose js-post-body"><p>One practical note: In a distributed deployment the counters must be shared, otherwise each instance enforces its own limit and the effective limit becomes the sum across instances. A central store introduces a network round trip per request, so many systems combine a local pre-filter with a periodic sync to the shared counter.</p></div><div class="post-menu"><a href="/a/3/share">Share</a> <a href="/posts/3/edit">Edit</a> <a href="#">Follow</a></div><div class="user-info">answered Jan 8 by <a href="/users/4">user4</a></div>
+
+</div></div>
+</div>
+<div class="post-form"><h2>Your Answer</h2><textarea></textarea><button>Post Your Answer</button><p>By clicking Post Your Answer you agree to our <a href="/terms">terms of service</a>.</p></div>
+</div>
+<div id="sidebar" class="sidebar"><div class="module"><h4>Linked</h4><ul><li><a href="/questions/1">Sliding window vs fixed window</a></li><li><a href="/questions/2">Redis rate limiter race condition</a></li></ul></div><div class="module"><h4>Hot Network Questions HOT-NETWORK-MARKER</h4><ul><li><a href="/q/a">Why is my kettle humming</a></li><li><a href="/q/b">Etymology of "bucket"</a></li><li><a href="/q/c">Can a chess pawn move backwards</a></li></ul></div></div>
+</div>
+
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Example Q&A</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Example Q&A Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

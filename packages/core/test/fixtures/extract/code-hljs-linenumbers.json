@@ -1,0 +1,14 @@
+{
+  "url": "https://wiki.example.net/snippets/sliding-window-redis",
+  "type": "wiki snippet page with highlight.js code in a two-column line-number table plus a copy button",
+  "minF1": 0.8,
+  "mustContain": [
+    "redis.call('ZREMRANGEBYSCORE'",
+    "return 0"
+  ],
+  "mustNotContain": [
+    "Copy to clipboard",
+    "1 2 3 4 5"
+  ],
+  "minCodeBlocks": 1
+}

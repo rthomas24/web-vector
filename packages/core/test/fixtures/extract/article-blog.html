@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>An HTTP caching primer — Priya writes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:type" content="article"><meta name="author" content="Priya Natarajan"><meta name="date" content="2025-11-02">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Priya writes</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header>
+<div class="layout">
+<main id="content">
+<article class="post">
+<header class="post-header"><h1>An HTTP caching primer</h1><p class="meta">Posted on <time datetime="2025-11-02">2 Nov 2025</time> · 6 min read · 12 comments</p></header>
+<div class="post-body">
+
+
+<p>HTTP caching lets a response be reused for later requests instead of being generated again. Reuse is governed by freshness: a stored response is fresh until its age exceeds the lifetime the origin granted, and after that it must be revalidated before use.</p>
+<p>The max-age directive of Cache-Control gives the freshness lifetime in seconds relative to the time the response was generated. It takes precedence over the Expires header when both are present, and a shared cache honours s-maxage over max-age.</p>
+<h2>Revalidation</h2>
+<p>Revalidation sends a conditional request carrying the validator of the stored response, either an entity tag in If-None-Match or a date in If-Modified-Since. A 304 Not Modified answer refreshes the stored response without transferring the body again.</p>
+<p>When a response has neither an explicit lifetime nor a validator, caches may assign a heuristic freshness lifetime, typically ten percent of the time since Last-Modified. Explicit directives are always preferable because heuristics vary between implementations.</p>
+<h2>Vary</h2>
+<p>The Vary header lists the request headers that selected this representation. A cache must not reuse the stored response for a request whose listed header values differ, which is how content negotiation on Accept-Encoding or Accept-Language stays correct.</p>
+<p>That is all there is to it: grant a lifetime, ship a validator, and list what you varied on.</p>
+</div>
+<footer class="post-footer"><a href="#comments" class="btn">Leave a comment</a></footer>
+</article>
+</main>
+<aside class="widgets">
+<section class="widget"><h3>Popular posts POPULAR-POSTS-MARKER</h3><ul><li><a href="/posts/a">Why my build is slow</a></li><li><a href="/posts/b">Notes on WAL mode</a></li><li><a href="/posts/c">Reading RFCs for fun</a></li></ul></section>
+<section class="widget"><h3>Follow</h3><a href="https://mastodon.example/@priya">Mastodon</a> <a href="/feed.xml">RSS</a></section>
+</aside>
+</div>
+
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Priya writes</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Priya writes Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

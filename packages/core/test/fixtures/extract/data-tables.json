@@ -1,0 +1,11 @@
+{
+  "url": "https://compare.example.com/rate-limiters",
+  "type": "comparison page: little prose, one 8-row data table with caption; Readability tends to drop the table",
+  "minF1": 0.8,
+  "mustContain": [
+    "Envoy local ratelimit",
+    "permitsPerSecond",
+    "GCRA"
+  ],
+  "minTableRows": 8
+}

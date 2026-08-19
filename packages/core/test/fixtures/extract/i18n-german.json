@@ -1,0 +1,14 @@
+{
+  "url": "https://www.example.de/blog/ratenbegrenzung",
+  "type": "German article with html lang=\"de\", hreflang alternates, Content-Language meta",
+  "minF1": 0.9,
+  "mustContain": [
+    "Höchstkapazität",
+    "Leaky-Bucket glättet"
+  ],
+  "meta": {
+    "lang": "de",
+    "canonicalUrl": "https://www.example.de/blog/ratenbegrenzung",
+    "kind": "blog"
+  }
+}

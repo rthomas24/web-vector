@@ -1,0 +1,11 @@
+{
+  "url": "https://www.sqlite.org/wal.html",
+  "type": "real: sqlite.org classic HTML docs (tables of contents, no semantic tags)",
+  "minF1": 0.9,
+  "mustContain": [
+    "checkpoint",
+    "wal_autocheckpoint",
+    "shared memory"
+  ],
+  "minChars": 8000
+}

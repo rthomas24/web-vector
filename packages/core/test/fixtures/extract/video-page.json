@@ -1,0 +1,17 @@
+{
+  "url": "https://video.example.com/watch?v=abc123",
+  "type": "video watch page (og:type video.other, VideoObject JSON-LD): player, description, chapters, comments, up-next rail",
+  "minF1": 0.6,
+  "mustContain": [
+    "18:40 Leaky buckets and smoothing",
+    "Recorded at ExampleConf 2026"
+  ],
+  "mustNotContain": [
+    "UP-NEXT-MARKER",
+    "FOOTER-MARKER-TEXT"
+  ],
+  "meta": {
+    "kind": "video",
+    "publishedAt": "2026-04-10"
+  }
+}

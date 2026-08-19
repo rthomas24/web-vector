@@ -263,7 +263,7 @@ interface ResearchResult {
   query: string; queries: string[];        // the query + expansions actually used
   passages: Passage[];                     // ranked; each: text, url, title, score (0–1), cosine?, bm25?,
                                            //   rerankScore?, chunkIndex, chunkCount? (merged neighbours),
-                                           //   startOffset, endOffset, publishedAt?, fetchedAt, matchedQueries,
+                                           //   startOffset, endOffset, publishedAt?, updatedAt?, kind?, page? (PDF), fetchedAt, matchedQueries,
                                            //   highlight? { text, startOffset, endOffset } (best sentence window),
                                            //   corroboration? (distinct domains saying the same thing),
                                            //   citation "[n] Title — url (YYYY-MM-DD)"
@@ -284,7 +284,7 @@ interface ResearchResult {
 
 Two kinds, deliberately separate:
 
-- **Failures** are per-page and never abort a run: `FETCH_TIMEOUT`, `FETCH_HTTP_ERROR`, `FETCH_BLOCKED_ROBOTS`, `FETCH_BLOCKED_SSRF`, `FETCH_BLOCKED_BOT` (anti-bot wall — Cloudflare/Akamai/DataDome/PerimeterX/Imperva, `details.vendor`, never retried), `FETCH_PAYMENT_REQUIRED` (HTTP 402 pay-per-crawl), `FETCH_BLOCKED_CONTENT_SIGNAL` (site declared `ai-input=no`), `FETCH_TOO_LARGE`, `TOO_MANY_REDIRECTS`, `UNSUPPORTED_CONTENT_TYPE`, `PARSE_EMPTY`, `PARSE_FAILED`. They land in `result.failures[]` and `sources[].failure`. If *every* page fails you still get the search snippets (`degraded: 'search_only'`, `ALL_FETCHES_FAILED`).
+- **Failures** are per-page and never abort a run: `FETCH_TIMEOUT`, `FETCH_HTTP_ERROR`, `FETCH_BLOCKED_ROBOTS`, `FETCH_BLOCKED_SSRF`, `FETCH_BLOCKED_BOT` (anti-bot wall — Cloudflare/Akamai/DataDome/PerimeterX/Imperva, `details.vendor`, never retried), `FETCH_PAYMENT_REQUIRED` (HTTP 402 pay-per-crawl), `FETCH_BLOCKED_CONTENT_SIGNAL` (site declared `ai-input=no`), `FETCH_TOO_LARGE`, `TOO_MANY_REDIRECTS`, `UNSUPPORTED_CONTENT_TYPE`, `PARSE_EMPTY`, `PARSE_NEEDS_JS` (client-rendered shell — see `ingestion.render`), `PARSE_FAILED`. They land in `result.failures[]` and `sources[].failure`. If *every* page fails you still get the search snippets (`degraded: 'search_only'`, `ALL_FETCHES_FAILED`).
 - **Errors** are thrown as `WebVectorError` with `code`, `message`, `remediation`, `retryable`, `provider`, `stage` and `toJSON()`; secrets are redacted. Examples: `MISSING_API_KEY` ("Set BRAVE_API_KEY … or use a keyless provider: duckduckgo"), `MISSING_DEPENDENCY` ("npm i @huggingface/transformers — or embeddings.provider: 'none'"), `SEARCH_BLOCKED`, `PROVIDER_RATE_LIMITED` (with `retryAfterMs`), `EMBEDDING_DIMENSION_MISMATCH` (names both models; suggests `store.clear()` or a new collection), `INVALID_CONFIG`.
 
 ## 10. Security and etiquette
@@ -351,7 +351,9 @@ new WebVector({ search: { instance: myIndex } });
 ```
 research(query)
   1. search      provider chain (DuckDuckGo → fallbacks) → dedupe by canonical URL → domain filters → top N
-  2. ingest      concurrent, polite fetch → HTML (Readability→Markdown) | PDF | text → page cache
+  2. ingest      concurrent, polite fetch → HTML (page-type routing: Readability + full-page recall guard,
+                 whole-main for docs/forums, code/table pre-pass, JSON-LD / __NEXT_DATA__ recovery, JS-shell
+                 detection → optional renderer) | PDF (page-aware) | text → page cache
   3. chunk+embed markdown-aware recursive chunks with heading breadcrumbs → content-hash dedupe → embed (batched, cached)
   4. retrieve    query + expansions → vector top-k lists + BM25 top-k lists → weighted RRF → cosine cutoffs
                  → near-duplicate removal → per-source cap → MMR → optional rerank → top-k
@@ -362,7 +364,7 @@ Typical run on a laptop: search ~1 s, 8 pages fetched + parsed ~1–2.5 s, retri
 
 ## 14. Roadmap
 
-LanceDB and Pinecone stores · a headless-browser fetch adapter for JS-rendered pages · contextual-retrieval (LLM-summarised chunk context) as an opt-in · a standalone binary with no Node requirement · Python package sharing the conformance fixtures.
+LanceDB and Pinecone stores · a bundled headless-browser renderer (today: `ingestion.render` with Cloudflare Browser Rendering / Browserless / your own function) · contextual-retrieval (LLM-summarised chunk context) as an opt-in · a standalone binary with no Node requirement · Python package sharing the conformance fixtures.
 
 ## License
 

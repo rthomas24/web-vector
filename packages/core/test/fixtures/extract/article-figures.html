@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How we shed load without dropping customers - Example Engineering</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:type" content="article"><meta property="og:title" content="How we shed load without dropping customers"><meta itemprop="datePublished" content="2026-01-21"><meta property="og:image" content="https://eng.example.com/img/spike.png">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Example Engineering</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header><main><article itemscope itemtype="https://schema.org/BlogPosting"><meta itemprop="datePublished" content="2026-01-21"><h1>How we shed load without dropping customers</h1>
+<p>Last quarter our ingestion tier saw a 6× spike in traffic when a partner replayed a week of events in an hour. This post explains the three mechanisms that kept the service up: <a href="/blog/2025/priority-queues">priority queues</a>, adaptive concurrency limits and a token bucket per tenant.</p>
+<figure><img src="/img/spike.png" alt="Request rate spike graph"><figcaption>Figure 1: request rate during the replay.</figcaption></figure>
+<h2>Adaptive concurrency</h2>
+<p>Instead of a static connection limit we measure the gradient of latency against in-flight requests and shrink the limit when latency climbs faster than throughput. The estimator is a simplified version of the one described in <a href="https://example.com/papers/gradient">the gradient paper</a>.</p>
+<h2>Per-tenant buckets</h2>
+<p>The token bucket algorithm keeps a counter of available tokens that refills at a fixed rate up to a maximum capacity. Each request consumes one token; when the bucket is empty the request is rejected. Because tokens accumulate while the service is idle, the bucket tolerates short bursts without exceeding the long-term average rate.</p>
+<p>In a distributed deployment the counters must be shared, otherwise each instance enforces its own limit and the effective limit becomes the sum across instances. A central store introduces a network round trip per request, so many systems combine a local pre-filter with a periodic sync to the shared counter.</p>
+<h2>What we would do differently</h2>
+<ul><li>Turn on the per-tenant limits before the incident rather than during it.</li><li>Alert on bucket exhaustion per tenant, not just on global error rate.</li><li>Document the Retry-After behaviour in the partner API guide.</li></ul><div class="author-card"><img src="/img/authors/kim.jpg" alt=""><p><b>Kim Reyes</b> is a staff engineer on the ingestion team. AUTHOR-CARD-MARKER</p><a href="/authors/kim">More posts by Kim</a></div><section id="comments"><h3>Comments</h3><p>Comments are closed.</p></section></article>
+<aside class="sidebar related-posts">
+  <h3>Related articles</h3>
+  <ul>
+    <li><a href="/blog/circuit-breakers">Circuit breakers explained</a></li>
+    <li><a href="/blog/retries">Retries with exponential backoff</a></li>
+    <li><a href="/blog/idempotency">Idempotency keys in practice</a></li>
+    <li><a href="/blog/timeouts">Choosing timeouts</a></li>
+  </ul>
+  <div class="ad-slot">Advertisement RELATED-ASIDE-MARKER</div>
+</aside></main>
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Example Engineering</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Example Engineering Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

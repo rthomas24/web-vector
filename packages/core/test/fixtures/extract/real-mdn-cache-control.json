@@ -1,0 +1,15 @@
+{
+  "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control",
+  "type": "real: MDN reference page (sidebar, breadcrumbs, tables, code)",
+  "minF1": 0.9,
+  "mustContain": [
+    "max-age",
+    "no-store",
+    "stale-while-revalidate"
+  ],
+  "mustNotContain": [
+    "Skip to main content"
+  ],
+  "minCodeBlocks": 5,
+  "minChars": 8000
+}

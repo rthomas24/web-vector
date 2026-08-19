@@ -1,0 +1,11 @@
+{
+  "url": "https://rfc.example.org/rfc/rfc9999.html",
+  "type": "old rfc-editor .html: the whole document is a series of <pre> blocks with page-break markers; Readability returns nothing",
+  "minF1": 0.6,
+  "mustContain": [
+    "RateLimit-Remaining field indicates",
+    "Security Considerations",
+    "MUST NOT be greater than"
+  ],
+  "minChars": 1200
+}

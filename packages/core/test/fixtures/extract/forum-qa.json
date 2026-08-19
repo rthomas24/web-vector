@@ -1,0 +1,19 @@
+{
+  "url": "https://qa.example.com/questions/48213/how-does-a-token-bucket-handle-bursts",
+  "type": "Stack-Overflow-like Q&A (QAPage JSON-LD): question + 3 answers with vote widgets and comments; Readability drops answers",
+  "minF1": 0.75,
+  "mustContain": [
+    "tolerates bursts",
+    "idle 10s",
+    "pick the leaky bucket",
+    "many CDNs expose exactly these two knobs",
+    "One practical note"
+  ],
+  "mustNotContain": [
+    "HOT-NETWORK-MARKER",
+    "FOOTER-MARKER-TEXT"
+  ],
+  "meta": {
+    "kind": "qa"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "url": "https://ssr.example.com/blog/parsers-client",
+  "type": "Next.js page whose DOM holds only a title/skeleton while __NEXT_DATA__ carries the article HTML in a `content` field",
+  "minF1": 0.6,
+  "mustContain": [
+    "binding power",
+    "synchronise on statement boundaries"
+  ],
+  "mustNotContain": [
+    "FOOTER-MARKER-TEXT"
+  ]
+}

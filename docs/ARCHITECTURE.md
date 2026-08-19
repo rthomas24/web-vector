@@ -19,7 +19,7 @@ docs/                           CONFIGURATION.md (every option), PROVIDERS.md (s
 |---|---|---|
 | wiring | `components.ts` | Builds the search stack, embedder (or none), store, fetcher, parsers, caches, expander, reranker from config |
 | 1 search | `search-stage.ts` | Runs the query (+ related queries) through the provider chain, merges + dedupes results |
-| 2+3 ingest | `ingest-stage.ts` | For one page: chunk → dedupe by content hash → embed (cached) → upsert → BM25 index |
+| 2+3 ingest | `ingest-stage.ts` | For one page: chunk → dedupe by content hash and canonical URL → same-host boilerplate suppression → embed (cached) → upsert → BM25 index |
 | 4 retrieve | `retrieve-stage.ts` | Vector lists + BM25 lists → weighted RRF → cutoffs → dedupe → per-source cap → MMR → rerank → passages |
 | 5 format | `format.ts` | Markdown rendering with citations |
 | orchestration | `webvector.ts` | The `WebVector` class: config, lifecycle, `research()`, `fetch()`, `search()`, sessions |
@@ -37,6 +37,9 @@ src/embeddings/   EmbeddingProvider  hosted.ts (OpenAI/compatible/Gemini/Voyage/
 src/stores/       VectorStore        memory.ts (brute-force cosine), external.ts (Chroma/Qdrant/pgvector), index.ts
 src/rerankers/    Reranker           cohere/voyage/jina/local cross-encoder/LLM listwise
 src/ingest/       fetcher.ts (polite + SSRF-guarded fetch), ssrf.ts, robots.ts, parsers.ts (HTML/PDF/text → Markdown), chunker.ts
+                  extract-detect.ts (JS-shell + language), extract-meta.ts (dates/canonical/kind/paywall), extract-prepass.ts
+                  (code/table fidelity), extract-ensemble.ts (page-type routing + recall guard), extract-recover.ts (JSON-LD /
+                  __NEXT_DATA__ recovery), extract-boilerplate.ts (same-host repeats), render.ts (RenderProvider hook)
 src/retrieval/    bm25.ts, fusion.ts (RRF/MMR/dedupe/diversify), expansion.ts (heuristic + LLM query expansion)
 src/config/       schema.ts (zod, defaults), env.ts (WEBVECTOR_* + provider keys), index.ts (file loading, precedence, redaction)
 src/integrations/ ai-sdk.ts, anthropic.ts, openai.ts, langchain.ts — thin bindings over tool.ts

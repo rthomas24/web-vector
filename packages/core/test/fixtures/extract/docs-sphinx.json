@@ -1,0 +1,16 @@
+{
+  "url": "https://sphinx.example.org/en/stable/library/ratelimit.html",
+  "type": "Sphinx/pygments docs: div.highlight code, headerlink pilcrows, sphinxsidebar, related bar, dl signatures",
+  "minF1": 0.85,
+  "mustContain": [
+    "try_acquire",
+    "refill_rate=10",
+    "consume tokens if enough are available"
+  ],
+  "mustNotContain": [
+    "SPHINX-SIDEBAR-MARKER",
+    "Quick search",
+    "¶"
+  ],
+  "minCodeBlocks": 1
+}

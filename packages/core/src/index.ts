@@ -57,6 +57,7 @@ export {
   requireApiKey,
   WebVectorError,
 } from './errors.js';
+export type { RenderProvider, RenderResult } from './ingest/render.js';
 export type {
   FetchedDocument,
   FetchOptions,

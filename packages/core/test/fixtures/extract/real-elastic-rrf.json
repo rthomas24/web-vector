@@ -1,0 +1,12 @@
+{
+  "url": "https://www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion",
+  "type": "real: Elastic docs served as text/markdown (frontmatter, admonition tags) — TextParser path",
+  "contentType": "text/markdown",
+  "minF1": 0.9,
+  "mustContain": [
+    "rank_constant",
+    "rank_window_size"
+  ],
+  "minCodeBlocks": 3,
+  "minChars": 4000
+}

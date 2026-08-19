@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Ratenbegrenzung verständlich erklärt – Beispiel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="content-language" content="de-DE"><link rel="canonical" href="https://www.example.de/blog/ratenbegrenzung"><link rel="alternate" hreflang="en" href="https://www.example.com/blog/rate-limiting"><link rel="alternate" hreflang="fr" href="https://www.example.fr/blog/limitation-de-debit"><link rel="alternate" hreflang="x-default" href="https://www.example.com/blog/rate-limiting"><meta property="og:type" content="article">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Beispiel</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header><main><article><h1>Ratenbegrenzung verständlich erklärt</h1>
+<p>Eine Ratenbegrenzung schützt einen Dienst davor, von zu vielen Anfragen in kurzer Zeit überlastet zu werden. Statt unter Last unvorhersehbar auszufallen, lehnt ein begrenzter Dienst überzählige Anfragen kontrolliert ab und teilt dem Client mit, wann er es erneut versuchen darf.</p>
+<h2>Token-Bucket</h2>
+<p>Der Token-Bucket-Algorithmus führt einen Zähler verfügbarer Token, der sich mit fester Rate bis zu einer Höchstkapazität auffüllt. Jede Anfrage verbraucht ein Token; ist der Eimer leer, wird die Anfrage abgelehnt. Weil sich Token im Leerlauf ansammeln, verträgt der Eimer kurze Lastspitzen, ohne die langfristige Durchschnittsrate zu überschreiten.</p>
+<h2>Leaky-Bucket</h2>
+<p>Ein Leaky-Bucket glättet den Verkehr, statt Spitzen zu tolerieren: Anfragen landen in einer Warteschlange, die mit konstanter Rate abfließt; kommen Anfragen bei voller Warteschlange an, werden sie verworfen.</p></article></main>
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Beispiel</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Beispiel Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

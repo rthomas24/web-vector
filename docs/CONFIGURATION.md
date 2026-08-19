@@ -113,6 +113,14 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `cache.dir` | `auto` | `WEBVECTOR_CACHE_DIR` (`auto`, a path, or `false`) | `auto` → `pages.sqlite` in `$XDG_CACHE_HOME/webvector` (`~/.cache/webvector`); a path → `pages.sqlite` there; `false` → memory only. Needs `node:sqlite` (Node ≥ 22.13, feature-detected); explicit dirs fall back to one JSON file per URL without it, `auto` falls back to memory. WAL + busy timeout: several processes (CLI + MCP) can share the file |
 | `cache.maxDiskPages` / `cache.maxDiskBytes` | `20000` / `1073741824` (1 GiB) | — | disk budgets; least-recently-used pages are evicted first (`webvector cache stats\|prune\|clear` to inspect) |
 | `cache.negativeTtlMs` | `15000` | — | remember robots-blocked / SSRF-blocked / 4xx URLs for this long (0 = off) |
+| `html.strategy` | `auto` | — | HTML extraction: `auto` routes by page type (Q&A/forum and docs pages → whole main content, `<pre>` documents unwrapped, articles → Readability with a recall guard against the full page); `readability` = classic Readability with whole-page fallback only when thin; `full` = always the whole page with nav/chrome removed |
+| `html.useJsonLdBody` | `true` | — | recover the article text from JSON-LD `articleBody` when the DOM yields too little — only when the page is not paywalled (`isAccessibleForFree !== false`); `__NEXT_DATA__` / RSC / Nuxt payloads are walked the same way (always on) |
+| `render.provider` / `render.when` / `render.maxPerRun` / `render.timeoutMs` | — / `never` / `5` / `30000` | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (`cloudflare`), `BROWSERLESS_TOKEN` + `BROWSERLESS_URL` (`browserless`) | optional page renderer, fired only on `PARSE_NEEDS_JS` (`when: needs-js`) or also on blocked fetches — 401/403/429/451, bot challenge — (`when: blocked`); `cloudflare` = Browser Rendering `/markdown` REST, `browserless` = `/content` REST, `custom` = code-only `ingestion.render.instance` (`{ id, render(url, { signal }) → { html \| markdown, finalUrl } }`). No browser is bundled. Every render is SSRF-checked and capped per run; remote renderers see the URLs you send them. `render.accountId` / `render.baseUrl` / `render.apiToken` override the env vars |
+| `chunkSize` / `chunkOverlap` | `480` / `60` | `WEBVECTOR_CHUNK_SIZE` / `WEBVECTOR_CHUNK_OVERLAP` | tokens |
+| `maxChunksPerPage` / `minChunkChars` | `200` / `100` | — | |
+| `dropSharedBoilerplate` | `true` | — | drop chunks whose text (content hash or ≥ 80 % of word shingles) already appeared on another page of the same host in this session — nav, footers, "related" rails — and retract the earlier copies from the lexical index; code blocks are never dropped |
+| `useProviderContent` | `true` | — | use page text returned by Tavily/Exa instead of fetching |
+| `cache.enabled` / `cache.ttlMs` / `cache.maxPages` / `cache.dir` | `true` / `900000` / `500` / — | `WEBVECTOR_CACHE_DIR` (sets `dir`) | in-memory page cache; `dir` adds an on-disk cache |
 
 ## output / logging
 
@@ -131,7 +139,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `output.deepLinks` | `false` | — | cite passages with text-fragment deep links `url#:~:text=start,end` (PDFs skipped) |
 | `logging.level` | `warn` | `WEBVECTOR_LOG_LEVEL` | `silent` `error` `warn` `info` `debug` (stderr) |
 
-Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation).
+Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation), `ingestion.render.instance` (custom renderer).
 
 ## telemetry
 

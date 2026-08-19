@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { RenderProvider } from '../ingest/render.js';
 import type {
   EmbeddingProvider,
   LlmFn,
@@ -328,10 +329,54 @@ export const ingestionConfigSchema = z.object({
    * pages; archived documents carry `doc.fetchedFrom: 'archive'` and `doc.archivedAt`.
    */
   archiveFallback: z.union([z.literal(false), z.enum(['blocked', 'always'])]).default(false),
+  /** HTML extraction knobs (see ingest/extract-ensemble.ts). */
+  html: z
+    .object({
+      /**
+       * `auto` (default): route by page type — Q&A/forum threads and docs pages convert the whole
+       * main content (Readability deletes answers and sidebars-adjacent tables), <pre> documents
+       * are unwrapped, articles run Readability with a recall guard against the full page.
+       * `readability`: classic Readability, whole page only when the article is thin.
+       * `full`: always the whole page with navigation/chrome removed.
+       */
+      strategy: z.enum(['auto', 'readability', 'full']).default('auto'),
+      /**
+       * Use the JSON-LD `articleBody` when the DOM yields too little text and the page is not
+       * paywalled (`isAccessibleForFree !== false`, including `hasPart`). Never overrides good DOM output.
+       */
+      useJsonLdBody: z.boolean().default(true),
+    })
+    .default({ strategy: 'auto', useJsonLdBody: true }),
+  /**
+   * Optional page renderer, used only when the served HTML is a JavaScript shell
+   * (`PARSE_NEEDS_JS`) or — with `when: 'blocked'` — also when the fetch was blocked (401/403/
+   * 429/451, bot challenge). No browser is bundled: `cloudflare` calls Browser Rendering's
+   * `/markdown` REST endpoint (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN), `browserless` calls
+   * `/content` (BROWSERLESS_TOKEN, BROWSERLESS_URL), `custom` takes `ingestion.render.instance`.
+   * Off by default (`when: 'never'`). Remote renderers see the URLs you send them.
+   */
+  render: z
+    .object({
+      provider: z.enum(['cloudflare', 'browserless', 'custom']).optional(),
+      when: z.enum(['needs-js', 'blocked', 'never']).default('never'),
+      /** Renders per research() call / per fetch(). */
+      maxPerRun: z.number().int().min(0).default(5),
+      timeoutMs: z.number().int().min(1000).default(30_000),
+      accountId: z.string().optional(),
+      baseUrl: z.string().optional(),
+      apiToken: z.string().optional(),
+    })
+    .default({ when: 'never', maxPerRun: 5, timeoutMs: 30_000 }),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
   minChunkChars: z.number().int().min(1).default(100),
+  /**
+   * Drop chunks whose text already appeared on another page of the same host in this session
+   * (navigation, footers, "related" rails) and retract the earlier copies from the lexical index;
+   * code blocks are never dropped.
+   */
+  dropSharedBoilerplate: z.boolean().default(true),
   /**
    * Use provider-returned page content (Tavily raw_content / Exa text) instead of fetching:
    * `'auto'` (default) only when it passes a quality gate (≥ 300 chars, not raw HTML, not cut off
@@ -461,8 +506,14 @@ export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartia
 
 export interface WebVectorConfig
   extends DeepPartial<
-    Omit<WebVectorFileConfigInput, 'search' | 'embeddings' | 'store' | 'retrieval'>
+    Omit<WebVectorFileConfigInput, 'search' | 'embeddings' | 'store' | 'retrieval' | 'ingestion'>
   > {
+  ingestion?: DeepPartial<z.input<typeof ingestionConfigSchema>> & {
+    render?: {
+      /** Ready renderer instance (`provider: 'custom'`): `render(url, { signal }) → { html | markdown, finalUrl }`. */
+      instance?: RenderProvider;
+    };
+  };
   search?: DeepPartial<z.input<typeof searchConfigSchema>> & {
     /** Provide a ready instance instead of a provider name. */
     instance?: SearchProvider;

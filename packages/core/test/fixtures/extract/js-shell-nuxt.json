@@ -1,0 +1,5 @@
+{
+  "url": "https://nuxt.example.com/blog",
+  "type": "Nuxt 3 SPA shell: empty #__nuxt, __NUXT_DATA__ payload script",
+  "failure": "PARSE_NEEDS_JS"
+}

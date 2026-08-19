@@ -1,0 +1,13 @@
+{
+  "url": "https://arxiv.org/abs/1706.03762",
+  "type": "real: arXiv abstract page (short content, heavy chrome)",
+  "minF1": 0.85,
+  "mustContain": [
+    "Transformer",
+    "attention"
+  ],
+  "mustNotContain": [
+    "Bibliographic Explorer"
+  ],
+  "minChars": 800
+}

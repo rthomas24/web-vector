@@ -1,0 +1,16 @@
+{
+  "url": "https://paper.example.com/2026/06/01/inside-the-rate-limiter",
+  "type": "paywalled article: DOM shows a teaser + subscribe wall; JSON-LD has isAccessibleForFree:false and the full articleBody (must never be used)",
+  "minF1": 0.6,
+  "mustContain": [
+    "TEASER-VISIBLE-MARKER"
+  ],
+  "mustNotContain": [
+    "PAYWALLED-BODY-MARKER",
+    "FOOTER-MARKER-TEXT"
+  ],
+  "meta": {
+    "accessibleForFree": false,
+    "kind": "news"
+  }
+}

@@ -385,7 +385,13 @@ export function citationFor(
   title: string,
   url: string,
   publishedAt?: string,
+  page?: number,
 ): string {
   const date = publishedAt ? ` (${publishedAt.slice(0, 10)})` : '';
-  return `[${index}] ${title} — ${url}${date}`;
+  return `[${index}] ${title} — ${page ? pageUrl(url, page) : url}${date}`;
+}
+
+/** `url#page=N` for PDF passages (the pdf.js / browser viewer fragment). */
+export function pageUrl(url: string, page: number): string {
+  return `${url.replace(/#.*$/, '')}#page=${page}`;
 }

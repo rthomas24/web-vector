@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rate limits | Example Docs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="docusaurus_version" content="current"><meta name="generator" content="Docusaurus v3.6.0"><meta property="og:type" content="website">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<nav class="navbar navbar--fixed-top" aria-label="Main"><a class="navbar__brand" href="/">Example Docs</a><div class="navbar__items"><a class="navbar__item" href="/docs">Docs</a><a class="navbar__item" href="/api">API</a><a class="navbar__item" href="/blog">Blog</a><a href="https://github.com/example/sdk">GitHub</a></div><button class="DocSearch">Search ⌘K</button></nav>
+<div class="main-wrapper docsWrapper">
+<aside class="theme-doc-sidebar-container"><nav class="menu thin-scrollbar" aria-label="Docs sidebar"><ul class="theme-doc-sidebar-menu menu__list">
+<li class="menu__list-item"><a class="menu__link" href="/guides/intro">Introduction SIDEBAR-MARKER</a></li>
+<li class="menu__list-item"><a class="menu__link" href="/guides/auth">Authentication</a></li>
+<li class="menu__list-item menu__list-item--active"><a class="menu__link menu__link--active" href="/guides/rate-limits">Rate limits</a></li>
+<li class="menu__list-item"><a class="menu__link" href="/guides/webhooks">Webhooks</a></li>
+<li class="menu__list-item"><a class="menu__link" href="/guides/errors">Errors</a></li>
+<li class="menu__list-item"><a class="menu__link" href="/guides/sdks">SDKs</a></li>
+</ul></nav></aside>
+<main class="docMainContainer">
+<div class="container padding-top--md">
+<nav class="theme-doc-breadcrumbs breadcrumbs" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a href="/">Home</a></li><li class="breadcrumbs__item"><a href="/guides">Guides</a></li><li class="breadcrumbs__item breadcrumbs__item--active"><span>Rate limits</span></li></ul></nav>
+<article>
+<div class="theme-doc-markdown markdown">
+
+<h1>Rate limits</h1>
+<p>Rate limiting protects a service from being overwhelmed by too many requests in a short window. Instead of failing unpredictably under load, a rate-limited service rejects or delays excess requests in a controlled way, and tells the client when it may try again.</p>
+<div class="admonition"><p><strong>note</strong></p><p>Limits apply per API key, not per IP address.</p></div>
+<h2>Token bucket configuration</h2>
+<p>The token bucket algorithm keeps a counter of available tokens that refills at a fixed rate up to a maximum capacity. Each request consumes one token; when the bucket is empty the request is rejected. Because tokens accumulate while the service is idle, the bucket tolerates short bursts without exceeding the long-term average rate.</p>
+<div class="codeBlockContainer_Ckt0 theme-code-block"><div class="codeBlockContent_biex"><pre tabindex="0" class="prism-code language-ts codeBlock_bY9V thin-scrollbar"><code class="codeBlockLines_e6Vv"><span class="token-line" style="color:#393A34"><span class="token plain">import</span><span class="token plain"> </span><span class="token punctuation">{</span><span class="token plain"> </span><span class="token plain">RateLimiter</span><span class="token plain"> </span><span class="token punctuation">}</span><span class="token plain"> </span><span class="token plain">from</span><span class="token plain"> </span><span class="token punctuation">'@example/sdk';</span></span>
+<span class="token-line" style="color:#393A34"><span class="token plain">const</span><span class="token plain"> </span><span class="token punctuation">limiter</span><span class="token plain"> </span><span class="token plain">=</span><span class="token plain"> </span><span class="token punctuation">new</span><span class="token plain"> </span><span class="token plain">RateLimiter({</span><span class="token plain"> </span><span class="token punctuation">capacity:</span><span class="token plain"> </span><span class="token plain">100,</span><span class="token plain"> </span><span class="token punctuation">refillPerSecond:</span><span class="token plain"> </span><span class="token plain">10</span><span class="token plain"> </span><span class="token punctuation">});</span></span>
+<span class="token-line" style="color:#393A34"><span class="token plain">if</span><span class="token plain"> </span><span class="token punctuation">(!limiter.tryAcquire())</span><span class="token plain"> </span><span class="token plain">{</span><span class="token plain"> </span><span class="token punctuation">throw</span><span class="token plain"> </span><span class="token plain">new</span><span class="token plain"> </span><span class="token punctuation">Error('rate</span><span class="token plain"> </span><span class="token plain">limited');</span><span class="token plain"> </span><span class="token punctuation">}</span></span></code></pre><div class="buttonGroup__atx"><button type="button" aria-label="Copy code to clipboard" title="Copy" class="clean-btn"><span class="copyButtonIcons_eSgA" aria-hidden="true"></span>Copy</button></div></div></div>
+<h2>Response headers</h2>
+<p>Servers commonly signal limits with the RateLimit-Limit, RateLimit-Remaining and RateLimit-Reset headers, and answer rejected requests with HTTP status 429 Too Many Requests together with a Retry-After header. Clients that honour Retry-After avoid making the overload worse.</p>
+<table><thead><tr><th>Header</th><th>Meaning</th></tr></thead><tbody><tr><td>RateLimit-Limit</td><td>Requests allowed per window</td></tr><tr><td>RateLimit-Remaining</td><td>Requests left in the window</td></tr><tr><td>RateLimit-Reset</td><td>Seconds until the window resets</td></tr></tbody></table>
+<h2>Distributed deployments</h2>
+<p>In a distributed deployment the counters must be shared, otherwise each instance enforces its own limit and the effective limit becomes the sum across instances. A central store introduces a network round trip per request, so many systems combine a local pre-filter with a periodic sync to the shared counter.</p>
+</div>
+<footer class="theme-doc-footer docusaurus-mt-lg"><div class="row"><div class="col"><a href="https://github.com/example/docs/edit/main/guides/rate-limits.md" class="theme-edit-this-page">Edit this page</a></div><div class="col"><span class="theme-last-updated">Last updated on <b>Mar 2, 2026</b></span></div></div><div class="feedback">Was this page helpful? <button>Yes</button><button>No</button></div></footer>
+</article>
+<nav class="pagination-nav docusaurus-mt-lg" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/guides/auth"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Authentication</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/guides/webhooks"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Webhooks</div></a></nav>
+</div>
+<div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#token-bucket-configuration" class="table-of-contents__link toc-highlight">Token bucket configuration</a></li><li><a href="#response-headers" class="table-of-contents__link">Response headers</a></li><li><a href="#distributed-deployments" class="table-of-contents__link">Distributed deployments</a></li></ul></div></div>
+</main>
+</div>
+<footer class="footer footer--dark"><div class="container"><div class="row"><div class="col footer__col"><div class="footer__title">Docs</div><ul class="footer__items"><li><a href="/guides/intro">Getting started</a></li><li><a href="/api">API reference</a></li></ul></div><div class="col footer__col"><div class="footer__title">Community</div><ul><li><a href="https://discord.example">Discord</a></li><li><a href="https://x.com/example">X</a></li></ul></div></div><div class="footer__copyright">Copyright © 2026 Example, Inc. Built with Docusaurus. FOOTER-MARKER-TEXT</div></div></footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

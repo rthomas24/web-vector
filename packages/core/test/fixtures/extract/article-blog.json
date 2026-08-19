@@ -1,0 +1,19 @@
+{
+  "url": "https://blog.example.dev/posts/http-caching-primer",
+  "type": "personal blog post (BlogPosting) with sidebar widgets, comment CTA and popular-posts list",
+  "minF1": 0.9,
+  "mustContain": [
+    "s-maxage",
+    "If-None-Match",
+    "heuristic freshness lifetime"
+  ],
+  "mustNotContain": [
+    "POPULAR-POSTS-MARKER",
+    "FOOTER-MARKER-TEXT",
+    "Leave a comment"
+  ],
+  "meta": {
+    "publishedAt": "2025-11-02",
+    "byline": "Priya Natarajan"
+  }
+}

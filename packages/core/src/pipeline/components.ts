@@ -11,6 +11,7 @@ import { WebVectorError } from '../errors.js';
 import { loadTokenCounter, type TokenCounter } from '../ingest/chunker.js';
 import { Fetcher, PageCache } from '../ingest/index.js';
 import { createParsers } from '../ingest/parsers.js';
+import { createRenderProvider, type RenderProvider } from '../ingest/render.js';
 import { createReranker, LlmReranker } from '../rerankers/index.js';
 import type { BM25Options } from '../retrieval/bm25.js';
 import { HeuristicExpander, LlmExpander } from '../retrieval/expansion.js';
@@ -40,6 +41,8 @@ export interface Components {
   sharedStore?: VectorStore;
   fetcher: Fetcher;
   parsers: ContentParser[];
+  /** Optional page renderer for JS shells / blocked pages (ingestion.render). */
+  render?: RenderProvider;
   pageCache: PageCache;
   /** Single-flight coalescing + negative cache for page fetches and searches. */
   coordinator: FetchCoordinator;
@@ -146,7 +149,10 @@ export async function buildComponents(
   });
 
   const fetcher = new Fetcher({ ...cfg.ingestion, fetch: fetchImpl, logger });
-  const parsers = createParsers(cfg.ingestion.parsers);
+  const parsers = createParsers(cfg.ingestion.parsers, {
+    strategy: cfg.ingestion.html.strategy,
+    useJsonLdBody: cfg.ingestion.html.useJsonLdBody,
+  });
   const pageCache = await PageCache.create(cfg.ingestion.cache, logger);
   if (pageCache.backend === 'sqlite') logger.debug(`page cache: sqlite at ${pageCache.location}`);
   const coordinator = new FetchCoordinator({ negativeTtlMs: cfg.ingestion.cache.negativeTtlMs });
@@ -156,6 +162,18 @@ export async function buildComponents(
     dtype: embedder?.dtype ?? cfg.embeddings.dtype ?? 'fp32',
   });
   if (embeddingCache.persistent) logger.debug('embedding cache: persistent (pages.sqlite)');
+  const render = createRenderProvider({
+    ...cfg.ingestion.render,
+    instance: code.ingestion?.render?.instance,
+    fetch: fetchImpl,
+    userAgent: cfg.ingestion.userAgent,
+  });
+  if (cfg.ingestion.render.when !== 'never' && !render)
+    throw new WebVectorError('ingestion.render.when is set but no provider is configured.', {
+      code: 'INVALID_CONFIG',
+      remediation:
+        "Set ingestion.render.provider to 'cloudflare' | 'browserless' | 'custom' (with ingestion.render.instance).",
+    });
 
   const llm = code.retrieval?.llm;
   const expander =
@@ -174,6 +192,7 @@ export async function buildComponents(
     sharedStore,
     fetcher,
     parsers,
+    render,
     pageCache,
     coordinator,
     embeddingCache,

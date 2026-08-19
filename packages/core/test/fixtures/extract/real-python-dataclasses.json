@@ -1,0 +1,16 @@
+{
+  "url": "https://docs.python.org/3/library/dataclasses.html",
+  "type": "real: Sphinx docs (docs.python.org)",
+  "minF1": 0.9,
+  "mustContain": [
+    "@dataclass",
+    "field(",
+    "frozen"
+  ],
+  "mustNotContain": [
+    "Quick search",
+    "Report a bug"
+  ],
+  "minCodeBlocks": 5,
+  "minChars": 10000
+}

@@ -1,0 +1,16 @@
+{
+  "url": "https://github.example.com/acme/limiter",
+  "type": "GitHub-like repo landing page: global nav, file table, sidebar About/Releases, README article",
+  "minF1": 0.7,
+  "mustContain": [
+    "npm install @acme/limiter",
+    "refillPerSecond: 5",
+    "dependency-free rate limiter"
+  ],
+  "mustNotContain": [
+    "FILE-TABLE-MARKER",
+    "Skip to content",
+    "You signed in with another tab"
+  ],
+  "minCodeBlocks": 2
+}

@@ -4,6 +4,26 @@ import { parseHTML } from 'linkedom';
 import { htmlToMarkdown } from 'mdream';
 import { WebVectorError } from '../errors.js';
 import type { ContentParser, ParseContext, ParsedDocument } from '../types.js';
+import {
+  detectJsShell,
+  guessLangFromScript,
+  type JsShellSignals,
+  normalizeLangTag,
+} from './extract-detect.js';
+import {
+  articleCandidate,
+  type Candidate,
+  type Choice,
+  candidateFrom,
+  chooseCandidate,
+  classifyPageType,
+  fullCandidate,
+  type PageType,
+  stripObviousChrome,
+} from './extract-ensemble.js';
+import { extractMeta } from './extract-meta.js';
+import { prepassDocument } from './extract-prepass.js';
+import { prestripScripts, recoverArticleBody, recoverFromStash } from './extract-recover.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -71,12 +91,20 @@ export function decodeBytes(bytes: Uint8Array, charset?: string): string {
   }
 }
 
-function tidyMarkdown(md: string): string {
-  return sanitizeText(md)
-    .replace(/\r\n?/g, '\n')
-    .replace(/\\?\[\s*\[edit\]\([^)]*\)\s*\\?\]/g, '') // Wikipedia [edit] links
-    .replace(/\[\]\([^)]*\)/g, '') // empty links
-    .replace(/[ \t]+$/gm, '')
+/** Sanitise + light whitespace clean-up; fenced code blocks keep their indentation verbatim. */
+export function tidyMarkdown(md: string): string {
+  const parts = md.replace(/\r\n?/g, '\n').split(/(^```[^\n]*\n[\s\S]*?^```[ \t]*$)/m);
+  const out = parts.map((part, i) =>
+    i % 2 === 1
+      ? part.replace(CONTROL_CHARS, '')
+      : sanitizeText(part)
+          .replace(/\\?\[\s*\[edit\]\([^)]*\)\s*\\?\]/g, '') // Wikipedia [edit] links
+          .replace(/\[\]\([^)]*\)/g, '') // empty links
+          .replace(/\s*\[(?:#|¶|§)\]\([^)]*\)/g, '') // heading self-links that survived the DOM pass
+          .replace(/[ \t]+$/gm, ''),
+  );
+  return out
+    .join('')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -90,8 +118,20 @@ export interface HtmlParserOptions {
   minArticleChars?: number;
   /** Minimum length to consider a page non-empty (default 80). */
   minPageChars?: number;
-  /** Try `defuddle` (optional peer) before mdream-minimal fallback. */
+  /** Try `defuddle` (optional peer) when the chosen extraction is still thin. */
   useDefuddle?: boolean;
+  /**
+   * Use JSON-LD `articleBody` when the DOM yields too little and the page is not paywalled
+   * (`isAccessibleForFree !== false`). Default true.
+   */
+  useJsonLdBody?: boolean;
+  /**
+   * `auto` (default): route by page type (Q&A/forum and docs pages use the whole main content,
+   * <pre> documents are unwrapped, articles run Readability with a recall guard against the full
+   * page); `readability`: classic Readability with whole-page fallback only when thin; `full`:
+   * always the whole page (chrome removed).
+   */
+  strategy?: 'auto' | 'readability' | 'full';
 }
 
 const STRIP_SELECTOR =
@@ -115,16 +155,27 @@ export class HtmlParser implements ContentParser {
 
   async parse(bytes: Uint8Array, ctx: ParseContext): Promise<ParsedDocument | null> {
     const html = decodeBytes(bytes, ctx.charset);
-    return this.parseHtml(html, ctx.url, ctx.contentType || 'text/html');
+    return this.parseHtml(html, ctx.url, ctx.contentType || 'text/html', {
+      contentLanguage: ctx.contentLanguage,
+    });
   }
 
   async parseHtml(
     html: string,
     url: string,
     contentType = 'text/html',
+    extra: { contentLanguage?: string } = {},
   ): Promise<ParsedDocument | null> {
     const minArticle = this.opts.minArticleChars ?? 300;
     const minPage = this.opts.minPageChars ?? 80;
+    // Fragments without <html>/<body> (old rfc-editor pages start with <pre>) lose most nodes in
+    // linkedom unless wrapped.
+    if (!/<(?:html|body)[\s>]/i.test(html)) html = `<html><body>${html}</body></html>`;
+    // Big script blobs out before DOM parsing (SSR pages ship 400 KB–2 MB of JSON); framework
+    // payloads are stashed for content recovery. Shell detection reads the raw HTML.
+    const rawHtml = html;
+    const pre = prestripScripts(html);
+    html = pre.html;
     const { document } = parseHTML(html);
     // Meta before mutation
     const meta = extractMeta(document, url);
@@ -141,76 +192,212 @@ export class HtmlParser implements ContentParser {
     }
     // Strip non-content nodes (also fixes linkedom <template> leak)
     for (const el of [...document.querySelectorAll(STRIP_SELECTOR)]) el.remove();
+    // JS-shell signals (empty #root, "enable JavaScript", hydration markers); decided at the end
+    // against the amount of content actually extracted.
+    const js = detectJsShell(rawHtml, document);
+    // Code/table fidelity pre-pass: highlighter soup → <pre><code class="language-x">, copy
+    // buttons and heading anchors removed, data tables marked so Readability keeps them.
+    const prepass = prepassDocument(document);
+    // Cookie walls, recommendation rails, share bars, flash notices: chrome on every page type.
+    stripObviousChrome(document);
 
-    let markdown = '';
-    let parser = 'readability';
+    // ── extractor ensemble + page-type routing ───────────────────────────
+    const strategy = this.opts.strategy ?? 'auto';
+    const pageType: PageType = classifyPageType(document, meta);
+    const runReadability = (): ReturnType<Readability['parse']> | null => {
+      try {
+        const clone = document.cloneNode(true) as unknown as Document;
+        return new Readability(clone as any, {
+          charThreshold: this.opts.charThreshold ?? 200,
+          keepClasses: false,
+          // Readability strips classes; keep the language markers so mdream emits fenced blocks.
+          classesToPreserve: prepass.languageClasses,
+        }).parse();
+      } catch {
+        return null;
+      }
+    };
+    const fullOpts = {
+      url,
+      tidy: tidyMarkdown,
+      mainOnly: pageType === 'docs',
+      unwrapPre: pageType === 'pre',
+    };
     let article: ReturnType<Readability['parse']> | null = null;
-    try {
-      const clone = document.cloneNode(true) as unknown as Document;
-      article = new Readability(clone as any, {
-        charThreshold: this.opts.charThreshold ?? 200,
-        keepClasses: false,
-      }).parse();
-    } catch {
-      article = null;
+    let readabilityCand: Candidate | undefined;
+    let fullCand: Candidate | undefined;
+    let choice: Choice | undefined;
+    if (strategy === 'readability' || (strategy === 'auto' && pageType === 'article')) {
+      article = runReadability();
+      if (article?.content)
+        readabilityCand = candidateFrom(
+          'readability',
+          tidyMarkdown(htmlToMarkdown(article.content, { origin: url })),
+        );
     }
-    if (article?.content) {
-      markdown = tidyMarkdown(htmlToMarkdown(article.content, { origin: url }));
-    }
-    if (markdown.length < minArticle) {
-      // fallback 1: defuddle (optional)
-      if (this.opts.useDefuddle) {
-        try {
-          const spec = 'defuddle/node';
-          const mod: any = await import(/* @vite-ignore */ spec);
-          const r = await mod.Defuddle(document as any, url, { markdown: true, useAsync: false });
-          if (r?.content && r.content.length > markdown.length) {
-            markdown = tidyMarkdown(r.content);
-            parser = 'defuddle';
-            if (!meta.title && r.title) meta.title = r.title;
-            if (!meta.publishedAt && r.published) meta.publishedAt = r.published;
-          }
-        } catch {
-          /* optional */
-        }
-      }
-      // fallback 2: mdream minimal on whole document
-      if (markdown.length < minArticle) {
-        try {
-          const whole = tidyMarkdown(
-            htmlToMarkdown(document.documentElement?.outerHTML ?? html, {
-              origin: url,
-              minimal: true,
-            }),
+    if (strategy === 'readability') {
+      // Classic behaviour: Readability, whole document only when the article is too thin.
+      if (!readabilityCand || readabilityCand.textLen < minArticle)
+        fullCand = fullCandidate(document, { ...fullOpts, mainOnly: false });
+      choice = chooseCandidate({
+        readability: readabilityCand,
+        full: fullCand,
+        minArticleChars: minArticle,
+      });
+    } else if (strategy === 'full' || pageType !== 'article') {
+      // Forums / Q&A (Readability deletes answers), docs (main container), <pre> documents.
+      fullCand = fullCandidate(document, fullOpts);
+      if (!fullCand || fullCand.textLen < minArticle) {
+        article ??= runReadability();
+        if (article?.content)
+          readabilityCand = candidateFrom(
+            'readability',
+            tidyMarkdown(htmlToMarkdown(article.content, { origin: url })),
           );
-          if (whole.length > markdown.length) {
-            markdown = whole;
-            parser = 'mdream-minimal';
-          }
-        } catch {
-          /* ignore */
+      }
+      choice =
+        fullCand && (!readabilityCand || fullCand.textLen >= readabilityCand.textLen * 0.5)
+          ? { candidate: fullCand, guard: undefined }
+          : chooseCandidate({
+              readability: readabilityCand,
+              full: fullCand,
+              minArticleChars: minArticle,
+            });
+    } else {
+      // Article: both candidates, Readability unless the recall guard says it dropped too much
+      // (or a single clean <article> exists and Readability's pick is link-heavy around it).
+      fullCand = fullCandidate(document, fullOpts);
+      choice = chooseCandidate({
+        readability: readabilityCand,
+        full: fullCand,
+        article: articleCandidate(document, fullOpts),
+        minArticleChars: minArticle,
+      });
+    }
+    let markdown = choice?.candidate.markdown ?? '';
+    let parser = choice
+      ? `${choice.candidate.name}${choice.guard ? `:${choice.guard}` : ''}`
+      : 'none';
+    if (choice?.candidate.name === 'readability' && !article) parser = 'readability';
+
+    // Optional: defuddle (peer) when the chosen text is still thin.
+    if (this.opts.useDefuddle && markdown.length < minArticle) {
+      try {
+        const spec = 'defuddle/node';
+        const mod: any = await import(/* @vite-ignore */ spec);
+        const r = await mod.Defuddle(document as any, url, { markdown: true, useAsync: false });
+        if (r?.content && r.content.length > markdown.length) {
+          markdown = tidyMarkdown(r.content);
+          parser = 'defuddle';
+          if (!meta.title && r.title) meta.title = r.title;
+          if (!meta.publishedAt && r.published) meta.publishedAt = r.published;
         }
+      } catch {
+        /* optional */
       }
     }
-    // Drop frontmatter mdream may add in minimal mode
+    // ── recovery when the DOM yielded too little ─────────────────────────
+    // "Too little" = under minArticleChars, or under a quarter of what the page's own data
+    // declares. JSON-LD articleBody first (paywall-guarded), then __NEXT_DATA__ / RSC / Nuxt.
+    const domTextLen = choice?.candidate.textLen ?? 0;
+    const thin = (declared: number) => domTextLen < minArticle || domTextLen * 4 < declared;
+    const withTitle = (md: string) => {
+      const t = cleanField(meta.title ?? document.title, 200);
+      return t && !/^#\s/.test(md) ? `# ${t}\n\n${md}` : md;
+    };
+    if (this.opts.useJsonLdBody !== false && meta.articleBody && thin(meta.articleBody.length)) {
+      const md = recoverArticleBody(meta.articleBody, meta.accessibleForFree, tidyMarkdown);
+      if (md && md.length > markdown.length) {
+        markdown = withTitle(md);
+        parser = 'jsonld-body';
+      }
+    }
+    if (
+      parser !== 'jsonld-body' &&
+      (pre.stash.nextData || pre.stash.nextFlight || pre.stash.nuxtData)
+    ) {
+      const r = recoverFromStash(pre.stash, tidyMarkdown);
+      if (r && thin(r.markdown.length) && r.markdown.length > markdown.length) {
+        markdown = withTitle(r.markdown);
+        parser = r.source;
+      }
+    }
+    // Drop frontmatter mdream may add
     markdown = markdown.replace(/^---\n[\s\S]*?\n---(?:\n+|$)/, '').trim();
+    const recovered = /^(jsonld-body|next-data|next-flight|nuxt-data)$/.test(parser);
+    if (!recovered && js.suspected && markdown.length < js.maxMarkdownLength)
+      throw needsJsError(url, js);
     if (markdown.length < minPage) return null;
 
-    const title = (article?.title || meta.title || document.title || '').trim() || hostTitle(url);
+    const title =
+      (article?.title || meta.title || document.title || '').trim() ||
+      firstHeading(document, markdown) ||
+      hostTitle(url);
+    const text = markdownToText(markdown);
+    // <html lang> / meta / JSON-LD → Content-Language header → Readability → Unicode-script guess.
+    const lang =
+      meta.lang ??
+      normalizeLangTag(extra.contentLanguage) ??
+      cleanField(article?.lang, 16) ??
+      guessLangFromScript(text);
     return {
       url,
       title: cleanField(title) ?? hostTitle(url),
       markdown,
-      text: markdownToText(markdown),
-      byline: cleanField(article?.byline ?? meta.byline, 200),
-      siteName: cleanField(article?.siteName ?? meta.siteName, 120),
-      publishedAt: cleanField(article?.publishedTime ?? meta.publishedAt, 64),
-      lang: cleanField(article?.lang ?? meta.lang, 16),
+      text,
+      byline: cleanField(meta.byline ?? article?.byline, 200),
+      siteName: cleanField(meta.siteName ?? article?.siteName, 120) ?? hostTitle(url),
+      publishedAt: cleanField(meta.publishedAt ?? article?.publishedTime, 64),
+      updatedAt: cleanField(meta.updatedAt, 64),
+      lang: cleanField(lang, 16),
       excerpt: cleanField(article?.excerpt ?? meta.description, 500),
+      canonicalUrl: meta.canonicalUrl,
+      alternates: meta.alternates,
+      kind: meta.kind,
+      accessibleForFree: meta.accessibleForFree,
+      wordCount: countWords(text),
       contentType,
       parser,
     };
   }
+}
+
+/** Whitespace-token count (CJK runs count per character). */
+export function countWords(text: string): number {
+  let n = 0;
+  for (const tok of text.split(/\s+/)) {
+    if (!tok) continue;
+    const cjk = tok.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g)?.length ?? 0;
+    n += cjk ? cjk + (tok.length > cjk ? 1 : 0) : 1;
+  }
+  return n;
+}
+
+/** PARSE_NEEDS_JS: the page is a client-rendered shell; name the render hook in the remediation. */
+export function needsJsError(url: string, js: JsShellSignals): WebVectorError {
+  return new WebVectorError(
+    `Page requires JavaScript to render${js.framework ? ` (${js.framework})` : ''}; no readable content in the served HTML of ${url}.`,
+    {
+      code: 'PARSE_NEEDS_JS',
+      stage: 'ingest',
+      remediation:
+        "Configure a renderer with `ingestion.render` ({ provider: 'cloudflare' | 'browserless' | 'custom', when: 'needs-js' }) or use a search provider that returns page content.",
+      details: { signals: js.signals, framework: js.framework, bodyTextLength: js.bodyTextLength },
+    },
+  );
+}
+
+/** Title fallback for pages without <title>/og:title: first <h1>, `.h1` (rfc-editor), first heading. */
+function firstHeading(document: any, markdown: string): string | undefined {
+  try {
+    const h = document.querySelector('h1,.h1,h2');
+    const t = cleanField(h?.textContent, 200);
+    if (t) return t;
+  } catch {
+    /* ignore */
+  }
+  const m = /^#{1,3}\s+(.+)$/m.exec(markdown);
+  return m ? cleanField(m[1], 200) : undefined;
 }
 
 function hostTitle(url: string): string {
@@ -219,59 +406,6 @@ function hostTitle(url: string): string {
   } catch {
     return url;
   }
-}
-
-function extractMeta(
-  document: any,
-  url: string,
-): {
-  title?: string;
-  description?: string;
-  siteName?: string;
-  publishedAt?: string;
-  lang?: string;
-  byline?: string;
-} {
-  const get = (sel: string, attr = 'content'): string | undefined => {
-    try {
-      const v = document.querySelector(sel)?.getAttribute(attr);
-      return v ? String(v).trim() : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  const out: ReturnType<typeof extractMeta> = {
-    title: get('meta[property="og:title"]') ?? get('meta[name="twitter:title"]'),
-    description: get('meta[name="description"]') ?? get('meta[property="og:description"]'),
-    siteName: get('meta[property="og:site_name"]'),
-    publishedAt:
-      get('meta[property="article:published_time"]') ??
-      get('meta[name="date"]') ??
-      get('meta[name="pubdate"]') ??
-      get('time[datetime]', 'datetime'),
-    lang: document.documentElement?.getAttribute?.('lang') ?? undefined,
-    byline: get('meta[name="author"]') ?? get('meta[property="article:author"]'),
-  };
-  // JSON-LD datePublished / headline
-  try {
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      const json = JSON.parse(s.textContent ?? '');
-      const nodes = Array.isArray(json) ? json : json['@graph'] ? json['@graph'] : [json];
-      for (const n of nodes) {
-        if (n && typeof n === 'object') {
-          if (!out.publishedAt && typeof n.datePublished === 'string')
-            out.publishedAt = n.datePublished;
-          if (!out.title && typeof n.headline === 'string') out.title = n.headline;
-          if (!out.byline && n.author)
-            out.byline = typeof n.author === 'string' ? n.author : n.author?.name;
-        }
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  if (!out.siteName) out.siteName = hostTitle(url);
-  return out;
 }
 
 // ─── PDF ────────────────────────────────────────────────────────────────────
@@ -348,11 +482,17 @@ export class PdfParser implements ContentParser {
         () => {},
       );
     }
-    const markdown = tidyMarkdown(
-      used
-        .map((p, i) => `${normalizePdfPage(p)}${i < used.length - 1 ? '\n\n---\n\n' : ''}`)
-        .join(''),
-    );
+    // Pages are tidied one by one so the recorded page offsets stay exact; empty pages (scans,
+    // figures) are skipped. `pages` lets the ingest stage cite `url#page=N`.
+    let markdown = '';
+    const pages: { start: number; page: number }[] = [];
+    used.forEach((p, i) => {
+      const md = tidyMarkdown(normalizePdfPage(p));
+      if (!md) return;
+      if (markdown) markdown += '\n\n---\n\n';
+      pages.push({ start: markdown.length, page: i + 1 });
+      markdown += md;
+    });
     if (markdown.replace(/[-\s]/g, '').length < 40) return null;
     if (!title) {
       // Heuristic: first short line without terminal punctuation among the opening lines (paper titles).
@@ -378,6 +518,8 @@ export class PdfParser implements ContentParser {
       text: markdownToText(markdown),
       byline,
       publishedAt,
+      pages,
+      wordCount: countWords(markdown),
       contentType: 'application/pdf',
       parser: `unpdf(${totalPages}p)`,
     };

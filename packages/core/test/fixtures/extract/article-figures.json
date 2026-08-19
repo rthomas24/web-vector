@@ -1,0 +1,17 @@
+{
+  "url": "https://eng.example.com/blog/2026/how-we-shed-load",
+  "type": "engineering blog post with figure/figcaption, inline links, list; author card and comments section after the article",
+  "minF1": 0.9,
+  "mustContain": [
+    "6× spike",
+    "gradient of latency",
+    "Alert on bucket exhaustion"
+  ],
+  "mustNotContain": [
+    "AUTHOR-CARD-MARKER",
+    "FOOTER-MARKER-TEXT"
+  ],
+  "meta": {
+    "publishedAt": "2026-01-21"
+  }
+}

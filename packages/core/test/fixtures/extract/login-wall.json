@@ -1,0 +1,5 @@
+{
+  "url": "https://intranet.example.com/wiki/Runbook",
+  "type": "server-rendered login form page with almost no text; must be PARSE_EMPTY, not PARSE_NEEDS_JS",
+  "failure": "PARSE_EMPTY"
+}
