@@ -31,3 +31,6 @@ webvector.config.local.*
 # private working notes (kept outside the repo)
 webvector-private-notes/
 scratch/
+
+# private planning docs (feature ideas, roadmap drafts) — never pushed
+private/
