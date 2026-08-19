@@ -39,7 +39,10 @@ export async function ingestDocument(
   input: IngestDocumentInput,
 ): Promise<{ chunks: Chunk[]; embedded: number; stats: EmbedStats }> {
   const { doc, page, result, query, session, chunking, signal } = input;
-  const canonical = canonicalizeUrl(doc.url);
+  // Dedupe key: the page's declared canonical URL when it has one (merges AMP / mobile / tracking
+  // variants), else the normalised fetch URL.
+  const urlCanonical = canonicalizeUrl(doc.url);
+  const canonical = doc.canonicalUrl ? canonicalizeUrl(doc.canonicalUrl) : urlCanonical;
   const checkAbort = () => {
     if (signal?.aborted)
       throw new WebVectorError('Ingest aborted', { code: 'ABORTED', stage: 'ingest' });
@@ -77,8 +80,11 @@ export async function ingestDocument(
         sessionId: session.id,
         siteName: doc.siteName,
         publishedAt: doc.publishedAt ?? result?.publishedAt,
+        updatedAt: doc.updatedAt,
         lang: doc.lang,
         breadcrumb: tc.breadcrumb,
+        kind: doc.kind,
+        page: pageAt(doc.pages, tc.startOffset),
       },
     };
   });
@@ -109,7 +115,22 @@ export async function ingestDocument(
     }
   }
   session.urls.add(canonical);
+  session.urls.add(urlCanonical);
   return { chunks, embedded: toEmbed.length, stats };
+}
+
+/** PDF page (1-based) containing markdown offset `offset`, from the parser's page boundaries. */
+export function pageAt(
+  pages: { start: number; page: number }[] | undefined,
+  offset: number,
+): number | undefined {
+  if (!pages?.length) return undefined;
+  let page: number | undefined;
+  for (const p of pages) {
+    if (p.start > offset) break;
+    page = p.page;
+  }
+  return page;
 }
 
 /** Embed chunks, using the content-hash cache to skip texts embedded before with this model. */

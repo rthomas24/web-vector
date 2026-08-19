@@ -83,6 +83,11 @@ export function renderMarkdown(result: ResearchResult, opts: MarkdownRenderOptio
   return parts.filter(Boolean).join('\n\n');
 }
 
-export function citationFor(index: number, title: string, url: string): string {
-  return `[${index}] ${title} — ${url}`;
+export function citationFor(index: number, title: string, url: string, page?: number): string {
+  return `[${index}] ${title} — ${page ? pageUrl(url, page) : url}`;
+}
+
+/** `url#page=N` for PDF passages (the pdf.js / browser viewer fragment). */
+export function pageUrl(url: string, page: number): string {
+  return `${url.replace(/#.*$/, '')}#page=${page}`;
 }

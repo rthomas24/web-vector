@@ -16,6 +16,7 @@
   "minCodeBlocks": 1,
   "minTableRows": 3,
   "meta": {
-    "title": "Rate limits"
+    "title": "Rate limits",
+    "kind": "docs"
   }
 }

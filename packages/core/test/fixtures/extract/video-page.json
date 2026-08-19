@@ -9,5 +9,9 @@
   "mustNotContain": [
     "UP-NEXT-MARKER",
     "FOOTER-MARKER-TEXT"
-  ]
+  ],
+  "meta": {
+    "kind": "video",
+    "publishedAt": "2026-04-10"
+  }
 }

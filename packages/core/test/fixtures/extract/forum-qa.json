@@ -13,5 +13,8 @@
   "mustNotContain": [
     "HOT-NETWORK-MARKER",
     "FOOTER-MARKER-TEXT"
-  ]
+  ],
+  "meta": {
+    "kind": "qa"
+  }
 }

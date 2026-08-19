@@ -16,7 +16,11 @@
   "meta": {
     "title": "Rate limiting, explained for busy engineers",
     "publishedAt": "2026-03-14T09:30:00Z",
+    "updatedAt": "2026-03-15T11:00:00Z",
     "siteName": "Example News",
-    "byline": "Dana Whitfield"
+    "byline": "Dana Whitfield",
+    "kind": "news",
+    "canonicalUrl": "https://news.example.com/2026/03/14/rate-limiting-explained",
+    "accessibleForFree": true
   }
 }

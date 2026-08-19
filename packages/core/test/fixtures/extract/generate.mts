@@ -181,8 +181,12 @@ ${para('headers', 'distributed', 'conclusion')}`;
       meta: {
         title: 'Rate limiting, explained for busy engineers',
         publishedAt: '2026-03-14T09:30:00Z',
+        updatedAt: '2026-03-15T11:00:00Z',
         siteName: 'Example News',
         byline: 'Dana Whitfield',
+        kind: 'news',
+        canonicalUrl: url,
+        accessibleForFree: true,
       },
     },
     html: page({
@@ -310,7 +314,7 @@ ${para('distributed')}`;
       mustNotContain: ['SIDEBAR-MARKER', 'Copy code to clipboard', 'Edit this page', 'Was this page helpful'],
       minCodeBlocks: 1,
       minTableRows: 3,
-      meta: { title: 'Rate limits' },
+      meta: { title: 'Rate limits', kind: 'docs' },
     },
     html: page({
       title: 'Rate limits | Example Docs',
@@ -498,6 +502,7 @@ after     -> 10 requests per second sustained</code></pre>`,
         'One practical note',
       ],
       mustNotContain: ['HOT-NETWORK-MARKER', 'FOOTER-MARKER-TEXT'],
+      meta: { kind: 'qa' },
     },
     html: page({
       title: 'throttling - How does a token bucket handle bursts? - Example Q&A',
@@ -847,13 +852,12 @@ ${siteFooter('Example Media')}`,
     name: 'paywall-jsonld',
     gold: teaser,
     spec: {
-      expectFail: 'C6 ranking-grade metadata',
       url,
       type: 'paywalled article: DOM shows a teaser + subscribe wall; JSON-LD has isAccessibleForFree:false and the full articleBody (must never be used)',
       minF1: 0.6,
       mustContain: ['TEASER-VISIBLE-MARKER'],
       mustNotContain: ['PAYWALLED-BODY-MARKER', 'FOOTER-MARKER-TEXT'],
-      meta: { accessibleForFree: false },
+      meta: { accessibleForFree: false, kind: 'news' },
     },
     html: page({
       title: 'Inside the rate limiter that runs the world’s busiest API',
@@ -1163,6 +1167,7 @@ Abstract
       mustContain: ['40 Gbit/s', 'gossip, 50 ms convergence'],
       mustNotContain: ['RECOMMENDED-MARKER', 'FOOTER-MARKER-TEXT'],
       minTableRows: 3,
+      meta: { kind: 'product' },
     },
     html: page({
       title: 'Limiter Pro edge appliance – Example Shop',
@@ -1188,6 +1193,7 @@ add({
     minF1: 0.6,
     mustContain: ['18:40 Leaky buckets and smoothing', 'Recorded at ExampleConf 2026'],
     mustNotContain: ['UP-NEXT-MARKER', 'FOOTER-MARKER-TEXT'],
+    meta: { kind: 'video', publishedAt: '2026-04-10' },
   },
   html: page({
     title: 'Talk: Rate limiting at the edge - Example Video',
@@ -1213,12 +1219,11 @@ add({
     name: 'i18n-german',
     gold,
     spec: {
-      expectFail: 'C6 ranking-grade metadata',
       url,
       type: 'German article with html lang="de", hreflang alternates, Content-Language meta',
       minF1: 0.9,
       mustContain: ['Höchstkapazität', 'Leaky-Bucket glättet'],
-      meta: { lang: 'de', canonicalUrl: url },
+      meta: { lang: 'de', canonicalUrl: url, kind: 'blog' },
     },
     html: page({
       lang: 'de',
@@ -1234,7 +1239,6 @@ add({
   name: 'i18n-japanese-nolang',
   gold: `<h1>レート制限のしくみ</h1><p>レート制限は、短時間に大量のリクエストが集中してサービスが過負荷になるのを防ぐ仕組みです。負荷がかかったときに予測不能に失敗する代わりに、制限されたサービスは超過分のリクエストを制御された方法で拒否または遅延させ、いつ再試行してよいかをクライアントに伝えます。</p><h2>トークンバケット</h2><p>トークンバケットアルゴリズムは、利用可能なトークンのカウンターを保持し、一定の速度で最大容量まで補充します。各リクエストはトークンを一つ消費し、バケットが空のときはリクエストが拒否されます。アイドル中にトークンが蓄積されるため、長期的な平均レートを超えることなく短いバーストを許容できます。</p><h2>リーキーバケット</h2><p>リーキーバケットはバーストを許容する代わりにトラフィックを平滑化します。リクエストは一定の速度で排出されるキューに入り、キューが満杯のときに到着したリクエストは破棄されます。</p>`,
   spec: {
-      expectFail: 'C6 ranking-grade metadata',
     url: 'https://tech.example.jp/articles/rate-limiting',
     type: 'Japanese article with no lang attribute; language must come from a Unicode-script heuristic',
     minF1: 0.85,
@@ -1259,7 +1263,6 @@ ${para('leakyBucket', 'headers')}
     name: 'amp-canonical-urldate',
     gold,
     spec: {
-      expectFail: 'C6 ranking-grade metadata',
       url,
       type: 'AMP mirror page: no date metadata (date only in the URL path), rel=canonical pointing at the desktop URL, og:url',
       minF1: 0.9,
@@ -1289,7 +1292,6 @@ ${para('tokenBucket', 'distributed')}
     name: 'article-figures',
     gold,
     spec: {
-      expectFail: 'C6 ranking-grade metadata',
       url,
       type: 'engineering blog post with figure/figcaption, inline links, list; author card and comments section after the article',
       minF1: 0.9,

@@ -254,7 +254,7 @@ If the primary search provider fails or is rate-limited, the `fallbackProviders`
 interface ResearchResult {
   query: string; queries: string[];        // the query + expansions actually used
   passages: Passage[];                     // ranked; each: text, url, title, score (0–1), cosine?, bm25?,
-                                           //   rerankScore?, chunkIndex, startOffset, endOffset, publishedAt?,
+                                           //   rerankScore?, chunkIndex, startOffset, endOffset, publishedAt?, updatedAt?, kind?, page? (PDF),
                                            //   fetchedAt, matchedQueries, citation "[n] Title — url"
   sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, failure?
   failures: Failure[];                     // per-URL / per-stage problems with machine codes (never thrown)

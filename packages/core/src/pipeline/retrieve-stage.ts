@@ -325,9 +325,12 @@ export async function runRetrieveStage(
       endOffset: x.metadata.endOffset,
       siteName: x.metadata.siteName,
       publishedAt: x.metadata.publishedAt,
+      updatedAt: x.metadata.updatedAt,
+      kind: x.metadata.kind,
+      page: x.metadata.page,
       fetchedAt: x.metadata.fetchedAt,
       matchedQueries: [...(matched.get(x.id) ?? [query])],
-      citation: citationFor(i + 1, x.metadata.title, x.metadata.url),
+      citation: citationFor(i + 1, x.metadata.title, x.metadata.url, x.metadata.page),
       ...(input.explain ? { explain: explainFor(x.id, x) } : {}),
     };
   });

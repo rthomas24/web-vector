@@ -4,7 +4,8 @@ import { parseHTML } from 'linkedom';
 import { htmlToMarkdown } from 'mdream';
 import { WebVectorError } from '../errors.js';
 import type { ContentParser, ParseContext, ParsedDocument } from '../types.js';
-import { detectJsShell, type JsShellSignals } from './extract-detect.js';
+import { detectJsShell, guessLangFromScript, type JsShellSignals } from './extract-detect.js';
+import { extractMeta } from './extract-meta.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -205,20 +206,39 @@ export class HtmlParser implements ContentParser {
     if (markdown.length < minPage) return null;
 
     const title = (article?.title || meta.title || document.title || '').trim() || hostTitle(url);
+    const text = markdownToText(markdown);
+    const lang = meta.lang ?? cleanField(article?.lang, 16) ?? guessLangFromScript(text);
     return {
       url,
       title: cleanField(title) ?? hostTitle(url),
       markdown,
-      text: markdownToText(markdown),
-      byline: cleanField(article?.byline ?? meta.byline, 200),
-      siteName: cleanField(article?.siteName ?? meta.siteName, 120),
-      publishedAt: cleanField(article?.publishedTime ?? meta.publishedAt, 64),
-      lang: cleanField(article?.lang ?? meta.lang, 16),
+      text,
+      byline: cleanField(meta.byline ?? article?.byline, 200),
+      siteName: cleanField(meta.siteName ?? article?.siteName, 120) ?? hostTitle(url),
+      publishedAt: cleanField(meta.publishedAt ?? article?.publishedTime, 64),
+      updatedAt: cleanField(meta.updatedAt, 64),
+      lang: cleanField(lang, 16),
       excerpt: cleanField(article?.excerpt ?? meta.description, 500),
+      canonicalUrl: meta.canonicalUrl,
+      alternates: meta.alternates,
+      kind: meta.kind,
+      accessibleForFree: meta.accessibleForFree,
+      wordCount: countWords(text),
       contentType,
       parser,
     };
   }
+}
+
+/** Whitespace-token count (CJK runs count per character). */
+export function countWords(text: string): number {
+  let n = 0;
+  for (const tok of text.split(/\s+/)) {
+    if (!tok) continue;
+    const cjk = tok.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g)?.length ?? 0;
+    n += cjk ? cjk + (tok.length > cjk ? 1 : 0) : 1;
+  }
+  return n;
 }
 
 /** PARSE_NEEDS_JS: the page is a client-rendered shell; name the render hook in the remediation. */
@@ -241,59 +261,6 @@ function hostTitle(url: string): string {
   } catch {
     return url;
   }
-}
-
-function extractMeta(
-  document: any,
-  url: string,
-): {
-  title?: string;
-  description?: string;
-  siteName?: string;
-  publishedAt?: string;
-  lang?: string;
-  byline?: string;
-} {
-  const get = (sel: string, attr = 'content'): string | undefined => {
-    try {
-      const v = document.querySelector(sel)?.getAttribute(attr);
-      return v ? String(v).trim() : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  const out: ReturnType<typeof extractMeta> = {
-    title: get('meta[property="og:title"]') ?? get('meta[name="twitter:title"]'),
-    description: get('meta[name="description"]') ?? get('meta[property="og:description"]'),
-    siteName: get('meta[property="og:site_name"]'),
-    publishedAt:
-      get('meta[property="article:published_time"]') ??
-      get('meta[name="date"]') ??
-      get('meta[name="pubdate"]') ??
-      get('time[datetime]', 'datetime'),
-    lang: document.documentElement?.getAttribute?.('lang') ?? undefined,
-    byline: get('meta[name="author"]') ?? get('meta[property="article:author"]'),
-  };
-  // JSON-LD datePublished / headline
-  try {
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      const json = JSON.parse(s.textContent ?? '');
-      const nodes = Array.isArray(json) ? json : json['@graph'] ? json['@graph'] : [json];
-      for (const n of nodes) {
-        if (n && typeof n === 'object') {
-          if (!out.publishedAt && typeof n.datePublished === 'string')
-            out.publishedAt = n.datePublished;
-          if (!out.title && typeof n.headline === 'string') out.title = n.headline;
-          if (!out.byline && n.author)
-            out.byline = typeof n.author === 'string' ? n.author : n.author?.name;
-        }
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  if (!out.siteName) out.siteName = hostTitle(url);
-  return out;
 }
 
 // ─── PDF ────────────────────────────────────────────────────────────────────

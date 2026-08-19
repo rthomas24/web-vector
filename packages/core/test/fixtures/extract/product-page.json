@@ -11,5 +11,8 @@
     "RECOMMENDED-MARKER",
     "FOOTER-MARKER-TEXT"
   ],
-  "minTableRows": 3
+  "minTableRows": 3,
+  "meta": {
+    "kind": "product"
+  }
 }

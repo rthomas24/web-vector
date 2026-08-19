@@ -1,5 +1,4 @@
 {
-  "expectFail": "C6 ranking-grade metadata",
   "url": "https://paper.example.com/2026/06/01/inside-the-rate-limiter",
   "type": "paywalled article: DOM shows a teaser + subscribe wall; JSON-LD has isAccessibleForFree:false and the full articleBody (must never be used)",
   "minF1": 0.6,
@@ -11,6 +10,7 @@
     "FOOTER-MARKER-TEXT"
   ],
   "meta": {
-    "accessibleForFree": false
+    "accessibleForFree": false,
+    "kind": "news"
   }
 }

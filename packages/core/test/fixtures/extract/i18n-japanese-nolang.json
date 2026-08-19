@@ -1,5 +1,4 @@
 {
-  "expectFail": "C6 ranking-grade metadata",
   "url": "https://tech.example.jp/articles/rate-limiting",
   "type": "Japanese article with no lang attribute; language must come from a Unicode-script heuristic",
   "minF1": 0.85,
