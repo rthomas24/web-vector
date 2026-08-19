@@ -268,7 +268,7 @@ interface ResearchResult {
 
 Two kinds, deliberately separate:
 
-- **Failures** are per-page and never abort a run: `FETCH_TIMEOUT`, `FETCH_HTTP_ERROR`, `FETCH_BLOCKED_ROBOTS`, `FETCH_BLOCKED_SSRF`, `FETCH_TOO_LARGE`, `TOO_MANY_REDIRECTS`, `UNSUPPORTED_CONTENT_TYPE`, `PARSE_EMPTY`, `PARSE_FAILED`. They land in `result.failures[]` and `sources[].failure`. If *every* page fails you still get the search snippets (`degraded: 'search_only'`, `ALL_FETCHES_FAILED`).
+- **Failures** are per-page and never abort a run: `FETCH_TIMEOUT`, `FETCH_HTTP_ERROR`, `FETCH_BLOCKED_ROBOTS`, `FETCH_BLOCKED_SSRF`, `FETCH_BLOCKED_BOT` (anti-bot wall — Cloudflare/Akamai/DataDome/PerimeterX/Imperva, `details.vendor`, never retried), `FETCH_PAYMENT_REQUIRED` (HTTP 402 pay-per-crawl), `FETCH_BLOCKED_CONTENT_SIGNAL` (site declared `ai-input=no`), `FETCH_TOO_LARGE`, `TOO_MANY_REDIRECTS`, `UNSUPPORTED_CONTENT_TYPE`, `PARSE_EMPTY`, `PARSE_FAILED`. They land in `result.failures[]` and `sources[].failure`. If *every* page fails you still get the search snippets (`degraded: 'search_only'`, `ALL_FETCHES_FAILED`).
 - **Errors** are thrown as `WebVectorError` with `code`, `message`, `remediation`, `retryable`, `provider`, `stage` and `toJSON()`; secrets are redacted. Examples: `MISSING_API_KEY` ("Set BRAVE_API_KEY … or use a keyless provider: duckduckgo"), `MISSING_DEPENDENCY` ("npm i @huggingface/transformers — or embeddings.provider: 'none'"), `SEARCH_BLOCKED`, `PROVIDER_RATE_LIMITED` (with `retryAfterMs`), `EMBEDDING_DIMENSION_MISMATCH` (names both models; suggests `store.clear()` or a new collection), `INVALID_CONFIG`.
 
 ## 10. Security and etiquette
@@ -277,7 +277,7 @@ WebVector fetches URLs chosen by a search engine — i.e. content an attacker ca
 
 - **SSRF guard**: private, loopback, link-local, CGNAT, multicast, reserved, IPv4-mapped-IPv6 and `localhost`/`*.internal` targets are refused; DNS answers are checked and every redirect hop is re-checked. Opt out only for trusted local setups (`ingestion.allowPrivateNetworks`).
 - **Caps** on redirects (5), response size (5 MB), per-request time (15 s) and whole-run deadline (45 s); bounded concurrency globally and per host.
-- **Etiquette**: robots.txt honoured (incl. `Crawl-delay`), identifiable User-Agent, per-host minimum interval, `Retry-After` respected.
+- **Etiquette**: robots.txt honoured (incl. `Crawl-delay` and [Content Signals](https://contentsignals.org) — `ai-input=no` is refused by default), identifiable User-Agent, per-host minimum interval, `Retry-After` respected; anti-bot challenge pages are recognised and never retried.
 - **Parsing without execution**: HTML is parsed with linkedom (no scripts, no sub-resource loading), PDFs with pdf.js in no-eval mode; callers only ever receive Markdown/plain text with control characters stripped.
 - **Secrets**: read from env/config, never logged; redacted in errors, in `webvector config`, and in the MCP `webvector_status` tool. Nothing is written to disk unless you enable the page cache directory.
 - **No telemetry, ever.**

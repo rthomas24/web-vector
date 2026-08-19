@@ -180,6 +180,29 @@ export interface ParsedDocument {
   contentType: string;
   /** Parser id that produced the document. */
   parser: string;
+  /** Content-usage signal declared by the site (robots.txt `Content-Signal:` or `content-signal` header). */
+  contentSignal?: ContentSignal;
+  /** Where the bytes came from: the origin (default), an API fast path, a web archive, or the search provider. */
+  fetchedFrom?: 'origin' | 'api' | 'archive' | 'provider';
+  /** ISO timestamp of the archived snapshot when `fetchedFrom` is `archive`. */
+  archivedAt?: string;
+  /** Decoded `#:~:text=` fragment from the requested URL, if any (a hint for retrieval). */
+  textFragment?: string;
+  /** Extra transport/parser metadata (e.g. `markdownTokens`, `fastPath`, `frontmatter.*`). */
+  metadata?: Record<string, string | number | boolean>;
+}
+
+/**
+ * Content Signals (contentsignals.org): a site's stated preferences for `search`, `ai-input`
+ * (real-time use, e.g. RAG/agents) and `ai-train`. Absent keys = no preference expressed.
+ */
+export interface ContentSignal {
+  search?: boolean;
+  aiInput?: boolean;
+  aiTrain?: boolean;
+  /** Raw directive value, e.g. `search=yes, ai-train=no`. */
+  raw: string;
+  source: 'robots' | 'header';
 }
 
 export interface ParseContext {

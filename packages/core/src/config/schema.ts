@@ -8,6 +8,7 @@ import type {
   SearchProvider,
   VectorStore,
 } from '../types.js';
+import { DEFAULT_USER_AGENT } from '../util/version.js';
 
 // ─── Zod schema for serialisable config (files / env) ────────────────────────
 
@@ -212,19 +213,67 @@ export const ingestionConfigSchema = z.object({
     .int()
     .min(10_000)
     .default(5 * 1024 * 1024),
+  /**
+   * Byte cap for textual responses (HTML/markdown/plain/XML/JSON) — below `maxBytes`, which still
+   * governs PDFs. Media, archives and scripts are rejected from the headers without downloading.
+   */
+  maxHtmlBytes: z
+    .number()
+    .int()
+    .min(10_000)
+    .default(2 * 1024 * 1024),
   respectRobotsTxt: z.boolean().default(true),
-  userAgent: z
-    .string()
-    .default('Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)'),
+  /**
+   * Content Signals (contentsignals.org — `Content-Signal: search=yes, ai-input=no, ai-train=no`
+   * in a robots.txt group, or a `content-signal` response header): `respect` refuses pages that say
+   * `ai-input=no` (FETCH_BLOCKED_CONTENT_SIGNAL) and records the signal on the document otherwise;
+   * `record` only records `doc.contentSignal`; `ignore` does neither.
+   */
+  contentSignals: z.enum(['ignore', 'record', 'respect']).default('respect'),
+  /**
+   * Self-describing agent identity: `WebVector/<version> (+https://github.com/rthomas24/web-vector;
+   * user-directed research agent)`. robots.txt groups match on the `WebVector` product token.
+   */
+  userAgent: z.string().default(DEFAULT_USER_AGENT),
+  /** Optional contact address sent as the `From:` request header (crawler etiquette, RFC 9110 §10.1.2). */
+  contactEmail: z.email().optional(),
   retries: z.number().int().min(0).max(5).default(2),
   allowPrivateNetworks: z.boolean().default(false),
   parsers: z.array(z.string()).default(['html', 'pdf', 'text']),
+  /**
+   * Content negotiation for served markdown (Cloudflare "Markdown for Agents", Mintlify, Vercel…):
+   * `prefer` asks for `text/markdown` first (measured 10–100× smaller bodies on docs sites),
+   * `accept` lists it after HTML, `off` never advertises it. Served markdown bypasses Readability
+   * and goes through the served-markdown cleaner (`parser: 'server-markdown'`).
+   */
+  acceptMarkdown: z.enum(['prefer', 'accept', 'off']).default('prefer'),
+  /**
+   * URL-rewrite / API fast paths for hosts whose HTML is the worst way to get the content
+   * (arxiv → HTML paper, github repo → raw README, github blob → raw, google docs → markdown
+   * export, npm/pypi → registry readme, HN → Algolia API, Stack Exchange → API with answers,
+   * GitHub issues/PRs → REST). true (all), false, or a list of ids. Rewritten hosts still go
+   * through robots.txt/SSRF/politeness; any failure falls back to the original URL.
+   */
+  fastPaths: z.union([z.boolean(), z.array(z.string())]).default(true),
+  /**
+   * Wayback Machine fallback (opt-in): `'blocked'` retries bot-walled (FETCH_BLOCKED_BOT),
+   * pay-walled (FETCH_PAYMENT_REQUIRED), 404/410 and needs-JS pages from web.archive.org via the
+   * availability API; `'always'` any fetch failure except robots/SSRF/content-signal refusals.
+   * ≈1 request/s process-wide, a 429 disables it for 10 min, never for `isAccessibleForFree:false`
+   * pages; archived documents carry `doc.fetchedFrom: 'archive'` and `doc.archivedAt`.
+   */
+  archiveFallback: z.union([z.literal(false), z.enum(['blocked', 'always'])]).default(false),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
   minChunkChars: z.number().int().min(1).default(100),
-  /** Use provider-returned page content (Tavily raw_content / Exa text) instead of fetching when available. */
-  useProviderContent: z.boolean().default(true),
+  /**
+   * Use provider-returned page content (Tavily raw_content / Exa text) instead of fetching:
+   * `'auto'` (default) only when it passes a quality gate (≥ 300 chars, not raw HTML, not cut off
+   * at a round provider cap, not mostly links/nav) and falls through to a fetch otherwise
+   * (`parser: 'provider'` vs `'provider→fetch'`); `true` always (when > 400 chars); `false` never.
+   */
+  useProviderContent: z.union([z.boolean(), z.literal('auto')]).default('auto'),
   cache: z
     .object({
       enabled: z.boolean().default(true),
