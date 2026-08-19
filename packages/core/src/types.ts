@@ -248,6 +248,22 @@ export interface Passage {
   citation: string;
   /** True when this passage is a raw search snippet (degraded mode). */
   fromSnippet?: boolean;
+  /** Ranking breakdown; present only when `explain: true` was requested. */
+  explain?: PassageExplain;
+}
+
+/** Why a passage ranked where it did (`ResearchOptions.explain`). */
+export interface PassageExplain {
+  /** Fused score before display normalisation (RRF sum, or reranker score when reranked). */
+  fused: number;
+  /** Best 1-based rank across BM25 lists (undefined if no lexical list matched). */
+  bm25Rank?: number;
+  /** Best 1-based rank across vector lists (undefined if no vector list matched). */
+  vectorRank?: number;
+  /** Rank in the final ordering before display sort (after diversify/MMR/rerank). */
+  poolRank: number;
+  /** Every ranked list this chunk appeared in. */
+  lists: { kind: 'bm25' | 'vector'; query: string; rank: number; score: number; weight: number }[];
 }
 
 export interface SourceSummary {
@@ -330,6 +346,8 @@ export interface ResearchOptions {
   markdown?: boolean;
   /** Trim passages so the rendered markdown stays under this many (approximate) tokens. */
   maxOutputTokens?: number;
+  /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
+  explain?: boolean;
 }
 
 // ─── Logging ────────────────────────────────────────────────────────────────

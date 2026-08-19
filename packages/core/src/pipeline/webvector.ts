@@ -162,7 +162,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   async fetchAndRetrieve(
     url: string,
     query: string,
-    opts: { topK?: number; signal?: AbortSignal } = {},
+    opts: { topK?: number; signal?: AbortSignal; explain?: boolean } = {},
   ): Promise<ResearchResult> {
     const c = await this.ensure();
     const t0 = Date.now();
@@ -186,6 +186,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       topK: opts.topK ?? 8,
       signal: opts.signal,
       warnings,
+      explain: opts.explain,
     });
     const result: ResearchResult = {
       query,
@@ -468,6 +469,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         rerank: opts.rerank,
         signal,
         warnings,
+        explain: opts.explain,
       });
       passages = r.passages;
       candidates = r.candidates;

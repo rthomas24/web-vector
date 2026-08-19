@@ -19,7 +19,7 @@ import {
   rrf,
 } from '../retrieval/fusion.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
-import type { Passage, ScoredChunk, SearchResult } from '../types.js';
+import type { Passage, PassageExplain, ScoredChunk, SearchResult } from '../types.js';
 import { combine } from '../util/vector.js';
 import type { Components } from './components.js';
 import { citationFor } from './format.js';
@@ -38,6 +38,8 @@ export interface RetrieveInput {
   rerank?: boolean;
   signal?: AbortSignal;
   warnings: string[];
+  /** Attach `Passage.explain` breakdowns. */
+  explain?: boolean;
 }
 
 export interface RetrieveOutput {
@@ -62,6 +64,7 @@ export async function runRetrieveStage(
   const lists: Ranked[][] = [];
   const weights: number[] = [];
   const listQuery: string[] = []; // which query produced each list (→ passage.matchedQueries)
+  const listKind: ('bm25' | 'vector')[] = [];
   const cosineBest = new Map<string, number>();
   const bm25Best = new Map<string, number>();
   const hitById = new Map<string, ScoredChunk>();
@@ -90,6 +93,7 @@ export async function runRetrieveStage(
         lists.push(hits.map((h) => ({ id: h.id, score: h.score })));
         weights.push(vectors[i]!.w);
         listQuery.push(vectors[i]!.q);
+        listKind.push('vector');
         for (const h of hits) {
           if (!hitById.has(h.id)) hitById.set(h.id, h);
           if ((cosineBest.get(h.id) ?? Number.NEGATIVE_INFINITY) < h.score)
@@ -118,6 +122,7 @@ export async function runRetrieveStage(
       const base = i === 0 ? 1 : 0.7;
       weights.push(lexicalOnly ? base : rc.lexicalWeight * base);
       listQuery.push(q);
+      listKind.push('bm25');
       for (const h of hits) if ((bm25Best.get(h.id) ?? 0) < h.score) bm25Best.set(h.id, h.score);
     });
   }
@@ -192,6 +197,36 @@ export async function runRetrieveStage(
   const normById = new Map(norm.map((n) => [n.id, n.score]));
   cut.sort((a, b) => (normById.get(b.id) ?? 0) - (normById.get(a.id) ?? 0));
 
+  const poolRank = new Map(pool.map((p, i) => [p.id, i + 1]));
+  const explainFor = (id: string, x: Candidate): PassageExplain => {
+    const entries: PassageExplain['lists'] = [];
+    lists.forEach((l, li) => {
+      const r = l.findIndex((h) => h.id === id);
+      if (r >= 0)
+        entries.push({
+          kind: listKind[li] as 'bm25' | 'vector',
+          query: listQuery[li] as string,
+          rank: r + 1,
+          score: round(l[r]!.score),
+          weight: weights[li] as number,
+        });
+    });
+    const best = (kind: 'bm25' | 'vector') =>
+      entries
+        .filter((e) => e.kind === kind)
+        .reduce<number | undefined>(
+          (m, e) => (m === undefined || e.rank < m ? e.rank : m),
+          undefined,
+        );
+    return {
+      fused: round(reranked && x.rerankScore !== undefined ? x.rerankScore : x.fused, 6),
+      bm25Rank: best('bm25'),
+      vectorRank: best('vector'),
+      poolRank: poolRank.get(id) ?? 0,
+      lists: entries,
+    };
+  };
+
   const passages: Passage[] = cut.map((x, i) => {
     const cos = cosineBest.get(x.id);
     return {
@@ -211,6 +246,7 @@ export async function runRetrieveStage(
       fetchedAt: x.metadata.fetchedAt,
       matchedQueries: [...(matched.get(x.id) ?? [query])],
       citation: citationFor(i + 1, x.metadata.title, x.metadata.url),
+      ...(input.explain ? { explain: explainFor(x.id, x) } : {}),
     };
   });
   return { passages, candidates, reranked, lexicalOnly };

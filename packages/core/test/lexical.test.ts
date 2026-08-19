@@ -144,3 +144,47 @@ describe('embeddings provider resolution', () => {
     }
   });
 });
+
+describe('explain', () => {
+  it('attaches per-passage ranking breakdown only when requested', async () => {
+    const html = (t: string, body: string) =>
+      `<html><head><title>${t}</title></head><body><article><h1>${t}</h1><p>${body} ${'More words to pass the minimum length filter for extraction here. '.repeat(8)}</p></article></body></html>`;
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const u = String(input instanceof Request ? input.url : input);
+      if (u.endsWith('robots.txt')) return new Response('', { status: 404 });
+      return new Response(
+        u.includes('a.example')
+          ? html('Reciprocal rank fusion', 'Reciprocal rank fusion sums 1/(k+rank) with k=60.')
+          : html('Bananas', 'Bananas are yellow fruit grown in warm climates.'),
+        { headers: { 'content-type': 'text/html' } },
+      );
+    }) as typeof fetch;
+    const wv = await WebVector.create({
+      search: {
+        provider: 'x',
+        instance: customSearchProvider('x', async () => [
+          { url: 'https://a.example/rrf' },
+          { url: 'https://b.example/banana' },
+        ]),
+        fallbackProviders: [],
+      },
+      embeddings: { provider: 'none' },
+      ingestion: { cache: { enabled: false }, allowPrivateNetworks: true },
+      logging: { level: 'silent' },
+      fetch: fetchImpl,
+    });
+    const plain = await wv.research('reciprocal rank fusion');
+    expect(plain.passages[0]?.explain).toBeUndefined();
+    const res = await wv.research('reciprocal rank fusion', { explain: true });
+    const top = res.passages[0]!;
+    expect(top.url).toBe('https://a.example/rrf');
+    expect(top.explain).toBeDefined();
+    expect(top.explain!.bm25Rank).toBe(1);
+    expect(top.explain!.vectorRank).toBeUndefined();
+    expect(
+      top.explain!.lists.some((l) => l.kind === 'bm25' && l.query === 'reciprocal rank fusion'),
+    ).toBe(true);
+    expect(top.explain!.fused).toBeGreaterThan(0);
+    await wv.close();
+  });
+});

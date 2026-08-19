@@ -68,6 +68,7 @@ program
   .option('--json', 'print JSON result')
   .option('--md', 'print markdown (default)')
   .option('--stats', 'print stage timings')
+  .option('--explain', 'print a per-passage ranking breakdown (bm25/vector ranks, fused score)')
   .option('-q, --quiet', 'no progress output')
   .action(async (query: string, opts) => {
     const { overrides, configFile } = globalOverrides();
@@ -105,10 +106,21 @@ program
         domainsBlock: opts.block,
         sessionId: opts.session,
         rerank: opts.rerank !== undefined ? true : undefined,
+        explain: opts.explain,
       });
       if (!opts.quiet && !opts.json) process.stderr.write('\n');
       if (opts.json) console.log(JSON.stringify(res, null, 2));
       else console.log(res.markdown);
+      if (opts.explain && !opts.json) {
+        console.error('\n#   fused     bm25  vec  pool  matched queries → source');
+        for (const p of res.passages) {
+          const e = p.explain;
+          if (!e) continue;
+          console.error(
+            `${String(p.index).padStart(2)}  ${e.fused.toFixed(4).padStart(8)}  ${String(e.bm25Rank ?? '-').padStart(5)}  ${String(e.vectorRank ?? '-').padStart(3)}  ${String(e.poolRank).padStart(4)}  ${p.matchedQueries.map((q) => `"${q.slice(0, 24)}"`).join(', ')} → ${p.url}`,
+          );
+        }
+      }
       if (opts.stats && !opts.json) {
         const s = res.stats;
         console.error(
