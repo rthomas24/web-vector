@@ -232,3 +232,25 @@ describe('webvector_fetch pagination, links, selectors', () => {
     expect(miss.result.content[0].text).toContain('Reciprocal rank fusion combines');
   });
 });
+
+describe('registry files', () => {
+  it('server.json matches package.json (mcpName, version, identifier) and marks keys secret', async () => {
+    const { readFileSync } = await import('node:fs');
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+    const srv = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
+    expect(pkg.mcpName).toBe('io.github.rthomas24/webvector');
+    expect(srv.name).toBe(pkg.mcpName);
+    expect(srv.version).toBe(pkg.version);
+    expect(srv.packages[0]).toMatchObject({
+      registryType: 'npm',
+      identifier: pkg.name,
+      version: pkg.version,
+      transport: { type: 'stdio' },
+    });
+    expect(pkg.files).toContain('server.json');
+    for (const v of srv.packages[0].environmentVariables) {
+      expect(v.isRequired).toBe(false);
+      expect(v.isSecret).toBe(/_API_KEY$/.test(v.name));
+    }
+  });
+});

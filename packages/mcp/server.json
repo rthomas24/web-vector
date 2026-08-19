@@ -1,0 +1,127 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.rthomas24/webvector",
+  "description": "Web research for agents: webvector_research searches, reads the full pages and returns cited passages; plus webvector_fetch and webvector_search. Zero-config (DuckDuckGo + BM25), optional keys/embeddings.",
+  "repository": {
+    "url": "https://github.com/rthomas24/web-vector",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "webvector-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "WEBVECTOR_SEARCH_PROVIDER",
+          "description": "Search provider: duckduckgo (default, keyless) | brave | serper | tavily | exa | perplexity | searxng | serpapi | google-cse",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_EMBEDDINGS_PROVIDER",
+          "description": "Embeddings: auto (default) | none (lexical BM25) | local | openai | gemini | voyage | cohere | mistral | jina | ollama",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_STORE_MODE",
+          "description": "ephemeral (default) | session | persistent — whether pages are reused across calls",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "BRAVE_API_KEY",
+          "description": "Brave Search API key (optional; enables the brave search provider)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "SERPER_API_KEY",
+          "description": "Serper.dev API key (optional)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "TAVILY_API_KEY",
+          "description": "Tavily API key (optional)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "EXA_API_KEY",
+          "description": "Exa API key (optional)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "description": "OpenAI API key (optional; enables semantic retrieval with OpenAI embeddings)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "VOYAGE_API_KEY",
+          "description": "Voyage AI API key (optional; embeddings/reranking)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "GEMINI_API_KEY",
+          "description": "Google Gemini API key (optional; embeddings)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "COHERE_API_KEY",
+          "description": "Cohere API key (optional; embeddings/reranking)",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_MCP_MAX_TOKENS",
+          "description": "Default token budget per result (500–20000, default 4000)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "number"
+        },
+        {
+          "name": "WEBVECTOR_MCP_MAX_USES",
+          "description": "Refuse further web tool calls after this many (guardrail)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "number"
+        },
+        {
+          "name": "WEBVECTOR_MCP_ALLOWED_DOMAINS",
+          "description": "Comma-separated domains the server may search/fetch (guardrail)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_MCP_BLOCKED_DOMAINS",
+          "description": "Comma-separated domains the server never searches/fetches (guardrail)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}
