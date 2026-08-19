@@ -16,8 +16,12 @@ export type {
   WebVectorFileConfigInput,
 } from './config/index.js';
 export {
+  CONFIG_DESCRIPTIONS,
   CONFIG_FILENAMES,
+  CONFIG_SCHEMA_URL,
+  CONFIG_SCHEMA_YAML_MODELINE,
   configFromEnv,
+  configJsonSchema,
   defineConfig,
   embeddingProviderNames,
   envKeyFor,

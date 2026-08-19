@@ -1,12 +1,17 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  CONFIG_SCHEMA_URL,
+  CONFIG_SCHEMA_YAML_MODELINE,
   configFromEnv,
+  configJsonSchema,
   interpolateEnv,
   loadConfig,
   mergeConfig,
+  readConfigFile,
   redactConfig,
   validateConfig,
 } from '../src/config/index.js';
@@ -134,5 +139,61 @@ describe('config hardening', () => {
     expect(r.a.credential).not.toContain('xyz-secret');
     expect(r.store.url).toBe('https://user:***@qdrant.example:6333');
     expect(r.options['x-api-key']).not.toContain('1234567');
+  });
+});
+
+describe('config JSON Schema ($schema support)', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  it('generated schema matches the committed schema/webvector.config.json (run npm run build to refresh)', () => {
+    const committed = JSON.parse(
+      readFileSync(resolve(here, '../schema/webvector.config.json'), 'utf8'),
+    );
+    expect(committed).toEqual(configJsonSchema());
+  });
+  it('describes every top-level section, annotates defaults and allows $schema', () => {
+    const schema = configJsonSchema() as {
+      $id: string;
+      properties: Record<string, { description?: string; properties?: Record<string, any> }>;
+    };
+    expect(schema.$id).toBe(CONFIG_SCHEMA_URL);
+    for (const k of [
+      'search',
+      'embeddings',
+      'store',
+      'retrieval',
+      'ingestion',
+      'output',
+      'logging',
+      'telemetry',
+    ])
+      expect(schema.properties[k]?.description, k).toBeTruthy();
+    expect(schema.properties.$schema?.description).toBeTruthy();
+    expect(schema.properties.ingestion?.properties?.cache.properties.dir.description).toMatch(
+      /XDG/,
+    );
+    expect(schema.properties.store?.properties?.provider.default).toBe('memory');
+    expect(schema.properties.ingestion?.properties?.cache.properties.dir.default).toBe('auto');
+    expect(CONFIG_SCHEMA_YAML_MODELINE).toBe(
+      `# yaml-language-server: $schema=${CONFIG_SCHEMA_URL}`,
+    );
+  });
+  it('strips "$schema" from JSON and YAML config files before validation', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wv-schema-'));
+    writeFileSync(
+      join(dir, 'webvector.config.json'),
+      JSON.stringify({ $schema: CONFIG_SCHEMA_URL, retrieval: { topK: 5 } }),
+    );
+    const raw = await readConfigFile(join(dir, 'webvector.config.json'));
+    expect((raw as Record<string, unknown>).$schema).toBeUndefined();
+    const r = await loadConfig({ cwd: dir, env: {} });
+    expect(r.file.retrieval.topK).toBe(5);
+    expect((r.code as Record<string, unknown>).$schema).toBeUndefined();
+    writeFileSync(
+      join(dir, '.webvectorrc.yaml'),
+      `${CONFIG_SCHEMA_YAML_MODELINE}\n$schema: ${CONFIG_SCHEMA_URL}\nretrieval:\n  topK: 4\n`,
+    );
+    const y = await readConfigFile(join(dir, '.webvectorrc.yaml'));
+    expect((y as Record<string, unknown>).$schema).toBeUndefined();
+    expect((y as { retrieval: { topK: number } }).retrieval.topK).toBe(4);
   });
 });

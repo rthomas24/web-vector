@@ -1,0 +1,855 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/rthomas24/web-vector/main/packages/core/schema/webvector.config.json",
+  "title": "WebVector configuration",
+  "description": "webvector.config.{json,yaml} — every key is optional; ${VAR} / ${VAR:-default} in strings are interpolated from the environment. Precedence: code > file > env > defaults. See docs/CONFIGURATION.md.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Editor schema reference (ignored by WebVector)."
+    },
+    "search": {
+      "default": {
+        "provider": "duckduckgo",
+        "resultsPerQuery": 10,
+        "safeSearch": "moderate",
+        "fallbackProviders": [
+          "tavily-keyless",
+          "wikipedia"
+        ],
+        "timeoutMs": 20000,
+        "options": {}
+      },
+      "type": "object",
+      "properties": {
+        "provider": {
+          "default": "duckduckgo",
+          "type": "string",
+          "description": "duckduckgo (keyless, default) | brave | serper | serpapi | google-cse | searxng | tavily | tavily-keyless | exa | perplexity | wikipedia. API keys are read from the conventional env vars (BRAVE_API_KEY, …) or search.apiKey."
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "cx": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "resultsPerQuery": {
+          "default": 10,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "safeSearch": {
+          "default": "moderate",
+          "type": "string",
+          "enum": [
+            "off",
+            "moderate",
+            "strict"
+          ]
+        },
+        "country": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "freshness": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "day",
+                "week",
+                "month",
+                "year"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "after": {
+                  "type": "string"
+                },
+                "before": {
+                  "type": "string"
+                }
+              }
+            }
+          ],
+          "description": "'day' | 'week' | 'month' | 'year' or { after, before } ISO dates."
+        },
+        "fallbackProviders": {
+          "default": [
+            "tavily-keyless",
+            "wikipedia"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Providers tried in order when the primary fails or is rate-limited."
+        },
+        "timeoutMs": {
+          "default": 20000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991
+        },
+        "options": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "description": "Search engine: which provider answers the query, result count, freshness, fallbacks."
+    },
+    "embeddings": {
+      "default": {
+        "provider": "auto",
+        "allowRemoteModels": true,
+        "timeoutMs": 60000,
+        "cache": true,
+        "options": {}
+      },
+      "type": "object",
+      "properties": {
+        "provider": {
+          "default": "auto",
+          "type": "string",
+          "description": "auto | none | local | openai | openai-compatible | gemini | voyage | cohere | mistral | jina | ollama."
+        },
+        "model": {
+          "type": "string"
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "dimensions": {
+          "type": "integer",
+          "minimum": 16,
+          "maximum": 9007199254740991,
+          "description": "Matryoshka truncation where the model supports it."
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "cacheDir": {
+          "type": "string"
+        },
+        "dtype": {
+          "type": "string",
+          "description": "Local models: 'q8' (default) | 'fp32' | 'fp16' | 'q4'."
+        },
+        "device": {
+          "type": "string"
+        },
+        "allowRemoteModels": {
+          "default": true,
+          "type": "boolean"
+        },
+        "timeoutMs": {
+          "default": 60000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991
+        },
+        "cache": {
+          "default": true,
+          "type": "boolean",
+          "description": "Persist chunk embeddings in the page cache’s pages.sqlite (key: model + dimensions + dtype + role + content hash) so re-runs never re-embed the same text."
+        },
+        "options": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "description": "Embedding tier: auto (local model if @huggingface/transformers is installed, else a hosted provider with a key, else lexical BM25), none, local, or a hosted provider."
+    },
+    "store": {
+      "default": {
+        "provider": "memory",
+        "mode": "ephemeral",
+        "collection": "webvector",
+        "sessionTtlMs": 1800000,
+        "maxSessions": 100,
+        "options": {}
+      },
+      "type": "object",
+      "properties": {
+        "provider": {
+          "default": "memory",
+          "type": "string",
+          "description": "memory (default) | sqlite (zero-dependency persistent store on node:sqlite) | chroma | qdrant | pgvector."
+        },
+        "mode": {
+          "default": "ephemeral",
+          "type": "string",
+          "enum": [
+            "ephemeral",
+            "session",
+            "persistent"
+          ],
+          "description": "ephemeral (per call) | session (reuse pages by sessionId, TTL) | persistent (one shared session that survives restarts with sqlite/external stores)."
+        },
+        "collection": {
+          "default": "webvector",
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "description": "Connection URL — for sqlite a file path (default ~/.local/share/webvector/store.sqlite)."
+        },
+        "apiKey": {
+          "type": "string"
+        },
+        "sessionTtlMs": {
+          "default": 1800000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991,
+          "description": "Idle sessions are dropped after this long; persistent stores also expire their rows on disk."
+        },
+        "maxSessions": {
+          "default": 100,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "options": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {},
+          "description": "Provider-specific options, e.g. sqlite: { vec: true } to rank with the optional sqlite-vec extension."
+        }
+      },
+      "description": "Vector store and session lifetime."
+    },
+    "retrieval": {
+      "default": {
+        "topK": 12,
+        "candidateMultiplier": 4,
+        "queryExpansion": true,
+        "maxExpandedQueries": 4,
+        "hybrid": true,
+        "fusion": "rsf",
+        "rrfK": 60,
+        "lexicalWeight": 1.5,
+        "adaptiveWeights": false,
+        "expansionWeight": 0.7,
+        "maxPerSource": 3,
+        "maxPerDomain": 5,
+        "serpPriorWeight": 0,
+        "mmr": true,
+        "mmrLambda": 0.7,
+        "minScore": null,
+        "relativeCutoff": 0.6,
+        "lexicalRelativeCutoff": 0.3,
+        "autocut": 0,
+        "nearDuplicateThreshold": 0.9,
+        "rerank": false,
+        "rerankTopN": 50,
+        "fallbackToLexical": true,
+        "bm25": {
+          "variant": "okapi",
+          "k1": 1.2,
+          "b": 0.75,
+          "delta": 0.5,
+          "coverageWeight": 0,
+          "proximityWeight": 0.3,
+          "fields": {
+            "title": 1,
+            "breadcrumb": 1.5,
+            "body": 1,
+            "lead": 0
+          }
+        }
+      },
+      "type": "object",
+      "properties": {
+        "topK": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Passages returned per call (tool calls may ask for fewer, never more)."
+        },
+        "candidateMultiplier": {
+          "default": 4,
+          "type": "number",
+          "minimum": 1
+        },
+        "queryExpansion": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxExpandedQueries": {
+          "default": 4,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "hybrid": {
+          "default": true,
+          "type": "boolean"
+        },
+        "fusion": {
+          "default": "rsf",
+          "type": "string",
+          "enum": [
+            "rrf",
+            "rsf"
+          ]
+        },
+        "rrfK": {
+          "default": 60,
+          "type": "number",
+          "minimum": 1
+        },
+        "lexicalWeight": {
+          "default": 1.5,
+          "type": "number",
+          "minimum": 0
+        },
+        "adaptiveWeights": {
+          "default": false,
+          "type": "boolean"
+        },
+        "expansionWeight": {
+          "default": 0.7,
+          "type": "number",
+          "minimum": 0
+        },
+        "maxPerSource": {
+          "default": 3,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxPerDomain": {
+          "default": 5,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "serpPriorWeight": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0
+        },
+        "mmr": {
+          "default": true,
+          "type": "boolean"
+        },
+        "mmrLambda": {
+          "default": 0.7,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "minScore": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relativeCutoff": {
+          "default": 0.6,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lexicalRelativeCutoff": {
+          "default": 0.3,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "autocut": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "nearDuplicateThreshold": {
+          "default": 0.9,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rerank": {
+          "default": false,
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "false | true | local | cohere | voyage | jina | llm."
+        },
+        "rerankModel": {
+          "type": "string"
+        },
+        "rerankApiKey": {
+          "type": "string"
+        },
+        "rerankTopN": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "fallbackToLexical": {
+          "default": true,
+          "type": "boolean"
+        },
+        "bm25": {
+          "default": {
+            "variant": "okapi",
+            "k1": 1.2,
+            "b": 0.75,
+            "delta": 0.5,
+            "coverageWeight": 0,
+            "proximityWeight": 0.3,
+            "fields": {
+              "title": 1,
+              "breadcrumb": 1.5,
+              "body": 1,
+              "lead": 0
+            }
+          },
+          "type": "object",
+          "properties": {
+            "variant": {
+              "default": "okapi",
+              "type": "string",
+              "enum": [
+                "okapi",
+                "bmx"
+              ]
+            },
+            "k1": {
+              "default": 1.2,
+              "type": "number",
+              "minimum": 0
+            },
+            "b": {
+              "default": 0.75,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "delta": {
+              "default": 0.5,
+              "type": "number",
+              "minimum": 0
+            },
+            "coverageWeight": {
+              "default": 0,
+              "type": "number",
+              "minimum": 0
+            },
+            "proximityWeight": {
+              "default": 0.3,
+              "type": "number",
+              "minimum": 0
+            },
+            "fields": {
+              "default": {
+                "title": 1,
+                "breadcrumb": 1.5,
+                "body": 1,
+                "lead": 0
+              },
+              "type": "object",
+              "properties": {
+                "title": {
+                  "default": 1,
+                  "type": "number",
+                  "minimum": 0
+                },
+                "breadcrumb": {
+                  "default": 1.5,
+                  "type": "number",
+                  "minimum": 0
+                },
+                "body": {
+                  "default": 1,
+                  "type": "number",
+                  "minimum": 0
+                },
+                "lead": {
+                  "default": 0,
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "description": "Ranking: hybrid BM25 + vectors, fusion, expansion, MMR, cutoffs, reranking."
+    },
+    "ingestion": {
+      "default": {
+        "maxPages": 10,
+        "maxConcurrentFetches": 8,
+        "perHostConcurrency": 2,
+        "perHostMinIntervalMs": 500,
+        "maxCrawlDelayMs": 10000,
+        "timeoutMs": 15000,
+        "totalDeadlineMs": 45000,
+        "maxRedirects": 5,
+        "maxBytes": 5242880,
+        "respectRobotsTxt": true,
+        "userAgent": "Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)",
+        "retries": 2,
+        "allowPrivateNetworks": false,
+        "parsers": [
+          "html",
+          "pdf",
+          "text"
+        ],
+        "chunkSize": 480,
+        "chunkOverlap": 60,
+        "maxChunksPerPage": 200,
+        "minChunkChars": 100,
+        "useProviderContent": true,
+        "cache": {
+          "enabled": true,
+          "ttlMs": 900000,
+          "maxPages": 500,
+          "dir": "auto",
+          "maxDiskPages": 20000,
+          "maxDiskBytes": 1073741824,
+          "negativeTtlMs": 15000
+        }
+      },
+      "type": "object",
+      "properties": {
+        "maxPages": {
+          "default": 10,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Pages fetched per call (1–100)."
+        },
+        "maxConcurrentFetches": {
+          "default": 8,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "perHostConcurrency": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "perHostMinIntervalMs": {
+          "default": 500,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxCrawlDelayMs": {
+          "default": 10000,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "timeoutMs": {
+          "default": 15000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991
+        },
+        "totalDeadlineMs": {
+          "default": 45000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991
+        },
+        "maxRedirects": {
+          "default": 5,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "maxBytes": {
+          "default": 5242880,
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 9007199254740991
+        },
+        "respectRobotsTxt": {
+          "default": true,
+          "type": "boolean",
+          "description": "Honour robots.txt (incl. Crawl-delay). Only disable with permission."
+        },
+        "userAgent": {
+          "default": "Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)",
+          "type": "string"
+        },
+        "retries": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "allowPrivateNetworks": {
+          "default": false,
+          "type": "boolean",
+          "description": "Disables the SSRF guard — only for trusted local setups."
+        },
+        "parsers": {
+          "default": [
+            "html",
+            "pdf",
+            "text"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "chunkSize": {
+          "default": 480,
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 4096
+        },
+        "chunkOverlap": {
+          "default": 60,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxChunksPerPage": {
+          "default": 200,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "minChunkChars": {
+          "default": 100,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "useProviderContent": {
+          "default": true,
+          "type": "boolean"
+        },
+        "cache": {
+          "default": {
+            "enabled": true,
+            "ttlMs": 900000,
+            "maxPages": 500,
+            "dir": "auto",
+            "maxDiskPages": 20000,
+            "maxDiskBytes": 1073741824,
+            "negativeTtlMs": 15000
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean",
+              "description": "Turn the page cache off entirely."
+            },
+            "ttlMs": {
+              "default": 900000,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Freshness window (ms); past it a page is revalidated (ETag / Last-Modified → 304) or refetched. 0 = never expires. A longer Cache-Control max-age extends it."
+            },
+            "maxPages": {
+              "default": 500,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "description": "In-memory LRU capacity (pages)."
+            },
+            "dir": {
+              "default": "auto",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean",
+                  "const": false
+                }
+              ],
+              "description": "'auto' (default: pages.sqlite in $XDG_CACHE_HOME/webvector, i.e. ~/.cache/webvector), a directory path, or false for memory only."
+            },
+            "maxDiskPages": {
+              "default": 20000,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "description": "On-disk budget (pages); least-recently-used pages are evicted first."
+            },
+            "maxDiskBytes": {
+              "default": 1073741824,
+              "type": "integer",
+              "minimum": 1048576,
+              "maximum": 9007199254740991,
+              "description": "On-disk budget for page markdown (bytes)."
+            },
+            "negativeTtlMs": {
+              "default": 15000,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 300000,
+              "description": "Remember robots-blocked / SSRF-blocked / 4xx URLs for this long (ms; 0 = off)."
+            }
+          },
+          "description": "Page cache: in-process LRU in front of pages.sqlite; conditional revalidation when stale."
+        }
+      },
+      "description": "Fetching, politeness, parsing, chunking and the page cache."
+    },
+    "output": {
+      "default": {
+        "markdown": true,
+        "maxPassageChars": 1500,
+        "includeSnippetsOnFailure": true
+      },
+      "type": "object",
+      "properties": {
+        "markdown": {
+          "default": true,
+          "type": "boolean"
+        },
+        "maxPassageChars": {
+          "default": 1500,
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 9007199254740991
+        },
+        "includeSnippetsOnFailure": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "description": "Markdown rendering of results."
+    },
+    "logging": {
+      "default": {
+        "level": "warn"
+      },
+      "type": "object",
+      "properties": {
+        "level": {
+          "default": "warn",
+          "type": "string",
+          "enum": [
+            "silent",
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ]
+        }
+      },
+      "description": "Log level for stderr output."
+    },
+    "telemetry": {
+      "default": {
+        "pricing": false,
+        "otel": false,
+        "captureContent": false
+      },
+      "type": "object",
+      "properties": {
+        "pricing": {
+          "default": false,
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "embed": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "search": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "rerank": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          ],
+          "description": "true → stats.usage.estimatedCostUsd from a bundled list-price table (an ESTIMATE); an object overrides entries: { embed: { \"openai/text-embedding-3-small\": 0.02 }, search: { brave: 5 }, rerank: { cohere: 2 } }."
+        },
+        "otel": {
+          "default": false,
+          "type": "boolean",
+          "description": "Emit OpenTelemetry spans via @opentelemetry/api (optional peer; no-op without an SDK)."
+        },
+        "captureContent": {
+          "default": false,
+          "type": "boolean",
+          "description": "Include query text / passage excerpts in span attributes."
+        }
+      },
+      "description": "Observability. Nothing here sends data anywhere by itself."
+    }
+  },
+  "additionalProperties": false
+}

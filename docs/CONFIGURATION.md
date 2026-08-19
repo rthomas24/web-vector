@@ -4,7 +4,9 @@ Every option, with its default. Precedence: **code** (`new WebVector({...})`) ‚Ü
 
 Config files are searched from the working directory: `webvector.config.{ts,js,mjs,cjs,json,yaml,yml}`, `.webvectorrc`, `.webvectorrc.{json,yaml,yml}`, or a `"webvector"` key in `package.json`. JSON/YAML files are also discovered in parent directories; JS/TS files (which are executed) only in the current directory or via an explicit path. `${VAR}` and `${VAR:-default}` inside string values are filled from the environment.
 
-`webvector init` writes a commented starter file; `webvector config` prints the resolved result (secrets redacted); `webvector doctor` validates it.
+`webvector init` writes a commented starter file (interactive on a TTY: search provider ‚Üê detected keys, embeddings tier, store, MCP client snippet; `--yes` accepts the detected defaults, `--json` writes JSON); `webvector config` prints the resolved result (secrets redacted); `webvector doctor` validates it.
+
+**Editor support (JSON Schema).** The schema is generated from the zod definitions at build time and shipped in the `webvector` package (`webvector/schema/webvector.config.json`) and at a stable URL: `https://raw.githubusercontent.com/rthomas24/web-vector/main/packages/core/schema/webvector.config.json`. JSON configs may set `"$schema"` to it (ignored at runtime); YAML files get completions with the modeline `# yaml-language-server: $schema=<url>` (both are written by `webvector init`). `webvector config --schema` prints it.
 
 ## search
 

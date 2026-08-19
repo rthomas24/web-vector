@@ -195,7 +195,7 @@ Upgrade any time: `npm i @huggingface/transformers` next to the package, or set 
 
 Precedence: **code** → **config file** → **environment variables** → **defaults**. Config files: `webvector.config.{ts,js,mjs,json,yaml,yml}`, `.webvectorrc`, or a `webvector` key in `package.json`, found by walking up from the working directory. `${VAR}` / `${VAR:-default}` inside values are filled from the environment.
 
-`webvector init` writes a commented starter; here are the knobs people actually change:
+`webvector init` writes a commented starter (with a JSON-Schema modeline for editor completions); here are the knobs people actually change:
 
 ```yaml
 search:

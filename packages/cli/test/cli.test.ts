@@ -3,7 +3,7 @@
  * offline commands only (cache, doctor --json, init --yes) against a throwaway XDG directory.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -100,5 +100,46 @@ d('webvector CLI (built)', () => {
     expect(() =>
       run(['fetch', 'https://example.com/', '--max-age', 'soon', '--no-config']),
     ).toThrow(/Invalid duration/);
+  });
+
+  it('init --yes writes a schema-annotated YAML config (env-detected defaults) and .env.example', () => {
+    const out = run(['init', '--yes'], { cwd });
+    expect(out).toContain('webvector.config.yaml');
+    const yaml = readFileSync(join(cwd, 'webvector.config.yaml'), 'utf8');
+    expect(yaml).toMatch(/^# yaml-language-server: \$schema=/m);
+    expect(yaml).toMatch(/provider: none/); // WEBVECTOR_EMBEDDINGS_PROVIDER=none in the test env
+    expect(yaml).toMatch(/provider: memory/); // lexical → no vector store needed
+    expect(existsSync(join(cwd, '.env.example'))).toBe(true);
+    // second run refuses without --force
+    expect(() => run(['init', '--yes'], { cwd })).toThrow(/already exists/);
+    // explicit answers via flags; JSON output carries "$schema"; the file loads back cleanly
+    const out2 = run(
+      [
+        'init',
+        '--yes',
+        '--force',
+        '--json',
+        '--search',
+        'brave',
+        '--embeddings',
+        'openai',
+        '--store',
+        'sqlite',
+        '--client',
+        'claude-code',
+      ],
+      { cwd },
+    );
+    expect(out2).toContain('webvector.config.json');
+    expect(out2).toContain('claude mcp add webvector');
+    const json = JSON.parse(readFileSync(join(cwd, 'webvector.config.json'), 'utf8'));
+    expect(json.$schema).toMatch(/webvector\.config\.json$/);
+    expect(json.store).toEqual({ provider: 'sqlite', mode: 'session' });
+    expect(json.search.provider).toBe('brave');
+    const cfg = JSON.parse(run(['config', '--json'], { cwd }));
+    expect(cfg.config.search.provider).toBe('brave');
+    expect(cfg.config.$schema).toBeUndefined();
+    const schema = JSON.parse(run(['config', '--schema'], { cwd }));
+    expect(schema.title).toBe('WebVector configuration');
   });
 });

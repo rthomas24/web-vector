@@ -13,6 +13,9 @@ import { Command } from 'commander';
 import {
   autoEmbeddingProviderName,
   CONFIG_FILENAMES,
+  CONFIG_SCHEMA_URL,
+  CONFIG_SCHEMA_YAML_MODELINE,
+  configJsonSchema,
   createEmbeddingProvider,
   createSearchProvider,
   defaultDataDir,
@@ -291,9 +294,14 @@ program
   .command('config')
   .description('Print the resolved configuration (secrets redacted)')
   .option('--json', 'print JSON')
+  .option('--schema', 'print the JSON Schema for config files instead')
   .action(async (opts) => {
     const { overrides, configFile } = globalOverrides();
     try {
+      if (opts.schema) {
+        console.log(JSON.stringify(configJsonSchema(), null, 2));
+        return;
+      }
       const resolved = await loadConfig({ configFile, overrides });
       const out = {
         configFile: resolved.configPath ?? '(none — defaults + env)',
@@ -310,22 +318,240 @@ program
     }
   });
 
+// ─── init ────────────────────────────────────────────────────────────────────
+
+interface InitAnswers {
+  search: string;
+  embeddings: string;
+  store: 'memory' | 'sqlite';
+  client: 'none' | 'claude-code' | 'claude-desktop' | 'cursor';
+}
+
+const SEARCH_CHOICES = [
+  'duckduckgo',
+  'brave',
+  'serper',
+  'serpapi',
+  'tavily',
+  'exa',
+  'perplexity',
+  'google-cse',
+  'searxng',
+];
+const EMBED_CHOICES = [
+  'auto',
+  'none',
+  'local',
+  'openai',
+  'gemini',
+  'voyage',
+  'cohere',
+  'mistral',
+  'jina',
+  'ollama',
+];
+
+/** Defaults inferred from the environment (keys present, local runtime installed). */
+async function initDefaults(env: NodeJS.ProcessEnv): Promise<InitAnswers> {
+  const search =
+    env.WEBVECTOR_SEARCH_PROVIDER ??
+    SEARCH_CHOICES.find((p) => p !== 'duckduckgo' && p !== 'searxng' && envKeyFor(p, env)) ??
+    (envUrlFor('searxng', env) ? 'searxng' : 'duckduckgo');
+  const embeddings = env.WEBVECTOR_EMBEDDINGS_PROVIDER ?? (await autoEmbeddingProviderName()).name;
+  const store: InitAnswers['store'] =
+    embeddings === 'none' || embeddings === 'lexical' ? 'memory' : 'sqlite';
+  return { search, embeddings, store, client: 'none' };
+}
+
+async function askInit(defaults: InitAnswers): Promise<InitAnswers> {
+  const readline = await import('node:readline/promises');
+  const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+  const ask = async (q: string, def: string, choices?: string[]): Promise<string> => {
+    for (;;) {
+      const a = (
+        await rl.question(`${q}${choices ? ` [${choices.join('|')}]` : ''} (${def}): `)
+      ).trim();
+      if (!a) return def;
+      if (!choices || choices.includes(a)) return a;
+      process.stderr.write(`  please choose one of: ${choices.join(', ')}\n`);
+    }
+  };
+  try {
+    process.stderr.write('WebVector setup — press Enter to accept the detected defaults.\n');
+    const search = await ask('Search provider', defaults.search, SEARCH_CHOICES);
+    const embeddings = await ask(
+      'Embeddings (auto = local model if installed, else a keyed provider, else lexical BM25)',
+      defaults.embeddings,
+      EMBED_CHOICES,
+    );
+    const store = (await ask(
+      'Vector store (sqlite = persistent, zero dependencies; memory = per process)',
+      embeddings === 'none' ? 'memory' : defaults.store,
+      ['memory', 'sqlite'],
+    )) as InitAnswers['store'];
+    const client = (await ask('MCP client snippet to print', 'none', [
+      'none',
+      'claude-code',
+      'claude-desktop',
+      'cursor',
+    ])) as InitAnswers['client'];
+    return { search, embeddings, store, client };
+  } finally {
+    rl.close();
+  }
+}
+
+function starterYaml(a: InitAnswers): string {
+  const keyEnv = PROVIDER_KEY_ENV[a.search]?.[0];
+  const embedKeyEnv = PROVIDER_KEY_ENV[a.embeddings]?.[0];
+  return `${CONFIG_SCHEMA_YAML_MODELINE}
+# WebVector configuration — https://github.com/rthomas24/web-vector/blob/main/docs/CONFIGURATION.md
+# Precedence: code overrides > this file > environment variables > defaults.
+# \${VAR} and \${VAR:-default} are interpolated from the environment. Every key is optional.
+
+search:
+  provider: ${a.search}${' '.repeat(Math.max(1, 14 - a.search.length))}# duckduckgo (keyless) | brave | serper | serpapi | tavily | tavily-keyless | exa | perplexity | searxng | wikipedia
+${keyEnv ? `  apiKey: \${${keyEnv}}` : `  # apiKey: \${BRAVE_API_KEY}`}
+  resultsPerQuery: 10
+  safeSearch: moderate
+  fallbackProviders: [tavily-keyless, wikipedia]
+
+embeddings:
+  provider: ${a.embeddings}${' '.repeat(Math.max(1, 14 - a.embeddings.length))}# auto | none (lexical BM25, smallest install) | local (Transformers.js) | openai | openai-compatible | gemini | voyage | cohere | mistral | jina | ollama
+${a.embeddings === 'local' || a.embeddings === 'auto' ? '  model: Xenova/all-MiniLM-L6-v2   # local presets: minilm (fast) | granite (quality) | embeddinggemma (best) | bge-small | nomic …' : '  # model: text-embedding-3-small'}
+${embedKeyEnv ? `  apiKey: \${${embedKeyEnv}}` : `  # apiKey: \${OPENAI_API_KEY}`}
+  # dimensions: 512             # Matryoshka truncation where supported
+  cache: true                   # persist chunk embeddings in the page cache (never re-embed the same text)
+
+store:
+  provider: ${a.store}${' '.repeat(Math.max(1, 14 - a.store.length))}# memory | sqlite (persistent, zero deps) | chroma | qdrant | pgvector
+  mode: ${a.store === 'sqlite' ? 'session' : 'ephemeral'}${' '.repeat(Math.max(1, 17 - (a.store === 'sqlite' ? 7 : 9)))}# ephemeral (per call) | session (reuse by sessionId, TTL) | persistent (survives restarts)
+  # url: ~/.local/share/webvector/store.sqlite
+  # collection: webvector
+  sessionTtlMs: 1800000
+
+retrieval:
+  topK: 12
+  queryExpansion: true
+  maxExpandedQueries: 4
+  hybrid: true                  # BM25 + vectors fused (relative score fusion)
+  maxPerSource: 3
+  mmr: true
+  rerank: false                 # false | local | cohere | voyage | jina
+
+ingestion:
+  maxPages: 10
+  maxConcurrentFetches: 8
+  timeoutMs: 15000
+  respectRobotsTxt: true
+  chunkSize: 480
+  chunkOverlap: 60
+  cache:
+    dir: auto                   # auto (~/.cache/webvector/pages.sqlite) | a directory | false (memory only)
+    ttlMs: 900000               # 15 min; stale pages are revalidated with ETag / Last-Modified
+
+output:
+  markdown: true
+  maxPassageChars: 1500
+
+telemetry:
+  pricing: false                # true → stats.usage.estimatedCostUsd (an estimate from docs/pricing.json)
+
+logging:
+  level: warn
+`;
+}
+
+function starterJson(a: InitAnswers): string {
+  const cfg = {
+    $schema: CONFIG_SCHEMA_URL,
+    search: { provider: a.search },
+    embeddings: { provider: a.embeddings, cache: true },
+    store: { provider: a.store, mode: a.store === 'sqlite' ? 'session' : 'ephemeral' },
+    ingestion: { cache: { dir: 'auto' } },
+    logging: { level: 'warn' },
+  };
+  return `${JSON.stringify(cfg, null, 2)}\n`;
+}
+
+function mcpSnippet(client: InitAnswers['client'], a: InitAnswers): string | undefined {
+  const envLines: Record<string, string> = {};
+  const k = PROVIDER_KEY_ENV[a.search]?.[0];
+  if (k) envLines[k] = '<your key>';
+  const ek = PROVIDER_KEY_ENV[a.embeddings]?.[0];
+  if (ek) envLines[ek] = '<your key>';
+  const args =
+    a.embeddings === 'local' || a.embeddings === 'auto'
+      ? ['-y', '-p', '@huggingface/transformers', '-p', 'webvector-mcp', 'webvector-mcp']
+      : ['-y', 'webvector-mcp'];
+  const json = JSON.stringify(
+    {
+      mcpServers: {
+        webvector: {
+          command: 'npx',
+          args,
+          ...(Object.keys(envLines).length ? { env: envLines } : {}),
+        },
+      },
+    },
+    null,
+    2,
+  );
+  switch (client) {
+    case 'claude-code':
+      return `Claude Code:\n  claude mcp add webvector -- npx ${args.join(' ')}`;
+    case 'claude-desktop':
+      return `Claude Desktop — add to claude_desktop_config.json:\n${json}`;
+    case 'cursor':
+      return `Cursor — add to ~/.cursor/mcp.json:\n${json}`;
+    default:
+      return undefined;
+  }
+}
+
 program
   .command('init')
-  .description('Write a starter webvector.config.yaml and .env.example into the current directory')
+  .description(
+    'Write a commented starter config (webvector.config.yaml + .env.example). Interactive on a TTY; --yes accepts detected defaults',
+  )
+  .option('-y, --yes', 'no questions: use defaults detected from the environment')
   .option('-f, --force', 'overwrite existing files')
-  .action((opts) => {
-    const cfgPath = resolve('webvector.config.yaml');
-    if (existsSync(cfgPath) && !opts.force) {
-      console.error(`${cfgPath} already exists (use --force to overwrite)`);
-      process.exit(1);
+  .option('--json', 'write webvector.config.json (with "$schema") instead of YAML')
+  .option('--search <provider>', 'search provider (skips the question)')
+  .option('--embeddings <provider>', 'embeddings provider (skips the question)')
+  .option('--store <memory|sqlite>', 'vector store (skips the question)')
+  .option('--client <none|claude-code|claude-desktop|cursor>', 'print an MCP client snippet')
+  .action(async (opts) => {
+    try {
+      const cfgPath = resolve(opts.json ? 'webvector.config.json' : 'webvector.config.yaml');
+      if (existsSync(cfgPath) && !opts.force) {
+        console.error(`${cfgPath} already exists (use --force to overwrite)`);
+        process.exit(1);
+      }
+      const defaults = await initDefaults(process.env);
+      let answers: InitAnswers = {
+        ...defaults,
+        ...(opts.search ? { search: opts.search } : {}),
+        ...(opts.embeddings ? { embeddings: opts.embeddings } : {}),
+        ...(opts.store ? { store: opts.store } : {}),
+        ...(opts.client ? { client: opts.client } : {}),
+      };
+      const interactive =
+        !opts.yes && process.stdin.isTTY && process.stderr.isTTY && !process.env.CI;
+      if (interactive) answers = await askInit(answers);
+      writeFileSync(cfgPath, opts.json ? starterJson(answers) : starterYaml(answers));
+      const envPath = resolve('.env.example');
+      if (!existsSync(envPath) || opts.force) writeFileSync(envPath, STARTER_ENV);
+      console.log(`✔ wrote ${cfgPath}\n✔ wrote ${envPath}`);
+      console.log(
+        `  search=${answers.search} embeddings=${answers.embeddings} store=${answers.store} · schema: ${CONFIG_SCHEMA_URL}`,
+      );
+      const snippet = mcpSnippet(answers.client, answers);
+      if (snippet) console.log(`\n${snippet}`);
+      console.log('\nNext: `webvector doctor` then `webvector search "your question"`');
+    } catch (err) {
+      fail(err);
     }
-    writeFileSync(cfgPath, STARTER_CONFIG);
-    const envPath = resolve('.env.example');
-    if (!existsSync(envPath) || opts.force) writeFileSync(envPath, STARTER_ENV);
-    console.log(
-      `✔ wrote ${cfgPath}\n✔ wrote ${envPath}\nNext: \`webvector doctor\` then \`webvector search "your question"\``,
-    );
   });
 
 program
@@ -831,54 +1057,6 @@ program
     const f = findConfigFile();
     console.log(`\nNearest config file: ${f ?? '(none)'}`);
   });
-
-const STARTER_CONFIG = `# WebVector configuration — https://github.com/rthomas24/web-vector
-# Precedence: code overrides > this file > environment variables > defaults.
-# \${VAR} and \${VAR:-default} are interpolated from the environment.
-
-search:
-  provider: duckduckgo          # duckduckgo (keyless) | brave | serper | serpapi | tavily | tavily-keyless | exa | perplexity | searxng | wikipedia
-  # apiKey: \${BRAVE_API_KEY}
-  resultsPerQuery: 10
-  safeSearch: moderate
-  fallbackProviders: [tavily-keyless, wikipedia]
-
-embeddings:
-  provider: auto                # auto | none (lexical BM25, smallest install) | local (Transformers.js) | openai | openai-compatible | gemini | voyage | cohere | mistral | jina | ollama
-  model: Xenova/all-MiniLM-L6-v2   # local presets: minilm (fast) | granite (quality) | embeddinggemma (best) | bge-small | nomic …
-  # apiKey: \${OPENAI_API_KEY}
-  # dimensions: 512             # Matryoshka truncation where supported
-
-store:
-  provider: memory              # memory | chroma | qdrant | pgvector
-  mode: ephemeral               # ephemeral | session | persistent
-  # url: \${QDRANT_URL}
-  # collection: webvector
-
-retrieval:
-  topK: 12
-  queryExpansion: true
-  maxExpandedQueries: 4
-  hybrid: true                  # BM25 + vectors fused with RRF
-  maxPerSource: 3
-  mmr: true
-  rerank: false                 # false | local | cohere | voyage | jina
-
-ingestion:
-  maxPages: 10
-  maxConcurrentFetches: 8
-  timeoutMs: 15000
-  respectRobotsTxt: true
-  chunkSize: 480
-  chunkOverlap: 60
-
-output:
-  markdown: true
-  maxPassageChars: 1500
-
-logging:
-  level: warn
-`;
 
 const STARTER_ENV = `# Copy to .env (Node 22+: \`node --env-file=.env …\`). Only set what you use.
 # Search (all optional — DuckDuckGo needs no key)
