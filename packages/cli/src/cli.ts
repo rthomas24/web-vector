@@ -459,7 +459,7 @@ program
     console.log(`\nNearest config file: ${f ?? '(none)'}`);
   });
 
-const STARTER_CONFIG = `# WebVector configuration — https://github.com/rthomas24/webvector
+const STARTER_CONFIG = `# WebVector configuration — https://github.com/rthomas24/web-vector
 # Precedence: code overrides > this file > environment variables > defaults.
 # \${VAR} and \${VAR:-default} are interpolated from the environment.
 

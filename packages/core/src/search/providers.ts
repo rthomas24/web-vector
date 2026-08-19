@@ -363,7 +363,7 @@ export class WikipediaSearch implements SearchProvider {
       provider: this.id,
       headers: {
         'user-agent':
-          this.opts.userAgent ?? 'WebVector/0.1 (+https://github.com/rthomas24/webvector)',
+          this.opts.userAgent ?? 'WebVector/0.1 (+https://github.com/rthomas24/web-vector)',
       },
       timeoutMs: this.opts.timeoutMs,
       signal: opts.signal,

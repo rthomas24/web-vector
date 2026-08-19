@@ -14,4 +14,4 @@ webvector providers          # list providers and env vars
 webvector mcp [--http]       # run the MCP server
 ```
 
-Part of [WebVector](https://github.com/rthomas24/webvector).
+Part of [WebVector](https://github.com/rthomas24/web-vector).

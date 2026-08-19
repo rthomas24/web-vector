@@ -145,7 +145,7 @@ export const ingestionConfigSchema = z.object({
   respectRobotsTxt: z.boolean().default(true),
   userAgent: z
     .string()
-    .default('Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/webvector)'),
+    .default('Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)'),
   retries: z.number().int().min(0).max(5).default(2),
   allowPrivateNetworks: z.boolean().default(false),
   parsers: z.array(z.string()).default(['html', 'pdf', 'text']),

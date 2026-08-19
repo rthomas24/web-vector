@@ -1,6 +1,6 @@
 # webvector-mcp
 
-MCP server for [WebVector](https://github.com/rthomas24/webvector): gives any MCP client a `web_research` tool that searches the web, reads the full pages, ranks them and returns only the relevant, cited passages. Zero-config and ~12 MB (DuckDuckGo + lexical BM25 ranking). Built on the MCP TypeScript SDK v2.
+MCP server for [WebVector](https://github.com/rthomas24/web-vector): gives any MCP client a `web_research` tool that searches the web, reads the full pages, ranks them and returns only the relevant, cited passages. Zero-config and ~12 MB (DuckDuckGo + lexical BM25 ranking). Built on the MCP TypeScript SDK v2.
 
 ```bash
 npx -y webvector-mcp            # stdio, lexical tier (no downloads beyond the package)

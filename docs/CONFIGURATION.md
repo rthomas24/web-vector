@@ -84,7 +84,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `timeoutMs` / `totalDeadlineMs` | `15000` / `45000` | `WEBVECTOR_FETCH_TIMEOUT_MS` / `WEBVECTOR_TOTAL_DEADLINE_MS` | per request / per run (aborts stragglers) |
 | `maxRedirects` / `maxBytes` | `5` / `5242880` | — | |
 | `respectRobotsTxt` | `true` | `WEBVECTOR_RESPECT_ROBOTS` | |
-| `userAgent` | `Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/webvector)` | `WEBVECTOR_USER_AGENT` | |
+| `userAgent` | `Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)` | `WEBVECTOR_USER_AGENT` | |
 | `retries` | `2` | — | on network errors / 408 / 429 / 5xx |
 | `allowPrivateNetworks` | `false` | `WEBVECTOR_ALLOW_PRIVATE_NETWORKS` | disables the SSRF guard — only for trusted local setups |
 | `parsers` | `[html, pdf, text]` | — | |

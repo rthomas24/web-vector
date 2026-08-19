@@ -284,7 +284,7 @@ Found something? Please open a private security advisory on GitHub rather than a
 ## 11. Run it from source (local development)
 
 ```bash
-git clone https://github.com/rthomas24/webvector
+git clone https://github.com/rthomas24/web-vector
 cd webvector
 npm install                     # installs all workspaces (~1 min; includes the optional model runtime for tests)
 npm run build                   # tsdown → packages/*/dist

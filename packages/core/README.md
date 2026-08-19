@@ -13,4 +13,4 @@ Subpath exports: `webvector/search`, `webvector/embeddings`, `webvector/stores`,
 
 `embeddings.provider` defaults to `auto`: local Transformers.js model if the optional peer `@huggingface/transformers` is installed, else the first hosted provider with a key in the environment (`OPENAI_API_KEY`, `VOYAGE_API_KEY`, …), else `none` — lexical BM25 ranking over the fetched pages (~12 MB install, no downloads). Set it explicitly to pin a tier.
 
-Full documentation: https://github.com/rthomas24/webvector
+Full documentation: https://github.com/rthomas24/web-vector

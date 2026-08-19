@@ -5,7 +5,7 @@ Thanks for helping. The short version: keep it small, keep it tested, keep it de
 ## Setup
 
 ```bash
-git clone https://github.com/rthomas24/webvector && cd webvector
+git clone https://github.com/rthomas24/web-vector && cd webvector
 npm install && npm run build
 npm test            # offline unit tests (~5 s)
 npm run test:live   # real network + local model; provider tests auto-skip without their key
