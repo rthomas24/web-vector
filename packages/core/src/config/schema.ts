@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { RenderProvider } from '../ingest/render.js';
 import type {
   EmbeddingProvider,
   LlmFn,
@@ -237,6 +238,26 @@ export const ingestionConfigSchema = z.object({
       useJsonLdBody: z.boolean().default(true),
     })
     .default({ strategy: 'auto', useJsonLdBody: true }),
+  /**
+   * Optional page renderer, used only when the served HTML is a JavaScript shell
+   * (`PARSE_NEEDS_JS`) or — with `when: 'blocked'` — also when the fetch was blocked (401/403/
+   * 429/451, bot challenge). No browser is bundled: `cloudflare` calls Browser Rendering's
+   * `/markdown` REST endpoint (CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN), `browserless` calls
+   * `/content` (BROWSERLESS_TOKEN, BROWSERLESS_URL), `custom` takes `ingestion.render.instance`.
+   * Off by default (`when: 'never'`). Remote renderers see the URLs you send them.
+   */
+  render: z
+    .object({
+      provider: z.enum(['cloudflare', 'browserless', 'custom']).optional(),
+      when: z.enum(['needs-js', 'blocked', 'never']).default('never'),
+      /** Renders per research() call / per fetch(). */
+      maxPerRun: z.number().int().min(0).default(5),
+      timeoutMs: z.number().int().min(1000).default(30_000),
+      accountId: z.string().optional(),
+      baseUrl: z.string().optional(),
+      apiToken: z.string().optional(),
+    })
+    .default({ when: 'never', maxPerRun: 5, timeoutMs: 30_000 }),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
@@ -287,8 +308,14 @@ export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartia
 
 export interface WebVectorConfig
   extends DeepPartial<
-    Omit<WebVectorFileConfigInput, 'search' | 'embeddings' | 'store' | 'retrieval'>
+    Omit<WebVectorFileConfigInput, 'search' | 'embeddings' | 'store' | 'retrieval' | 'ingestion'>
   > {
+  ingestion?: DeepPartial<z.input<typeof ingestionConfigSchema>> & {
+    render?: {
+      /** Ready renderer instance (`provider: 'custom'`): `render(url, { signal }) → { html | markdown, finalUrl }`. */
+      instance?: RenderProvider;
+    };
+  };
   search?: DeepPartial<z.input<typeof searchConfigSchema>> & {
     /** Provide a ready instance instead of a provider name. */
     instance?: SearchProvider;

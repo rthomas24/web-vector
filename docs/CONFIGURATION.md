@@ -90,6 +90,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `parsers` | `[html, pdf, text]` | — | |
 | `html.strategy` | `auto` | — | HTML extraction: `auto` routes by page type (Q&A/forum and docs pages → whole main content, `<pre>` documents unwrapped, articles → Readability with a recall guard against the full page); `readability` = classic Readability with whole-page fallback only when thin; `full` = always the whole page with nav/chrome removed |
 | `html.useJsonLdBody` | `true` | — | recover the article text from JSON-LD `articleBody` when the DOM yields too little — only when the page is not paywalled (`isAccessibleForFree !== false`); `__NEXT_DATA__` / RSC / Nuxt payloads are walked the same way (always on) |
+| `render.provider` / `render.when` / `render.maxPerRun` / `render.timeoutMs` | — / `never` / `5` / `30000` | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (`cloudflare`), `BROWSERLESS_TOKEN` + `BROWSERLESS_URL` (`browserless`) | optional page renderer, fired only on `PARSE_NEEDS_JS` (`when: needs-js`) or also on blocked fetches — 401/403/429/451, bot challenge — (`when: blocked`); `cloudflare` = Browser Rendering `/markdown` REST, `browserless` = `/content` REST, `custom` = code-only `ingestion.render.instance` (`{ id, render(url, { signal }) → { html \| markdown, finalUrl } }`). No browser is bundled. Every render is SSRF-checked and capped per run; remote renderers see the URLs you send them. `render.accountId` / `render.baseUrl` / `render.apiToken` override the env vars |
 | `chunkSize` / `chunkOverlap` | `480` / `60` | `WEBVECTOR_CHUNK_SIZE` / `WEBVECTOR_CHUNK_OVERLAP` | tokens |
 | `maxChunksPerPage` / `minChunkChars` | `200` / `100` | — | |
 | `useProviderContent` | `true` | — | use page text returned by Tavily/Exa instead of fetching |
@@ -104,7 +105,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `output.includeSnippetsOnFailure` | `true` | — | return search snippets when no page could be fetched (`degraded: 'search_only'`) |
 | `logging.level` | `warn` | `WEBVECTOR_LOG_LEVEL` | `silent` `error` `warn` `info` `debug` (stderr) |
 
-Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation).
+Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation), `ingestion.render.instance` (custom renderer).
 
 ## Per-call options (`research(query, opts)` / tool arguments)
 

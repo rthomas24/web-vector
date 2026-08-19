@@ -9,10 +9,13 @@ import { type FetchedResource, Fetcher, type FetcherOptions } from './fetcher.js
 import {
   cleanField,
   createParsers,
+  HtmlParser,
   markdownToText,
   sanitizeText,
   selectParser,
+  TextParser,
 } from './parsers.js';
+import { isBlockedFailure, type RenderHook, renderWithHook } from './render.js';
 
 export type { ChunkerOptions, TextChunk, TokenCounter } from './chunker.js';
 export { approxTokens, chunkMarkdown, loadTokenCounter } from './chunker.js';
@@ -29,6 +32,19 @@ export {
   selectParser,
   TextParser,
 } from './parsers.js';
+export type {
+  RenderConfig,
+  RenderHook,
+  RenderProvider,
+  RenderResult,
+  RenderWhen,
+} from './render.js';
+export {
+  BrowserlessRenderProvider,
+  CloudflareRenderProvider,
+  createRenderProvider,
+  RenderBudget,
+} from './render.js';
 export { RobotsCache } from './robots.js';
 export { assertSafeUrl, isPublicIp } from './ssrf.js';
 
@@ -115,6 +131,8 @@ export interface IngestOptions {
   cache?: PageCache;
   logger?: Logger;
   signal?: AbortSignal;
+  /** Optional renderer, tried when the page is a JS shell (or blocked, per `hook.when`). */
+  render?: RenderHook;
 }
 
 export interface IngestOutcome {
@@ -124,6 +142,8 @@ export interface IngestOutcome {
   cached?: boolean;
   failure?: Failure;
   ms: number;
+  /** True when the page came from the render hook rather than the plain fetch. */
+  rendered?: boolean;
 }
 
 /** Fetch + parse one URL into a ParsedDocument (never throws; returns a failure record instead). */
@@ -136,15 +156,73 @@ export async function ingestUrl(url: string, opts: IngestOptions): Promise<Inges
     res = await opts.fetcher.fetch(url, opts.signal);
   } catch (err) {
     const e = WebVectorError.from(err, { code: 'FETCH_FAILED', stage: 'ingest' });
-    return {
-      url,
-      ok: false,
-      failure: { url, code: e.code, message: e.message, stage: 'ingest' },
-      ms: Date.now() - t0,
-    };
+    const failure: Failure = { url, code: e.code, message: e.message, stage: 'ingest' };
+    const status = (e.details as { status?: number } | undefined)?.status;
+    if (opts.render?.when === 'blocked' && isBlockedFailure(e.code, status)) {
+      const rendered = await renderUrl(url, opts, failure);
+      if (rendered) return { ...rendered, ms: Date.now() - t0 };
+    }
+    return { url, ok: false, failure, ms: Date.now() - t0 };
   }
   const outcome = await parseResource(res, opts);
+  if (
+    !outcome.ok &&
+    outcome.failure?.code === 'PARSE_NEEDS_JS' &&
+    opts.render &&
+    opts.render.when !== 'never'
+  ) {
+    const rendered = await renderUrl(url, opts, outcome.failure);
+    if (rendered) return { ...rendered, ms: Date.now() - t0 };
+  }
   return { ...outcome, ms: Date.now() - t0 };
+}
+
+/**
+ * Render a JS shell / blocked page through the configured hook and parse the result. Returns
+ * undefined (leaving the original failure in place) when the render is skipped or fails; the
+ * failure message then notes why.
+ */
+async function renderUrl(
+  url: string,
+  opts: IngestOptions,
+  original: Failure,
+): Promise<Omit<IngestOutcome, 'ms'> | undefined> {
+  const hook = opts.render as RenderHook;
+  try {
+    const r = await renderWithHook(hook, url, opts.signal);
+    const finalUrl = r.finalUrl ?? url;
+    let doc: ParsedDocument | null = null;
+    if (r.html) {
+      const parsers = opts.parsers ?? createParsers();
+      const html =
+        (parsers.find((p) => p.id === 'html') as HtmlParser | undefined) ?? new HtmlParser();
+      doc = await html.parseHtml(r.html, finalUrl);
+    } else if (r.markdown) {
+      doc = await new TextParser().parse(new TextEncoder().encode(r.markdown), {
+        url: finalUrl,
+        contentType: 'text/markdown',
+      });
+    }
+    if (!doc) {
+      original.message += ` Rendering with ${hook.provider.id} produced no readable content either.`;
+      return undefined;
+    }
+    doc = { ...doc, url, parser: `render:${hook.provider.id}/${doc.parser}` };
+    const page: CachedPage = {
+      doc,
+      pageHash: sha256(doc.markdown),
+      fetchedAt: new Date().toISOString(),
+      bytes: Buffer.byteLength(r.html ?? r.markdown ?? ''),
+      finalUrl,
+    };
+    opts.cache?.set(url, page);
+    return { url, ok: true, page, rendered: true };
+  } catch (err) {
+    const e = WebVectorError.from(err, { code: 'PARSE_FAILED', stage: 'ingest' });
+    opts.logger?.debug(`render failed for ${url}: ${e.message}`);
+    original.message += ` Rendering with ${hook.provider.id} failed: ${e.message}`;
+    return undefined;
+  }
 }
 
 /** Parse an already-fetched resource. */

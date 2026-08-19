@@ -26,6 +26,7 @@ import {
 import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
 import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
+import { RenderBudget, type RenderHook } from '../ingest/render.js';
 import type {
   Failure,
   Logger,
@@ -147,6 +148,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       cache: opts.useCache === false ? undefined : c.pageCache,
       logger: this.logger,
       signal: opts.signal,
+      render: this.renderHook(c),
     });
     if (!outcome.ok || !outcome.page) {
       const f = outcome.failure as Failure;
@@ -315,6 +317,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       message: `Fetching ${targets.length} pages`,
     });
 
+    const renderHook = this.renderHook(c);
     const ingestOne = async (r: SearchResult): Promise<void> => {
       const canonical = canonicalizeUrl(r.url);
       const summary: SourceSummary = {
@@ -338,7 +341,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           return;
         }
         this.emit('page:start', { url: r.url });
-        const fetched = await this.fetchPage(c, r, signal);
+        const fetched = await this.fetchPage(c, r, signal, renderHook);
         if ('failure' in fetched) {
           failures.push(fetched.failure);
           summary.failure = fetched.failure;
@@ -547,10 +550,24 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   // ─── internals ─────────────────────────────────────────────────────────
 
   /** Get page content: provider-supplied text (Tavily/Exa) when allowed, else fetch + parse. */
+  /** Render hook with a fresh per-run budget (undefined when ingestion.render is off). */
+  private renderHook(c: Components): RenderHook | undefined {
+    if (!c.render) return undefined;
+    const rc = this.config.ingestion.render;
+    return {
+      provider: c.render,
+      when: rc.when,
+      budget: new RenderBudget(rc.maxPerRun),
+      timeoutMs: rc.timeoutMs,
+      allowPrivateNetworks: this.config.ingestion.allowPrivateNetworks,
+    };
+  }
+
   private async fetchPage(
     c: Components,
     r: SearchResult,
     signal?: AbortSignal,
+    render?: RenderHook,
   ): Promise<
     { page: CachedPage; cachedHit: boolean; ms: number } | { failure: Failure; ms: number }
   > {
@@ -571,6 +588,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       cache: c.pageCache,
       logger: this.logger,
       signal,
+      render,
     });
     if (!outcome.ok || !outcome.page)
       return { failure: outcome.failure as Failure, ms: outcome.ms };

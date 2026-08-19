@@ -9,6 +9,7 @@ import { WebVectorError } from '../errors.js';
 import { loadTokenCounter, type TokenCounter } from '../ingest/chunker.js';
 import { Fetcher, PageCache } from '../ingest/index.js';
 import { createParsers } from '../ingest/parsers.js';
+import { createRenderProvider, type RenderProvider } from '../ingest/render.js';
 import { createReranker, LlmReranker } from '../rerankers/index.js';
 import type { BM25Options } from '../retrieval/bm25.js';
 import { HeuristicExpander, LlmExpander } from '../retrieval/expansion.js';
@@ -35,6 +36,8 @@ export interface Components {
   sharedStore?: VectorStore;
   fetcher: Fetcher;
   parsers: ContentParser[];
+  /** Optional page renderer for JS shells / blocked pages (ingestion.render). */
+  render?: RenderProvider;
   pageCache: PageCache;
   expander: QueryExpander;
   reranker?: Reranker;
@@ -127,6 +130,18 @@ export async function buildComponents(
     useJsonLdBody: cfg.ingestion.html.useJsonLdBody,
   });
   const pageCache = new PageCache(cfg.ingestion.cache);
+  const render = createRenderProvider({
+    ...cfg.ingestion.render,
+    instance: code.ingestion?.render?.instance,
+    fetch: fetchImpl,
+    userAgent: cfg.ingestion.userAgent,
+  });
+  if (cfg.ingestion.render.when !== 'never' && !render)
+    throw new WebVectorError('ingestion.render.when is set but no provider is configured.', {
+      code: 'INVALID_CONFIG',
+      remediation:
+        "Set ingestion.render.provider to 'cloudflare' | 'browserless' | 'custom' (with ingestion.render.instance).",
+    });
 
   const llm = code.retrieval?.llm;
   const expander =
@@ -144,6 +159,7 @@ export async function buildComponents(
     sharedStore,
     fetcher,
     parsers,
+    render,
     pageCache,
     expander,
     reranker,
