@@ -1,0 +1,636 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<!--[if IE 6]><html class="ie6" xmlns="http://www.w3.org/1999/xhtml"><![endif]-->
+<!--[if IE 7]><html class="lt-ie8 lt-ie9" xmlns="http://www.w3.org/1999/xhtml"><![endif]-->
+<!--[if IE 8]><html class="lt-ie9" xmlns="http://www.w3.org/1999/xhtml"><![endif]-->
+<!--[if gt IE 8]><!--><html xmlns="http://www.w3.org/1999/xhtml"><!--<![endif]-->
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=1" />
+  <meta name="referrer" content="origin" />
+  <meta name="HandheldFriendly" content="true" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>reciprocal rank fusion at DuckDuckGo</title>
+  <link title="DuckDuckGo (HTML)" type="application/opensearchdescription+xml" rel="search" href="//duckduckgo.com/opensearch_html_v2.xml" />
+  <link href="//duckduckgo.com/favicon.ico" rel="shortcut icon" />
+  <link rel="icon" href="//duckduckgo.com/favicon.ico" type="image/x-icon" />
+  <link id="icon60" rel="apple-touch-icon" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_60x60.png?v=2"/>
+  <link id="icon76" rel="apple-touch-icon" sizes="76x76" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_76x76.png?v=2"/>
+  <link id="icon120" rel="apple-touch-icon" sizes="120x120" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_120x120.png?v=2"/>
+  <link id="icon152" rel="apple-touch-icon" sizes="152x152" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_152x152.png?v=2"/>
+  <link rel="image_src" href="//duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png">
+  <link rel="stylesheet" media="handheld, all" href="//duckduckgo.com/dist/h.b7791eaa1c6d921ef675.css" type="text/css"/>
+</head>
+
+<body class="body--html">
+  <a name="top" id="top"></a>
+
+  <form action="/html/" method="post">
+    <input type="text" name="state_hidden" id="state_hidden" />
+  </form>
+
+  <div>
+    <div class="site-wrapper-border"></div>
+
+    <div id="header" class="header cw header--html">
+      <a title="DuckDuckGo" href="/html/" class="header__logo-wrap"></a>
+
+      <form name="x" class="header__form" action="/html/" method="post">
+        <div class="search search--header">
+          <input name="q" autocomplete="off" class="search__input" id="search_form_input_homepage" type="text" value="reciprocal rank fusion" />
+          <input name="b" id="search_button_homepage" class="search__button search__button--html" value="" title="Search" alt="Search" type="submit" />
+        </div>
+
+        
+        
+        
+        
+
+        <div class="frm__select">
+          <select name="kl">
+            
+              <option value="" >All Regions</option>
+            
+              <option value="ar-es" >Argentina</option>
+            
+              <option value="au-en" >Australia</option>
+            
+              <option value="at-de" >Austria</option>
+            
+              <option value="be-fr" >Belgium (fr)</option>
+            
+              <option value="be-nl" >Belgium (nl)</option>
+            
+              <option value="br-pt" >Brazil</option>
+            
+              <option value="bg-bg" >Bulgaria</option>
+            
+              <option value="ca-en" >Canada (en)</option>
+            
+              <option value="ca-fr" >Canada (fr)</option>
+            
+              <option value="ct-ca" >Catalonia</option>
+            
+              <option value="cl-es" >Chile</option>
+            
+              <option value="cn-zh" >China</option>
+            
+              <option value="co-es" >Colombia</option>
+            
+              <option value="hr-hr" >Croatia</option>
+            
+              <option value="cz-cs" >Czech Republic</option>
+            
+              <option value="dk-da" >Denmark</option>
+            
+              <option value="ee-et" >Estonia</option>
+            
+              <option value="fi-fi" >Finland</option>
+            
+              <option value="fr-fr" >France</option>
+            
+              <option value="de-de" >Germany</option>
+            
+              <option value="gr-el" >Greece</option>
+            
+              <option value="hk-tzh" >Hong Kong</option>
+            
+              <option value="hu-hu" >Hungary</option>
+            
+              <option value="is-is" >Iceland</option>
+            
+              <option value="in-en" >India (en)</option>
+            
+              <option value="id-en" >Indonesia (en)</option>
+            
+              <option value="ie-en" >Ireland</option>
+            
+              <option value="il-en" >Israel (en)</option>
+            
+              <option value="it-it" >Italy</option>
+            
+              <option value="jp-jp" >Japan</option>
+            
+              <option value="kr-kr" >Korea</option>
+            
+              <option value="lv-lv" >Latvia</option>
+            
+              <option value="lt-lt" >Lithuania</option>
+            
+              <option value="my-en" >Malaysia (en)</option>
+            
+              <option value="mx-es" >Mexico</option>
+            
+              <option value="nl-nl" >Netherlands</option>
+            
+              <option value="nz-en" >New Zealand</option>
+            
+              <option value="no-no" >Norway</option>
+            
+              <option value="pk-en" >Pakistan (en)</option>
+            
+              <option value="pe-es" >Peru</option>
+            
+              <option value="ph-en" >Philippines (en)</option>
+            
+              <option value="pl-pl" >Poland</option>
+            
+              <option value="pt-pt" >Portugal</option>
+            
+              <option value="ro-ro" >Romania</option>
+            
+              <option value="ru-ru" >Russia</option>
+            
+              <option value="xa-ar" >Saudi Arabia</option>
+            
+              <option value="sg-en" >Singapore</option>
+            
+              <option value="sk-sk" >Slovakia</option>
+            
+              <option value="sl-sl" >Slovenia</option>
+            
+              <option value="za-en" >South Africa</option>
+            
+              <option value="es-ca" >Spain (ca)</option>
+            
+              <option value="es-es" >Spain (es)</option>
+            
+              <option value="se-sv" >Sweden</option>
+            
+              <option value="ch-de" >Switzerland (de)</option>
+            
+              <option value="ch-fr" >Switzerland (fr)</option>
+            
+              <option value="tw-tzh" >Taiwan</option>
+            
+              <option value="th-en" >Thailand (en)</option>
+            
+              <option value="tr-tr" >Turkey</option>
+            
+              <option value="us-en" >US (English)</option>
+            
+              <option value="us-es" >US (Spanish)</option>
+            
+              <option value="ua-uk" >Ukraine</option>
+            
+              <option value="uk-en" >United Kingdom</option>
+            
+              <option value="vn-en" >Vietnam (en)</option>
+            
+          </select>
+        </div>
+
+        <div class="frm__select frm__select--last">
+          <select class="" name="df">
+            
+              <option value="" selected>Any Time</option>
+            
+              <option value="d" >Past Day</option>
+            
+              <option value="w" >Past Week</option>
+            
+              <option value="m" >Past Month</option>
+            
+              <option value="y" >Past Year</option>
+            
+          </select>
+        </div>
+      </form>
+    </div>
+
+    
+
+    
+      <!-- Web results are present -->
+      <div>
+        <div class="serp__results">
+          <div id="links" class="results">
+            
+
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Flearn.microsoft.com%2Fen%2Dus%2Fazure%2Fsearch%2Fhybrid%2Dsearch%2Dranking&amp;rut=6d431824ad856a4834d40644417712a9472629c448b1c292cc90d67e66bda21e">Hybrid Search Scoring (RRF) - Azure AI Search | Microsoft Learn</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Flearn.microsoft.com%2Fen%2Dus%2Fazure%2Fsearch%2Fhybrid%2Dsearch%2Dranking&amp;rut=6d431824ad856a4834d40644417712a9472629c448b1c292cc90d67e66bda21e">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/learn.microsoft.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Flearn.microsoft.com%2Fen%2Dus%2Fazure%2Fsearch%2Fhybrid%2Dsearch%2Dranking&amp;rut=6d431824ad856a4834d40644417712a9472629c448b1c292cc90d67e66bda21e">
+                            learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
+                          </a>
+                          
+                            <span>&nbsp; &nbsp; 2026-06-08T00:00:00.0000000</span>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Flearn.microsoft.com%2Fen%2Dus%2Fazure%2Fsearch%2Fhybrid%2Dsearch%2Dranking&amp;rut=6d431824ad856a4834d40644417712a9472629c448b1c292cc90d67e66bda21e"><b>Reciprocal</b> <b>Rank</b> <b>Fusion</b> (RRF) is an algorithm that evaluates search scores from multiple previously ranked results to produce a single, unified result set. In Azure AI Search, RRF is used when two or more queries execute in parallel, such as hybrid queries and multiple vector queries.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2F%40devalshah1619%2Fmathematical%2Dintuition%2Dbehind%2Dreciprocal%2Drank%2Dfusion%2Drrf%2Dexplained%2Din%2D2%2Dmins%2D002df0cc5e2a&amp;rut=dee27bb708cf4ab82b42447e69632ff81f913299c2d49ead7fabdae3d4b08e67">Reciprocal Rank Fusion (RRF) explained in 4 mins. - Medium</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2F%40devalshah1619%2Fmathematical%2Dintuition%2Dbehind%2Dreciprocal%2Drank%2Dfusion%2Drrf%2Dexplained%2Din%2D2%2Dmins%2D002df0cc5e2a&amp;rut=dee27bb708cf4ab82b42447e69632ff81f913299c2d49ead7fabdae3d4b08e67">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/medium.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2F%40devalshah1619%2Fmathematical%2Dintuition%2Dbehind%2Dreciprocal%2Drank%2Dfusion%2Drrf%2Dexplained%2Din%2D2%2Dmins%2D002df0cc5e2a&amp;rut=dee27bb708cf4ab82b42447e69632ff81f913299c2d49ead7fabdae3d4b08e67">
+                            medium.com/@devalshah1619/mathematical-intuition-behind-reciprocal-rank-fusion-rrf-explained-in-2-mins-002df0cc5e2a
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2F%40devalshah1619%2Fmathematical%2Dintuition%2Dbehind%2Dreciprocal%2Drank%2Dfusion%2Drrf%2Dexplained%2Din%2D2%2Dmins%2D002df0cc5e2a&amp;rut=dee27bb708cf4ab82b42447e69632ff81f913299c2d49ead7fabdae3d4b08e67">Unlock the power of <b>Reciprocal</b> <b>Rank</b> <b>Fusion</b> (RRF) to supercharge your search algorithms. Learn the math behind RRF and why it outperforms traditional ranking methods.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.elastic.co%2Fdocs%2Freference%2Felasticsearch%2Frest%2Dapis%2Freciprocal%2Drank%2Dfusion&amp;rut=3ecdb07233cf2ce0c81c3079eb11bc499a745db21714358f04dd3c914720af3f">Reciprocal rank fusion</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.elastic.co%2Fdocs%2Freference%2Felasticsearch%2Frest%2Dapis%2Freciprocal%2Drank%2Dfusion&amp;rut=3ecdb07233cf2ce0c81c3079eb11bc499a745db21714358f04dd3c914720af3f">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.elastic.co.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.elastic.co%2Fdocs%2Freference%2Felasticsearch%2Frest%2Dapis%2Freciprocal%2Drank%2Dfusion&amp;rut=3ecdb07233cf2ce0c81c3079eb11bc499a745db21714358f04dd3c914720af3f">
+                            www.elastic.co/docs/reference/elasticsearch/rest-apis/reciprocal-rank-fusion
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.elastic.co%2Fdocs%2Freference%2Felasticsearch%2Frest%2Dapis%2Freciprocal%2Drank%2Dfusion&amp;rut=3ecdb07233cf2ce0c81c3079eb11bc499a745db21714358f04dd3c914720af3f"><b>Reciprocal</b> <b>rank</b> <b>fusion</b> (RRF) is a method for combining multiple result sets with different relevance indicators into a single result set. RRF requires no tuning, and the different relevance indicators do not have to be related to each other to achieve high-quality results.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fspice.ai%2Flearn%2Freciprocal%2Drank%2Dfusion&amp;rut=726e03bb2a4a2b2a8c90861f506dd6e2ff467da3e6f8eebceef433f46bc0b96e">What is Reciprocal Rank Fusion (RRF)? Explained | Spice AI</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fspice.ai%2Flearn%2Freciprocal%2Drank%2Dfusion&amp;rut=726e03bb2a4a2b2a8c90861f506dd6e2ff467da3e6f8eebceef433f46bc0b96e">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/spice.ai.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fspice.ai%2Flearn%2Freciprocal%2Drank%2Dfusion&amp;rut=726e03bb2a4a2b2a8c90861f506dd6e2ff467da3e6f8eebceef433f46bc0b96e">
+                            spice.ai/learn/reciprocal-rank-fusion
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fspice.ai%2Flearn%2Freciprocal%2Drank%2Dfusion&amp;rut=726e03bb2a4a2b2a8c90861f506dd6e2ff467da3e6f8eebceef433f46bc0b96e"><b>Reciprocal</b> <b>Rank</b> <b>Fusion</b> (RRF) is a ranking algorithm that combines result lists from multiple retrieval methods into a single, unified ranking. Instead of comparing raw scores (which are on incompatible scales), RRF uses only each result&#x27;s position in each list. Documents appearing near the top of multiple result lists get the highest combined scores.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fopensearch.org%2Fblog%2Fintroducing%2Dreciprocal%2Drank%2Dfusion%2Dhybrid%2Dsearch%2F&amp;rut=72668f243854605f95e5c8d0fd0b15ee03e325176b15c094bb2c12afbf0d64e9">Introducing reciprocal rank fusion for hybrid search</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fopensearch.org%2Fblog%2Fintroducing%2Dreciprocal%2Drank%2Dfusion%2Dhybrid%2Dsearch%2F&amp;rut=72668f243854605f95e5c8d0fd0b15ee03e325176b15c094bb2c12afbf0d64e9">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/opensearch.org.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fopensearch.org%2Fblog%2Fintroducing%2Dreciprocal%2Drank%2Dfusion%2Dhybrid%2Dsearch%2F&amp;rut=72668f243854605f95e5c8d0fd0b15ee03e325176b15c094bb2c12afbf0d64e9">
+                            opensearch.org/blog/introducing-reciprocal-rank-fusion-hybrid-search/
+                          </a>
+                          
+                            <span>&nbsp; &nbsp; 2025-02-12T00:00:00.0000000</span>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fopensearch.org%2Fblog%2Fintroducing%2Dreciprocal%2Drank%2Dfusion%2Dhybrid%2Dsearch%2F&amp;rut=72668f243854605f95e5c8d0fd0b15ee03e325176b15c094bb2c12afbf0d64e9">Learn how OpenSearch 2.19&#x27;s new <b>Reciprocal</b> <b>Rank</b> <b>Fusion</b> (RRF) enhances hybrid search by intelligently merging results from diverse query sources, improving relevance, stability, and performance for high-throughput applications.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fapxml.com%2Fcourses%2Fadvanced%2Dvector%2Dsearch%2Dllms%2Fchapter%2D3%2Dhybrid%2Dsearch%2Dapproaches%2Frrf%2Dfusion%2Dalgorithms&amp;rut=9bd806558aa0eedd4515194f18d4d436cbeb0c985c4ebb17f760a5ed7ebb6a12">Reciprocal Rank Fusion (RRF) for Hybrid Search - apxml.com</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fapxml.com%2Fcourses%2Fadvanced%2Dvector%2Dsearch%2Dllms%2Fchapter%2D3%2Dhybrid%2Dsearch%2Dapproaches%2Frrf%2Dfusion%2Dalgorithms&amp;rut=9bd806558aa0eedd4515194f18d4d436cbeb0c985c4ebb17f760a5ed7ebb6a12">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/apxml.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fapxml.com%2Fcourses%2Fadvanced%2Dvector%2Dsearch%2Dllms%2Fchapter%2D3%2Dhybrid%2Dsearch%2Dapproaches%2Frrf%2Dfusion%2Dalgorithms&amp;rut=9bd806558aa0eedd4515194f18d4d436cbeb0c985c4ebb17f760a5ed7ebb6a12">
+                            apxml.com/courses/advanced-vector-search-llms/chapter-3-hybrid-search-approaches/rrf-fusion-algorithms
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fapxml.com%2Fcourses%2Fadvanced%2Dvector%2Dsearch%2Dllms%2Fchapter%2D3%2Dhybrid%2Dsearch%2Dapproaches%2Frrf%2Dfusion%2Dalgorithms&amp;rut=9bd806558aa0eedd4515194f18d4d436cbeb0c985c4ebb17f760a5ed7ebb6a12">Implementing <b>Reciprocal</b> <b>Rank</b> <b>Fusion</b> and exploring alternative algorithms for combining search results.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2Fmongodb%2Freciprocal%2Drank%2Dfusion%2Dand%2Drelative%2Dscore%2Dfusion%2Dclassic%2Dhybrid%2Dsearch%2Dtechniques%2D3bf91008b81d&amp;rut=03c2b8f6fdc93d805097a6189492c9a0b6ddc46384d54d079cd439adcc6bde2e">Reciprocal Rank Fusion and Relative Score Fusion: Classic ... - Medium</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2Fmongodb%2Freciprocal%2Drank%2Dfusion%2Dand%2Drelative%2Dscore%2Dfusion%2Dclassic%2Dhybrid%2Dsearch%2Dtechniques%2D3bf91008b81d&amp;rut=03c2b8f6fdc93d805097a6189492c9a0b6ddc46384d54d079cd439adcc6bde2e">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/medium.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2Fmongodb%2Freciprocal%2Drank%2Dfusion%2Dand%2Drelative%2Dscore%2Dfusion%2Dclassic%2Dhybrid%2Dsearch%2Dtechniques%2D3bf91008b81d&amp;rut=03c2b8f6fdc93d805097a6189492c9a0b6ddc46384d54d079cd439adcc6bde2e">
+                            medium.com/mongodb/reciprocal-rank-fusion-and-relative-score-fusion-classic-hybrid-search-techniques-3bf91008b81d
+                          </a>
+                          
+                            <span>&nbsp; &nbsp; 2025-11-20T00:00:00.0000000</span>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fmedium.com%2Fmongodb%2Freciprocal%2Drank%2Dfusion%2Dand%2Drelative%2Dscore%2Dfusion%2Dclassic%2Dhybrid%2Dsearch%2Dtechniques%2D3bf91008b81d&amp;rut=03c2b8f6fdc93d805097a6189492c9a0b6ddc46384d54d079cd439adcc6bde2e">Two independent variables and a <b>fusion</b> technique is where it&#x27;s at. Note: In this formula, 60 is a built-in fixed value. Basic mean <b>reciprocal</b> <b>rank</b> is simply the inverse of the <b>rank</b> without that ...</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fglaforge.dev%2Fposts%2F2026%2F02%2F10%2Fadvanced%2Drag%2Dunderstanding%2Dreciprocal%2Drank%2Dfusion%2Din%2Dhybrid%2Dsearch%2F&amp;rut=6efa539bab4393b85edd5367fff05336494ee8bd40c185c18e57e416ff85d7ab">Advanced RAG — Understanding Reciprocal Rank Fusion in Hybrid Search</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fglaforge.dev%2Fposts%2F2026%2F02%2F10%2Fadvanced%2Drag%2Dunderstanding%2Dreciprocal%2Drank%2Dfusion%2Din%2Dhybrid%2Dsearch%2F&amp;rut=6efa539bab4393b85edd5367fff05336494ee8bd40c185c18e57e416ff85d7ab">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/glaforge.dev.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fglaforge.dev%2Fposts%2F2026%2F02%2F10%2Fadvanced%2Drag%2Dunderstanding%2Dreciprocal%2Drank%2Dfusion%2Din%2Dhybrid%2Dsearch%2F&amp;rut=6efa539bab4393b85edd5367fff05336494ee8bd40c185c18e57e416ff85d7ab">
+                            glaforge.dev/posts/2026/02/10/advanced-rag-understanding-reciprocal-rank-fusion-in-hybrid-search/
+                          </a>
+                          
+                            <span>&nbsp; &nbsp; 2026-02-10T00:00:00.0000000</span>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fglaforge.dev%2Fposts%2F2026%2F02%2F10%2Fadvanced%2Drag%2Dunderstanding%2Dreciprocal%2Drank%2Dfusion%2Din%2Dhybrid%2Dsearch%2F&amp;rut=6efa539bab4393b85edd5367fff05336494ee8bd40c185c18e57e416ff85d7ab">Improve Retrieval-Augmented Generation outcomes by merging vector and BM25 scores using <b>Reciprocal</b> <b>Rank</b> <b>Fusion</b> (RRF) in Hybrid Search pipelines.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fblog.serghei.pl%2Fposts%2Freciprocal%2Drank%2Dfusion%2Dexplained%2F&amp;rut=79ccb133eccc283142e36db142259f7cf083cb18fcf47053c69b00943cceb8c5">Reciprocal Rank Fusion: the one-line algorithm behind hybrid search</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fblog.serghei.pl%2Fposts%2Freciprocal%2Drank%2Dfusion%2Dexplained%2F&amp;rut=79ccb133eccc283142e36db142259f7cf083cb18fcf47053c69b00943cceb8c5">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/blog.serghei.pl.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fblog.serghei.pl%2Fposts%2Freciprocal%2Drank%2Dfusion%2Dexplained%2F&amp;rut=79ccb133eccc283142e36db142259f7cf083cb18fcf47053c69b00943cceb8c5">
+                            blog.serghei.pl/posts/reciprocal-rank-fusion-explained/
+                          </a>
+                          
+                            <span>&nbsp; &nbsp; 2026-07-27T00:00:00.0000000</span>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fblog.serghei.pl%2Fposts%2Freciprocal%2Drank%2Dfusion%2Dexplained%2F&amp;rut=79ccb133eccc283142e36db142259f7cf083cb18fcf47053c69b00943cceb8c5">That formula is <b>Reciprocal</b> <b>Rank</b> <b>Fusion</b>. It is what Elasticsearch&#x27;s rrf retriever, OpenSearch&#x27;s hybrid search, Weaviate, Qdrant, and Azure AI Search all use under the hood.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+              
+                <div class="result results_links results_links_deep web-result ">
+                  <div class="links_main links_deep result__body"> <!-- This is the visible part -->
+                    
+                      <h2 class="result__title">
+                        <a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.mongodb.com%2Fresources%2Fbasics%2Freciprocal%2Drank%2Dfusion&amp;rut=f84f87447ba584c08b267b5d172603858cbfd149a4159a77ddc98c343090b738">Better RAG Results With Reciprocal Rank Fusion | MongoDB</a>
+                      </h2>
+
+                    
+
+                    
+                      <div class="result__extras">
+                        <div class="result__extras__url">
+                          <span class="result__icon">
+                            <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.mongodb.com%2Fresources%2Fbasics%2Freciprocal%2Drank%2Dfusion&amp;rut=f84f87447ba584c08b267b5d172603858cbfd149a4159a77ddc98c343090b738">
+                              <img class="result__icon__img" width="16" height="16" alt="" src="//external-content.duckduckgo.com/ip3/www.mongodb.com.ico" name="i15" />
+                            </a>
+                          </span>
+                          <a class="result__url" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.mongodb.com%2Fresources%2Fbasics%2Freciprocal%2Drank%2Dfusion&amp;rut=f84f87447ba584c08b267b5d172603858cbfd149a4159a77ddc98c343090b738">
+                            www.mongodb.com/resources/basics/reciprocal-rank-fusion
+                          </a>
+                          
+                        </div>
+                      </div>
+                    
+
+                    
+                      
+                        <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.mongodb.com%2Fresources%2Fbasics%2Freciprocal%2Drank%2Dfusion&amp;rut=f84f87447ba584c08b267b5d172603858cbfd149a4159a77ddc98c343090b738">Learn more about <b>reciprocal</b> <b>rank</b> <b>fusion</b> (RRF) and how to implement it into hybrid search. Discover its use cases and limitations.</a>
+                      
+                    
+
+                    <div class="clear"></div>
+                  </div>
+                </div>
+              
+            
+
+            
+              
+              
+                <div class="nav-link">
+                  <form action="/html/" method="post">
+                    <input type="submit" class='btn btn--alt' value="Next" />
+                    <input type="hidden" name="q" value="reciprocal rank fusion" />
+                    <input type="hidden" name="s" value="10" />
+                    <input type="hidden" name="nextParams" value="" />
+                    <input type="hidden" name="v" value="l" />
+                    <input type="hidden" name="o" value="json" />
+                    <input type="hidden" name="dc" value="11" />
+                    <input type="hidden" name="api" value="d.js" />
+                    <input type="hidden" name="vqd" value="4-334322834285928760135596036795217459357" />
+
+                    
+                    
+                    
+                      <input name="kl" value="wt-wt" type="hidden" />
+                    
+                    
+                    
+                    
+                  </form>
+                </div>
+              
+            
+
+            <div class="feedback-btn">
+              <a rel="nofollow" href="//duckduckgo.com/feedback.html" target="_new">Feedback</a>
+            </div>
+            <div class="clear"></div>
+          </div>
+        </div>
+      </div> <!-- links wrapper //-->
+    
+  </div>
+
+  <div id="bottom_spacing2"></div>
+
+  
+    <img src="//duckduckgo.com/t/sl_h"/>
+  
+</body>
+</html>

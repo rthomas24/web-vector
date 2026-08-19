@@ -1,0 +1,33 @@
+# dependencies & build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.tgz
+
+# secrets & local config (never commit keys)
+.env
+.env.*
+!.env.example
+webvector.config.local.*
+*.local.json
+*.local.yaml
+
+# runtime caches / local stores
+.webvector-cache/
+.webvector/
+.chroma/
+.cache/
+*.log
+
+# editors, OS, agents
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.claude/
+.turbo/
+
+# private working notes (kept outside the repo)
+webvector-private-notes/
+scratch/

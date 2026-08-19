@@ -1,0 +1,40 @@
+{
+  "name": "webvector-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "WebVector — provider-agnostic web research tool for AI agents: search → full-page ingestion → embeddings → semantic retrieval → cited passages.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "packages/core",
+    "packages/mcp",
+    "packages/cli",
+    "examples"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "test": "vitest run",
+    "test:live": "WEBVECTOR_LIVE=1 vitest run --config vitest.live.config.ts",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "npm run build && changeset publish"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
+    "@changesets/cli": "^3.0.0",
+    "@types/node": "^24.0.0",
+    "tsdown": "^0.22.14",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "author": "Ryan Thomas"
+}

@@ -1,0 +1,441 @@
+import { HttpResponse, http } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { customEmbeddingProvider, EmbeddingCache } from '../src/embeddings/base.js';
+import {
+  CohereEmbeddings,
+  GeminiEmbeddings,
+  OllamaEmbeddings,
+  OpenAIEmbeddings,
+  VoyageEmbeddings,
+} from '../src/embeddings/hosted.js';
+import { WebVectorError } from '../src/errors.js';
+import {
+  CohereReranker,
+  customReranker,
+  LlmReranker,
+  LocalReranker,
+} from '../src/rerankers/index.js';
+import { BM25Index, tokenize } from '../src/retrieval/bm25.js';
+import { HeuristicExpander, LlmExpander } from '../src/retrieval/expansion.js';
+import {
+  dbsfNormalize,
+  dedupeChunks,
+  diversifyBySource,
+  minMaxNormalize,
+  mmr,
+  rrf,
+  scoreFusion,
+  shingleJaccard,
+} from '../src/retrieval/fusion.js';
+import { MemoryVectorStore } from '../src/stores/memory.js';
+import { embeddingProviderConformance, vectorStoreConformance } from '../src/testing/index.js';
+import type { Chunk, ScoredChunk } from '../src/types.js';
+
+const server = setupServer();
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+const vec = (...xs: number[]) => {
+  const v = new Float32Array(xs);
+  let n = 0;
+  for (const x of xs) n += x * x;
+  n = Math.sqrt(n) || 1;
+  return v.map((x) => x / n);
+};
+const chunk = (
+  id: string,
+  text: string,
+  url = `https://s.com/${id}`,
+  v?: Float32Array,
+): ScoredChunk => ({
+  id,
+  text,
+  vector: v,
+  score: 0,
+  metadata: {
+    url,
+    canonicalUrl: url,
+    title: id,
+    chunkIndex: 0,
+    totalChunks: 1,
+    startOffset: 0,
+    endOffset: text.length,
+    contentHash: id,
+    pageHash: 'p',
+    fetchedAt: 't',
+    searchRank: 1,
+    searchQuery: 'q',
+    contentType: 'text/plain',
+    provider: 'x',
+  },
+});
+
+describe('BM25', () => {
+  it('tokenizes with stopwords + light stemming', () => {
+    expect(tokenize('The Rankings of fused lists!')).toEqual(['ranking', 'fused', 'list']);
+    expect(tokenize('Combining ranked results')).toEqual(['combin', 'rank', 'result']);
+  });
+  it('ranks relevant docs higher and supports remove/filter', () => {
+    const idx = new BM25Index();
+    idx.add('a', 'reciprocal rank fusion merges ranked lists using ranks');
+    idx.add('b', 'bananas are yellow fruit');
+    idx.add('c', 'rank fusion is a fusion of ranks');
+    const r = idx.search('rank fusion', 10);
+    expect(r[0]!.id).toBe('c');
+    expect(r.map((x) => x.id)).not.toContain('b');
+    expect(idx.search('rank fusion', 10, (id) => id !== 'c')[0]!.id).toBe('a');
+    idx.remove('c');
+    expect(idx.search('rank fusion', 10)[0]!.id).toBe('a');
+    expect(
+      BM25Index.topTerms(
+        ['rank fusion explained', 'reciprocal rank fusion formula'],
+        3,
+        new Set(['rank']),
+      ),
+    ).toContain('fusion');
+  });
+});
+
+describe('fusion + diversity', () => {
+  it('rrf merges with weights', () => {
+    const f = rrf(
+      [
+        [
+          { id: 'a', score: 1 },
+          { id: 'b', score: 0.5 },
+        ],
+        [
+          { id: 'b', score: 9 },
+          { id: 'c', score: 8 },
+        ],
+      ],
+      { k: 60, weights: [1, 1] },
+    );
+    expect(f[0]!.id).toBe('b');
+    expect(f.map((x) => x.id)).toEqual(['b', 'a', 'c']);
+    const w = rrf([[{ id: 'a', score: 1 }], [{ id: 'b', score: 1 }]], { weights: [0, 1] });
+    expect(w[0]!.id).toBe('b');
+    expect(w).toHaveLength(1);
+  });
+  it('score normalisers', () => {
+    expect(
+      minMaxNormalize([
+        { id: 'a', score: 2 },
+        { id: 'b', score: 4 },
+      ]).map((x) => x.score),
+    ).toEqual([0, 1]);
+    expect(
+      dbsfNormalize([
+        { id: 'a', score: 1 },
+        { id: 'b', score: 1 },
+      ])[0]!.score,
+    ).toBeCloseTo(0.5, 1);
+    expect(
+      scoreFusion(
+        [
+          [
+            { id: 'a', score: 1 },
+            { id: 'b', score: 0 },
+          ],
+          [{ id: 'b', score: 1 }],
+        ],
+        [0.75, 0.25],
+      )[0]!.id,
+    ).toBe('a');
+  });
+  it('mmr prefers diverse results', () => {
+    const q = vec(1, 0, 0);
+    const c = [
+      chunk('a', 'a', 'u1', vec(0.95, 0.31, 0)),
+      chunk('a2', 'a2', 'u2', vec(0.95, 0.31, 0)),
+      chunk('b', 'b', 'u3', vec(0.8, 0, 0.6)),
+    ];
+    c.forEach((x) => (x.score = 1));
+    const out = mmr(q, c, 2, 0.5);
+    expect(out.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(mmr(q, c, 2, 1).map((x) => x.id)).toEqual(['a', 'a2']);
+  });
+  it('diversifyBySource caps and round-robins', () => {
+    const hits = [
+      chunk('1', 'x', 'https://a'),
+      chunk('2', 'x', 'https://a'),
+      chunk('3', 'x', 'https://a'),
+      chunk('4', 'x', 'https://b'),
+      chunk('5', 'x', 'https://c'),
+    ];
+    hits.forEach((h, i) => (h.score = 1 - i * 0.1));
+    expect(diversifyBySource(hits, 2, 10).map((h) => h.id)).toEqual(['1', '4', '5', '2']);
+  });
+  it('dedupeChunks removes exact and near duplicates', () => {
+    const t = 'the quick brown fox jumps over the lazy dog and keeps running far away';
+    const c = [
+      chunk('a', t),
+      chunk('b', t),
+      chunk('c', `${t} today`),
+      chunk('d', 'completely different text about bananas and apples in the market'),
+    ];
+    c[1]!.metadata.contentHash = 'a';
+    c[2]!.metadata.contentHash = 'c';
+    expect(dedupeChunks(c, 0.8).map((x) => x.id)).toEqual(['a', 'd']);
+    expect(shingleJaccard('a b c d e f', 'a b c d e f')).toBe(1);
+  });
+});
+
+describe('MemoryVectorStore', () => {
+  for (const c of vectorStoreConformance(() => new MemoryVectorStore(), { dims: 8 }))
+    it(`conformance: ${c.name}`, c.run);
+  it('returns top-k sorted with filters', async () => {
+    const s = new MemoryVectorStore();
+    await s.init(3, 'm');
+    const cs: Chunk[] = [
+      {
+        ...chunk('a', 'a', 'https://a', vec(1, 0, 0)),
+        metadata: { ...chunk('a', 'a').metadata, sessionId: 's1' },
+      },
+      {
+        ...chunk('b', 'b', 'https://b', vec(0, 1, 0)),
+        metadata: { ...chunk('b', 'b').metadata, sessionId: 's2' },
+      },
+      {
+        ...chunk('c', 'c', 'https://c', vec(0.9, 0.1, 0)),
+        metadata: { ...chunk('c', 'c').metadata, sessionId: 's1' },
+      },
+    ];
+    await s.upsert(cs);
+    const r = await s.query(vec(1, 0, 0), { topK: 2 });
+    expect(r.map((x) => x.id)).toEqual(['a', 'c']);
+    expect(r[0]!.score).toBeCloseTo(1);
+    const r2 = await s.query(vec(1, 0, 0), { topK: 5, sessionId: 's2' });
+    expect(r2.map((x) => x.id)).toEqual(['b']);
+    expect(s.size()).toBe(3);
+    expect(s.all('s1')).toHaveLength(2);
+  });
+});
+
+describe('embedding providers (mocked HTTP)', () => {
+  it('OpenAI batches, decodes base64, preserves order and normalises', async () => {
+    let calls = 0;
+    server.use(
+      http.post('https://api.openai.com/v1/embeddings', async ({ request }) => {
+        calls++;
+        const body: any = await request.json();
+        expect(body.encoding_format).toBe('base64');
+        const data = (body.input as string[]).map((t, i) => {
+          const buf = Buffer.alloc(8);
+          buf.writeFloatLE(t.length, 0);
+          buf.writeFloatLE(1, 4);
+          return { index: i, embedding: buf.toString('base64') };
+        });
+        return HttpResponse.json({ data: data.reverse(), usage: { total_tokens: 1 } });
+      }),
+    );
+    const p = new OpenAIEmbeddings({ apiKey: 'sk-test', batchSize: 2 });
+    const out = await p.embed(['a', 'bbb', 'cc']);
+    expect(calls).toBe(2);
+    expect(out[1]![0]).toBeCloseTo(3 / Math.sqrt(10));
+    expect(await p.dimensions()).toBe(1536);
+  });
+  it('OpenAI missing key → MISSING_API_KEY with remediation', () => {
+    const prev = process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    try {
+      expect(() => new OpenAIEmbeddings({})).toThrow(WebVectorError);
+      try {
+        new OpenAIEmbeddings({});
+      } catch (e) {
+        expect((e as WebVectorError).code).toBe('MISSING_API_KEY');
+        expect((e as WebVectorError).remediation).toContain('OPENAI_API_KEY');
+      }
+    } finally {
+      if (prev) process.env.OPENAI_API_KEY = prev;
+    }
+  });
+  it('Gemini v2 uses prompt-in-text task and batch endpoint', async () => {
+    let body: any;
+    server.use(
+      http.post(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:batchEmbedContents',
+        async ({ request }) => {
+          body = await request.json();
+          expect(request.headers.get('x-goog-api-key')).toBe('AIzatest');
+          return HttpResponse.json({ embeddings: body.requests.map(() => ({ values: [3, 4] })) });
+        },
+      ),
+    );
+    const p = new GeminiEmbeddings({ apiKey: 'AIzatest', dimensions: 2 });
+    const [q] = await p.embed(['hello'], { kind: 'query' });
+    expect(body.requests[0].content.parts[0].text).toBe('task: search result | query: hello');
+    expect(body.requests[0].config.outputDimensionality).toBe(2);
+    expect(q![0]).toBeCloseTo(0.6);
+  });
+  it('Gemini 001 uses taskType', async () => {
+    let body: any;
+    server.use(
+      http.post(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:batchEmbedContents',
+        async ({ request }) => {
+          body = await request.json();
+          return HttpResponse.json({ embeddings: [{ values: [1, 0] }] });
+        },
+      ),
+    );
+    await new GeminiEmbeddings({ apiKey: 'k', model: 'gemini-embedding-001' }).embed(['x'], {
+      kind: 'document',
+    });
+    expect(body.requests[0].config.taskType).toBe('RETRIEVAL_DOCUMENT');
+    expect(body.requests[0].content.parts[0].text).toBe('x');
+  });
+  it('Voyage/Cohere send input types', async () => {
+    let vb: any;
+    let cb: any;
+    server.use(
+      http.post('https://api.voyageai.com/v1/embeddings', async ({ request }) => {
+        vb = await request.json();
+        return HttpResponse.json({ data: [{ index: 0, embedding: [1, 1] }] });
+      }),
+      http.post('https://api.cohere.com/v2/embed', async ({ request }) => {
+        cb = await request.json();
+        return HttpResponse.json({ embeddings: { float: [[1, 1]] } });
+      }),
+    );
+    await new VoyageEmbeddings({ apiKey: 'k' }).embed(['x'], { kind: 'query' });
+    await new CohereEmbeddings({ apiKey: 'k' }).embed(['x'], { kind: 'document' });
+    expect(vb.input_type).toBe('query');
+    expect(cb.input_type).toBe('search_document');
+    expect(cb.embedding_types).toEqual(['float']);
+  });
+  it('Ollama adds nomic prefixes and helpful connection error', async () => {
+    let body: any;
+    server.use(
+      http.post('http://127.0.0.1:11434/api/embed', async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({ embeddings: [[1, 0]] });
+      }),
+    );
+    await new OllamaEmbeddings({ model: 'nomic-embed-text' }).embed(['q'], { kind: 'query' });
+    expect(body.input[0]).toBe('search_query: q');
+    server.use(http.post('http://127.0.0.1:11434/api/embed', () => HttpResponse.error()));
+    await expect(new OllamaEmbeddings({}).embed(['q'])).rejects.toMatchObject({
+      code: 'PROVIDER_ERROR',
+    });
+  });
+  it('rate limit retries with backoff then succeeds', async () => {
+    let n = 0;
+    server.use(
+      http.post('https://api.voyageai.com/v1/embeddings', () => {
+        n++;
+        return n < 3
+          ? new HttpResponse('slow', { status: 429, headers: { 'retry-after': '0' } })
+          : HttpResponse.json({ data: [{ index: 0, embedding: [1, 0] }] });
+      }),
+    );
+    const out = await new VoyageEmbeddings({ apiKey: 'k' }).embed(['x']);
+    expect(out).toHaveLength(1);
+    expect(n).toBe(3);
+  });
+  it('custom provider passes conformance', async () => {
+    const p = customEmbeddingProvider(
+      'fake',
+      'fake-1',
+      async (texts) =>
+        texts.map((t) => [
+          t.includes('fusion') || t.includes('rank') ? 1 : 0,
+          t.includes('banana') ? 1 : 0,
+          0.1,
+        ]),
+      { dimensions: 3 },
+    );
+    for (const c of embeddingProviderConformance(() => p)) await c.run();
+  });
+  it('EmbeddingCache hits/misses', () => {
+    const c = new EmbeddingCache(10);
+    expect(c.get('m', 'h', 'document')).toBeUndefined();
+    c.set('m', 'h', 'document', new Float32Array([1]));
+    expect(c.get('m', 'h', 'document')).toBeDefined();
+    expect(c.hits).toBe(1);
+    expect(c.misses).toBe(1);
+  });
+});
+
+describe('expansion', () => {
+  it('heuristic expander produces keyword + PRF variants without duplicates', async () => {
+    const out = await new HeuristicExpander().expand('what is reciprocal rank fusion', {
+      searchResults: [
+        {
+          url: 'https://a',
+          title: 'Reciprocal Rank Fusion (RRF) explained',
+          snippet: 'RRF combines ranked lists using reciprocal ranks with constant k',
+          rank: 1,
+          source: 'x',
+        },
+        {
+          url: 'https://b',
+          title: 'Hybrid search scoring',
+          snippet: 'Azure AI Search uses RRF for hybrid queries',
+          rank: 2,
+          source: 'x',
+        },
+      ],
+      related: [],
+      max: 4,
+    });
+    expect(out.length).toBeGreaterThanOrEqual(2);
+    expect(out.length).toBeLessThanOrEqual(4);
+    expect(new Set(out.map((s) => s.toLowerCase())).size).toBe(out.length);
+    expect(out.some((s) => s.startsWith('reciprocal rank fusion'))).toBe(true);
+  });
+  it('llm expander parses lines and falls back', async () => {
+    const e = new LlmExpander(
+      async () => '1. RRF formula k=60\n- how rrf merges lists\n"rank fusion vs score fusion"',
+    );
+    const out = await e.expand('rrf', { searchResults: [], related: [], max: 2 });
+    expect(out).toEqual(['RRF formula k=60', 'how rrf merges lists']);
+    const bad = new LlmExpander(async () => {
+      throw new Error('down');
+    });
+    expect(
+      await bad.expand('reciprocal rank fusion', { searchResults: [], related: [], max: 2 }),
+    ).toBeInstanceOf(Array);
+  });
+});
+
+describe('rerankers', () => {
+  const chunks = [
+    chunk('a', 'bananas'),
+    chunk('b', 'reciprocal rank fusion formula'),
+    chunk('c', 'weather'),
+  ];
+  it('cohere reranker maps results', async () => {
+    server.use(
+      http.post('https://api.cohere.com/v2/rerank', () =>
+        HttpResponse.json({
+          results: [
+            { index: 1, relevance_score: 0.9 },
+            { index: 0, relevance_score: 0.1 },
+          ],
+        }),
+      ),
+    );
+    const r = await new CohereReranker({ apiKey: 'k' }).rerank('rrf', chunks, { topN: 2 });
+    expect(r.map((x) => x.id)).toEqual(['b', 'a']);
+    expect(r[0]!.rerankScore).toBe(0.9);
+  });
+  it('llm reranker parses index arrays and completes missing', async () => {
+    const r = await new LlmReranker(async () => 'Sure: [1, 2]').rerank('rrf', chunks);
+    expect(r.map((x) => x.id)).toEqual(['b', 'c', 'a']);
+    const bad = await new LlmReranker(async () => 'no json').rerank('rrf', chunks, { topN: 2 });
+    expect(bad).toHaveLength(2);
+  });
+  it('custom reranker', async () => {
+    const r = await customReranker('x', async (_q, texts) =>
+      texts.map((t) => (t.includes('fusion') ? 1 : 0)),
+    ).rerank('q', chunks, { topN: 1 });
+    expect(r[0]!.id).toBe('b');
+  });
+  it('local reranker requires transformers (present in dev) — smoke', async () => {
+    const r = new LocalReranker();
+    expect(r.id).toBe('local');
+  });
+});

@@ -1,0 +1,38 @@
+import { defineConfig } from 'tsdown';
+
+export default defineConfig({
+  entry: [
+    'src/index.ts',
+    'src/search/index.ts',
+    'src/embeddings/index.ts',
+    'src/stores/index.ts',
+    'src/rerankers/index.ts',
+    'src/ingest/index.ts',
+    'src/retrieval/index.ts',
+    'src/config/index.ts',
+    'src/integrations/ai-sdk.ts',
+    'src/integrations/anthropic.ts',
+    'src/integrations/openai.ts',
+    'src/integrations/langchain.ts',
+    'src/testing/index.ts',
+  ],
+  format: ['esm'],
+  platform: 'node',
+  target: 'node22',
+  dts: true,
+  sourcemap: true,
+  clean: true,
+  unbundle: true,
+  fixedExtension: false,
+  external: [
+    '@huggingface/transformers',
+    '@qdrant/js-client-rest',
+    'ai',
+    'chromadb',
+    'defuddle',
+    'gpt-tokenizer',
+    'pg',
+    'pgvector',
+    'yaml',
+  ],
+});

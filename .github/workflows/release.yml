@@ -1,0 +1,32 @@
+# Publishes to npm when changesets are merged to main.
+# One-time setup: add an npm automation token as the NPM_TOKEN repository secret
+# (npmjs.com → Access Tokens → Generate → "Automation"). Until then this workflow does nothing harmful:
+# it opens/updates a "Version Packages" PR and only publishes on that PR's merge.
+name: Release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+concurrency: release-${{ github.ref }}
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm, registry-url: https://registry.npmjs.org }
+      - run: npm ci
+      - run: npm run build && npm test
+      - uses: changesets/action@v1
+        with:
+          publish: npx changeset publish
+          version: npx changeset version
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true

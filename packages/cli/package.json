@@ -1,0 +1,58 @@
+{
+  "name": "webvector-cli",
+  "version": "0.1.0",
+  "description": "CLI for WebVector: `webvector search \"query\"` runs search → full-page ingestion → embeddings → cited passages; plus fetch, doctor, init, config, mcp.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "keywords": [
+    "cli",
+    "web-search",
+    "web-research",
+    "rag",
+    "agents",
+    "webvector"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rthomas24/webvector",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "webvector": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "webvector": "^0.1.0",
+    "webvector-mcp": "^0.1.0",
+    "yaml": "^2.9.0"
+  },
+  "peerDependencies": {
+    "@huggingface/transformers": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@huggingface/transformers": {
+      "optional": true
+    }
+  },
+  "author": "Ryan Thomas",
+  "homepage": "https://github.com/rthomas24/webvector#readme",
+  "bugs": {
+    "url": "https://github.com/rthomas24/webvector/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
