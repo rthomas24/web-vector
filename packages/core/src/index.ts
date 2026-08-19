@@ -50,6 +50,7 @@ export {
   requireApiKey,
   WebVectorError,
 } from './errors.js';
+export type { RenderProvider, RenderResult } from './ingest/render.js';
 export type { MarkdownRenderOptions } from './pipeline/format.js';
 export { citationFor, renderMarkdown, renderPassage } from './pipeline/format.js';
 export type { Session } from './pipeline/session.js';
