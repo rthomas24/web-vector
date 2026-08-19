@@ -91,7 +91,9 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `chunkSize` / `chunkOverlap` | `480` / `60` | `WEBVECTOR_CHUNK_SIZE` / `WEBVECTOR_CHUNK_OVERLAP` | tokens |
 | `maxChunksPerPage` / `minChunkChars` | `200` / `100` | — | |
 | `useProviderContent` | `true` | — | use page text returned by Tavily/Exa instead of fetching |
-| `cache.enabled` / `cache.ttlMs` / `cache.maxPages` / `cache.dir` | `true` / `900000` / `500` / — | `WEBVECTOR_CACHE_DIR` (sets `dir`) | in-memory page cache; `dir` adds an on-disk cache |
+| `cache.enabled` / `cache.ttlMs` / `cache.maxPages` | `true` / `900000` (15 min) / `500` | — | page cache: in-process LRU (`maxPages`) in front of the disk layer; past `ttlMs` a page is revalidated (ETag / Last-Modified → 304 = hit) or refetched. `0` = never expires. A longer `Cache-Control: max-age` from the origin extends freshness |
+| `cache.dir` | `auto` | `WEBVECTOR_CACHE_DIR` (`auto`, a path, or `false`) | `auto` → `pages.sqlite` in `$XDG_CACHE_HOME/webvector` (`~/.cache/webvector`); a path → `pages.sqlite` there; `false` → memory only. Needs `node:sqlite` (Node ≥ 22.13, feature-detected); explicit dirs fall back to one JSON file per URL without it, `auto` falls back to memory. WAL + busy timeout: several processes (CLI + MCP) can share the file |
+| `cache.maxDiskPages` / `cache.maxDiskBytes` | `20000` / `1073741824` (1 GiB) | — | disk budgets; least-recently-used pages are evicted first (`webvector cache stats\|prune\|clear` to inspect) |
 
 ## output / logging
 

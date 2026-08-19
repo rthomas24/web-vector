@@ -114,6 +114,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const c = await this.components?.catch(() => undefined);
     c?.sessions.clear();
     await c?.sharedStore?.close?.();
+    c?.pageCache.database?.close();
     this.removeAllListeners();
   }
 

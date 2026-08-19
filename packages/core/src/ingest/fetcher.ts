@@ -87,8 +87,16 @@ export class Fetcher {
     return this.fetchImpl(url, { ...init, ...(dispatcher ? ({ dispatcher } as RequestInit) : {}) });
   }
 
-  /** Fetch a URL honouring all guards. Throws WebVectorError with a per-URL failure code. */
-  async fetch(url: string, signal?: AbortSignal): Promise<FetchedResource> {
+  /**
+   * Fetch a URL honouring all guards. Throws WebVectorError with a per-URL failure code.
+   * `init.headers` adds per-request headers (conditional revalidation: If-None-Match /
+   * If-Modified-Since); a 304 is then returned as a resource with `status: 304` and empty bytes.
+   */
+  async fetch(
+    url: string,
+    signal?: AbortSignal,
+    init?: { headers?: Record<string, string> },
+  ): Promise<FetchedResource> {
     const parsed = new URL(url);
     await assertSafeUrl(parsed, {
       allowPrivateNetworks: this.opts.allowPrivateNetworks,
@@ -112,7 +120,7 @@ export class Fetcher {
     const host = parsed.hostname.toLowerCase();
     return this.limiter(() =>
       this.hostQueue.run(host, () =>
-        retry((attempt) => this.doFetch(url, signal, attempt), {
+        retry((attempt) => this.doFetch(url, signal, attempt, init?.headers), {
           retries: this.opts.retries,
           signal,
           minDelayMs: 500,
@@ -131,6 +139,7 @@ export class Fetcher {
     startUrl: string,
     signal: AbortSignal | undefined,
     attempt: number,
+    extraHeaders?: Record<string, string>,
   ): Promise<FetchedResource> {
     const t0 = Date.now();
     let current = startUrl;
@@ -152,6 +161,7 @@ export class Fetcher {
             'accept-language': 'en-US,en;q=0.9,*;q=0.5',
             'accept-encoding': 'gzip, deflate, br',
             ...(sameOrigin ? this.opts.headers : stripCredentialHeaders(this.opts.headers)),
+            ...extraHeaders,
           },
           signal: timeoutSignal,
         });
@@ -185,6 +195,20 @@ export class Fetcher {
         });
       }
 
+      if (res.status === 304 && extraHeaders) {
+        // Conditional request: the cached copy is still valid; caller reuses it.
+        await drain(res);
+        return {
+          url: startUrl,
+          finalUrl: current,
+          status: 304,
+          contentType: '',
+          bytes: new Uint8Array(),
+          ms: Date.now() - t0,
+          redirects,
+          headers: res.headers,
+        };
+      }
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get('location');
         await drain(res);

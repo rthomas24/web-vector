@@ -4,6 +4,8 @@
  * search → full-page ingestion → embeddings → hybrid semantic retrieval → cited passages.
  */
 
+export type { CacheDbOptions, CacheStats, PageRow } from './cache/db.js';
+export { CACHE_DB_FILENAME, CacheDb, openCacheDb, resolveCacheDir } from './cache/db.js';
 export type {
   DeepPartial,
   LoadConfigOptions,
@@ -87,6 +89,14 @@ export {
   registerReranker,
 } from './rerankers/index.js';
 export { HeuristicExpander, LlmExpander } from './retrieval/expansion.js';
+export type { RuntimeCapabilities } from './runtime.js';
+export {
+  defaultCacheDir,
+  defaultDataDir,
+  expandHome,
+  importNodeSqlite,
+  probeRuntime,
+} from './runtime.js';
 // Convenience re-exports of factories (full adapter sets live in subpath exports)
 export {
   buildSearchStack,

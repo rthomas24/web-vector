@@ -123,7 +123,8 @@ export async function buildComponents(
 
   const fetcher = new Fetcher({ ...cfg.ingestion, fetch: fetchImpl, logger });
   const parsers = createParsers(cfg.ingestion.parsers);
-  const pageCache = new PageCache(cfg.ingestion.cache);
+  const pageCache = await PageCache.create(cfg.ingestion.cache, logger);
+  if (pageCache.backend === 'sqlite') logger.debug(`page cache: sqlite at ${pageCache.location}`);
 
   const llm = code.retrieval?.llm;
   const expander =

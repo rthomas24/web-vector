@@ -41,7 +41,7 @@ export const embeddingProviderNames = [
 ] as const;
 export type EmbeddingProviderName = (typeof embeddingProviderNames)[number];
 
-export const storeProviderNames = ['memory', 'chroma', 'qdrant', 'pgvector'] as const;
+export const storeProviderNames = ['memory', 'sqlite', 'chroma', 'qdrant', 'pgvector'] as const;
 export type StoreProviderName = (typeof storeProviderNames)[number];
 
 export const rerankerNames = ['cohere', 'voyage', 'jina', 'local'] as const;
@@ -88,6 +88,12 @@ export const embeddingsConfigSchema = z.object({
   device: z.string().optional(),
   allowRemoteModels: z.boolean().default(true),
   timeoutMs: z.number().int().min(1000).default(60_000),
+  /**
+   * Persist chunk embeddings (keyed by model + dimensions + dtype + content hash) in the page
+   * cache's SQLite file so re-runs and restarts never re-embed the same text. Needs a cache dir
+   * (`ingestion.cache.dir`) and `node:sqlite`; the in-process cache is always on.
+   */
+  cache: z.boolean().default(true),
   options: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -228,15 +234,39 @@ export const ingestionConfigSchema = z.object({
   cache: z
     .object({
       enabled: z.boolean().default(true),
+      /** Freshness window; past it a cached page is revalidated (ETag / Last-Modified) or refetched. 0 = never expires. */
       ttlMs: z
         .number()
         .int()
         .min(0)
         .default(15 * 60_000),
+      /** In-memory LRU capacity (pages). */
       maxPages: z.number().int().min(1).default(500),
-      dir: z.string().optional(),
+      /**
+       * On-disk layer: `'auto'` (default) → `pages.sqlite` in `$XDG_CACHE_HOME/webvector`
+       * (`~/.cache/webvector`); a directory path; `false` → memory only. Needs `node:sqlite`
+       * (Node ≥ 22.13); explicit directories fall back to one JSON file per URL without it.
+       */
+      dir: z.union([z.string(), z.literal(false)]).default('auto'),
+      /** Disk budgets (LRU eviction by last access). */
+      maxDiskPages: z.number().int().min(1).default(20_000),
+      maxDiskBytes: z
+        .number()
+        .int()
+        .min(1024 * 1024)
+        .default(1024 * 1024 * 1024),
+      /** Remember robots-blocked / 4xx URLs for this long so agent swarms don't re-hit them (0 = off). */
+      negativeTtlMs: z.number().int().min(0).max(300_000).default(15_000),
     })
-    .default({ enabled: true, ttlMs: 15 * 60_000, maxPages: 500 }),
+    .default({
+      enabled: true,
+      ttlMs: 15 * 60_000,
+      maxPages: 500,
+      dir: 'auto',
+      maxDiskPages: 20_000,
+      maxDiskBytes: 1024 * 1024 * 1024,
+      negativeTtlMs: 15_000,
+    }),
 });
 
 export const outputConfigSchema = z.object({

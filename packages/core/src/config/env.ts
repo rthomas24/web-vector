@@ -71,6 +71,11 @@ function list(v: string | undefined): string[] | undefined {
     .filter(Boolean);
 }
 
+/** `WEBVECTOR_CACHE_DIR`: a path, `auto`, or `false|off|memory|0` for memory-only. */
+function cacheDir(v: string): string | false {
+  return ['false', 'off', 'memory', '0', 'none'].includes(v.trim().toLowerCase()) ? false : v;
+}
+
 /** Read WEBVECTOR_* environment variables into a partial config. */
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): WebVectorConfig {
   const cfg: WebVectorConfig = {
@@ -129,7 +134,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): WebVectorCo
       allowPrivateNetworks: bool(env.WEBVECTOR_ALLOW_PRIVATE_NETWORKS),
       chunkSize: num(env.WEBVECTOR_CHUNK_SIZE),
       chunkOverlap: num(env.WEBVECTOR_CHUNK_OVERLAP),
-      cache: env.WEBVECTOR_CACHE_DIR ? { dir: env.WEBVECTOR_CACHE_DIR } : undefined,
+      cache: env.WEBVECTOR_CACHE_DIR ? { dir: cacheDir(env.WEBVECTOR_CACHE_DIR) } : undefined,
     },
     output: { markdown: bool(env.WEBVECTOR_OUTPUT_MARKDOWN) },
     logging: {
