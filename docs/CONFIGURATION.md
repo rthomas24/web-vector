@@ -37,6 +37,7 @@ Code-only: `search.instance` (a `SearchProvider`), `search.fallbackInstances`.
 | `cacheDir` | `~/.cache/webvector/models` | `WEBVECTOR_MODEL_CACHE` | local model files |
 | `dtype` / `device` | `q8` / `cpu` | `WEBVECTOR_EMBEDDINGS_DTYPE` / `WEBVECTOR_EMBEDDINGS_DEVICE` | local only (`fp32`, `coreml`, `cuda`…) |
 | `allowRemoteModels` | `true` | `WEBVECTOR_ALLOW_REMOTE_MODELS` | `false` = fully offline (model must be in `cacheDir`) |
+| `cache` | `true` | — | persist chunk embeddings in the page cache's `pages.sqlite` (key: model + dimensions + dtype + role + content hash) so re-runs and restarts never re-embed the same text; needs `ingestion.cache.dir` (default `auto`) and `node:sqlite`. The in-process cache is always on. Hits show up in `stats.embed.cached` / `stats.usage.embed.cached` |
 | `timeoutMs` | `60000` | — | |
 | `options` | `{}` | — | extra request fields for hosted providers |
 

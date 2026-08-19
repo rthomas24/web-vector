@@ -5,6 +5,7 @@
 
 import { FetchCoordinator } from '../cache/single-flight.js';
 import type { WebVectorConfig, WebVectorFileConfig } from '../config/index.js';
+import { EmbeddingCache } from '../embeddings/base.js';
 import { autoEmbeddingProviderName, createEmbeddingProvider } from '../embeddings/index.js';
 import { WebVectorError } from '../errors.js';
 import { loadTokenCounter, type TokenCounter } from '../ingest/chunker.js';
@@ -40,6 +41,8 @@ export interface Components {
   pageCache: PageCache;
   /** Single-flight coalescing + negative cache for page fetches and searches. */
   coordinator: FetchCoordinator;
+  /** Chunk-embedding cache (memory LRU + persistent layer in the cache database when enabled). */
+  embeddingCache: EmbeddingCache;
   expander: QueryExpander;
   reranker?: Reranker;
   countTokens: TokenCounter;
@@ -132,6 +135,12 @@ export async function buildComponents(
   const pageCache = await PageCache.create(cfg.ingestion.cache, logger);
   if (pageCache.backend === 'sqlite') logger.debug(`page cache: sqlite at ${pageCache.location}`);
   const coordinator = new FetchCoordinator({ negativeTtlMs: cfg.ingestion.cache.negativeTtlMs });
+  const embeddingCache = new EmbeddingCache({
+    db: cfg.embeddings.cache ? pageCache.database : undefined,
+    dims: dimensions,
+    dtype: embedder?.dtype ?? cfg.embeddings.dtype ?? 'fp32',
+  });
+  if (embeddingCache.persistent) logger.debug('embedding cache: persistent (pages.sqlite)');
 
   const llm = code.retrieval?.llm;
   const expander =
@@ -152,6 +161,7 @@ export async function buildComponents(
     parsers,
     pageCache,
     coordinator,
+    embeddingCache,
     expander,
     reranker,
     countTokens,

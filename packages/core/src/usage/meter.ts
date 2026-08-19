@@ -58,6 +58,7 @@ export function meteredEmbedder(inner: EmbeddingProvider): EmbeddingProvider {
   return {
     id: inner.id,
     model: inner.model,
+    dtype: inner.dtype,
     dimensions: () => inner.dimensions(),
     limits: () => inner.limits(),
     init: inner.init ? () => inner.init!() : undefined,

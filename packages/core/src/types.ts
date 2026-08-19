@@ -79,6 +79,8 @@ export interface EmbeddingProvider {
   limits(): EmbeddingLimits;
   /** Optional warm-up (e.g. load a local model). */
   init?(): Promise<void>;
+  /** Weight/output dtype for local models (e.g. 'q8', 'fp32'); part of the persistent cache key. */
+  readonly dtype?: string;
 }
 
 // ─── Chunks & vector stores ──────────────────────────────────────────────────

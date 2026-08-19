@@ -23,7 +23,6 @@ import {
   type WebVectorConfig,
   type WebVectorFileConfig,
 } from '../config/index.js';
-import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
 import {
   type CachedPage,
@@ -78,7 +77,6 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   readonly codeConfig: WebVectorConfig;
   readonly logger: Logger;
   private components?: Promise<Components>;
-  private readonly embeddingCache = new EmbeddingCache();
   private closed = false;
 
   constructor(
@@ -122,6 +120,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const c = await this.components?.catch(() => undefined);
     c?.sessions.clear();
     await c?.sharedStore?.close?.();
+    c?.embeddingCache.flush();
     c?.pageCache.database?.close();
     this.removeAllListeners();
   }
@@ -209,7 +208,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     this.countHttp(meter, outcome);
     const session = ephemeralSession(undefined, c.bm25Options);
     if (c.embedder) await session.store.init?.(c.dimensions, c.embedder.model);
-    const { chunks, stats } = await ingestDocument(c, this.embeddingCache, {
+    const { chunks, stats } = await ingestDocument(c, c.embeddingCache, {
       doc,
       page,
       query,
@@ -424,7 +423,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           revalidated,
         });
 
-        const { chunks, embedded, stats } = await ingestDocument(c, this.embeddingCache, {
+        const { chunks, embedded, stats } = await ingestDocument(c, c.embeddingCache, {
           doc: { ...page.doc, url: r.url },
           page,
           result: r,

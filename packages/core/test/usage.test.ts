@@ -1,7 +1,12 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { type CacheDb, openCacheDb } from '../src/cache/db.js';
 import { FetchCoordinator, isNegativeCacheable, SingleFlight } from '../src/cache/single-flight.js';
-import { customEmbeddingProvider } from '../src/embeddings/base.js';
+import { customEmbeddingProvider, EmbeddingCache } from '../src/embeddings/base.js';
 import { WebVector } from '../src/pipeline/webvector.js';
+import { probeRuntime } from '../src/runtime.js';
 import { customSearchProvider } from '../src/search/providers.js';
 import type { UsageStats } from '../src/types.js';
 import { DEFAULT_PRICING, estimateCostUsd, resolvePricing } from '../src/usage/pricing.js';
@@ -310,4 +315,86 @@ describe('SingleFlight / negative cache primitives', () => {
     await co.ingest('u', fail, { bypassNegative: true });
     expect(calls).toBe(3);
   });
+});
+
+const caps = await probeRuntime();
+const sqliteIt = caps.sqlite ? it : it.skip;
+
+describe('persistent embedding cache (F3)', () => {
+  sqliteIt(
+    'EmbeddingCache: write-through to pages.sqlite keyed by model/dims/dtype/role/hash',
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'wv-emb-'));
+      const db = (await openCacheDb({ dir })) as CacheDb;
+      const a = new EmbeddingCache({ db, dims: 3, dtype: 'q8', batchSize: 100 });
+      expect(a.persistent).toBe(true);
+      a.set('m', 'h1', 'document', new Float32Array([1, 2, 3]));
+      expect(db.stats().embeddings.count).toBe(0); // batched
+      expect(a.flush()).toBe(1);
+      expect(db.stats().embeddings.count).toBe(1);
+      const b = new EmbeddingCache({ db, dims: 3, dtype: 'q8' });
+      expect(Array.from(b.get('m', 'h1', 'document') as Float32Array)).toEqual([1, 2, 3]);
+      expect(b.diskHits).toBe(1);
+      expect(b.get('m', 'h1', 'document')).toBeDefined();
+      expect(b.diskHits).toBe(1); // promoted to memory
+      expect(
+        new EmbeddingCache({ db, dims: 2, dtype: 'q8' }).get('m', 'h1', 'document'),
+      ).toBeUndefined();
+      expect(
+        new EmbeddingCache({ db, dims: 3, dtype: 'fp32' }).get('m', 'h1', 'document'),
+      ).toBeUndefined();
+      expect(b.get('m', 'h1', 'query')).toBeUndefined();
+      const mem = new EmbeddingCache(10);
+      expect(mem.persistent).toBe(false);
+      mem.set('m', 'h', 'document', new Float32Array([1]));
+      expect(mem.flush()).toBe(0);
+      db.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  );
+
+  sqliteIt(
+    'a fresh WebVector instance re-uses chunk embeddings from disk (stats.embed.cached)',
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'wv-emb2-'));
+      const f = makeFetch();
+      const cfg = {
+        ingestion: {
+          respectRobotsTxt: false,
+          perHostMinIntervalMs: 0,
+          retries: 0,
+          allowPrivateNetworks: true,
+          minChunkChars: 20,
+          chunkSize: 80,
+          cache: { dir },
+        },
+      };
+      const wv1 = make(f.fetchImpl, cfg);
+      const a = await wv1.research('rank fusion');
+      expect(a.stats.embed.chunks).toBeGreaterThan(0);
+      expect(a.stats.embed.cached).toBe(0);
+      await wv1.close();
+      const wv2 = make(f.fetchImpl, cfg);
+      const b = await wv2.research('rank fusion');
+      expect(b.stats.embed.cached).toBe(a.stats.embed.chunks); // every chunk vector came from disk
+      expect(b.stats.embed.batches).toBe(0); // no embed request for documents
+      expect(b.stats.usage?.embed.cached).toBe(a.stats.embed.chunks);
+      await wv2.close();
+      // embeddings.cache: false → nothing persisted for a third instance
+      const wv3 = make(f.fetchImpl, {
+        ...cfg,
+        embeddings: { instance: toyEmbedder, cache: false },
+      });
+      const db = (await openCacheDb({ dir })) as CacheDb;
+      db.clearEmbeddings();
+      db.close();
+      const c = await wv3.research('rank fusion');
+      expect(c.stats.embed.cached).toBe(0);
+      await wv3.close();
+      const db2 = (await openCacheDb({ dir })) as CacheDb;
+      expect(db2.stats().embeddings.count).toBe(0);
+      db2.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  );
 });
