@@ -12,7 +12,7 @@
 <div class="md-container"><nav class="md-nav md-nav--primary" aria-label="Navigation"><ul><li><a href="/recipes/retries">Retries</a></li><li><a href="/recipes/timeouts">Timeouts</a></li><li><a href="/recipes/bulkheads">Bulkheads</a></li></ul></nav>
 <main class="md-main"><article class="md-content__inner md-typeset"><h1>Retries with exponential backoff</h1>
 <p>Retrying too eagerly turns a brief outage into a thundering herd, so each attempt should wait longer than the last and add jitter so that clients do not synchronise.</p>
-<div class="codehilite"><pre><span></span><code><span class="k">import</span> time
+<div class="codehilite"><pre><span></span><code class="language-python"><span class="k">import</span> time
 
 <span class="k">def</span> re<span class="k">try</span>(fn, attempts=5, base=0.2):
     <span class="k">for</span> i <span class="k">in</span> range(attempts):

@@ -1,5 +1,6 @@
 /** Unit tests for the extraction helper modules (ingest/extract-*.ts) and their wiring. */
 import { parseHTML } from 'linkedom';
+import { htmlToMarkdown } from 'mdream';
 import { describe, expect, it } from 'vitest';
 import {
   detectJsShell,
@@ -7,8 +8,9 @@ import {
   normalizeLangTag,
 } from '../src/ingest/extract-detect.js';
 import { extractMeta } from '../src/ingest/extract-meta.js';
+import { detectLang, prepassDocument } from '../src/ingest/extract-prepass.js';
 import { parseResource } from '../src/ingest/index.js';
-import { HtmlParser } from '../src/ingest/parsers.js';
+import { HtmlParser, tidyMarkdown } from '../src/ingest/parsers.js';
 import { ingestDocument } from '../src/pipeline/ingest-stage.js';
 import { ephemeralSession } from '../src/pipeline/session.js';
 
@@ -277,5 +279,90 @@ describe('ingestDocument metadata + canonical dedupe', () => {
     });
     expect(b.chunks.map((ch) => ch.id)).toEqual(a.chunks.map((ch) => ch.id));
     expect(session.chunks.size).toBe(a.chunks.length);
+  });
+});
+
+describe('extract-prepass', () => {
+  const dom = (body: string) =>
+    parseHTML(`<!doctype html><html><body>${body}</body></html>`).document;
+  const md = (body: string) => {
+    const document = dom(body);
+    prepassDocument(document);
+    return tidyMarkdown(htmlToMarkdown(document.documentElement.outerHTML));
+  };
+  it('flattens Prism/Shiki/hljs token soup into fenced blocks with the language', () => {
+    expect(
+      md(
+        '<pre class="prism-code language-ts"><code><span class="token-line"><span class="token keyword">const</span><span class="token plain"> a = 1;</span></span>\n<span class="token-line"><span class="token plain">let b;</span></span></code></pre>',
+      ),
+    ).toBe('```ts\nconst a = 1;\nlet b;\n```');
+    expect(
+      md(
+        '<pre class="shiki" data-language="go"><code><span class="line"><span style="color:#f00">func</span> main() {}</span>\n<span class="line">x</span></code></pre>',
+      ),
+    ).toBe('```go\nfunc main() {}\nx\n```');
+    expect(
+      md(
+        '<pre><code class="hljs python"><span class="hljs-keyword">def</span> f(): pass</code></pre>',
+      ),
+    ).toBe('```python\ndef f(): pass\n```');
+    expect(
+      md(
+        '<div class="highlight-rust"><div class="highlight"><pre><span></span>fn main() {}</pre></div></div>',
+      ),
+    ).toBe('```rust\nfn main() {}\n```');
+    expect(
+      md(
+        '<pre data-lang="bash"><code class="lang-bash">ls -la<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>',
+      ),
+    ).toBe('```bash\nls -la\n```');
+  });
+  it('drops copy buttons and line-number gutters, collapses line-number tables', () => {
+    expect(
+      md('<pre><code class="language-js">x = 1;</code> <button class="copy">Copy</button></pre>'),
+    ).toBe('```js\nx = 1;\n```');
+    const table =
+      '<table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span class="normal">1</span>\n<span class="normal">2</span></pre></div></td><td class="code"><div class="highlight"><pre><code class="language-lua">local a = 1\nreturn a</code></pre></div></td></tr></table>';
+    expect(md(table)).toBe('```lua\nlocal a = 1\nreturn a\n```');
+    const github =
+      '<table class="highlight tab-size js-file-line-container" data-tab-size="8"><tr><td class="blob-num">1</td><td class="blob-code">import x</td></tr><tr><td class="blob-num">2</td><td class="blob-code">print(x)</td></tr></table>';
+    expect(md(github)).toBe('```\nimport x\nprint(x)\n```');
+    expect(md('<pre><span class="linenos">1</span>a\n<span class="linenos">2</span>b</pre>')).toBe(
+      '```\na\nb\n```',
+    );
+  });
+  it('removes heading self-links but keeps heading text', () => {
+    expect(
+      md('<h2 id="a">Title<a class="headerlink" href="#a" title="Link to this heading">¶</a></h2>'),
+    ).toBe('## Title');
+    expect(md('<h2 id="a"><a class="heading-anchor" href="#a">Title</a></h2>')).toBe('## Title');
+    expect(md('<h3>Class: X<span><a class="mark" href="#x">#</a></span></h3>')).toBe(
+      '### Class: X',
+    );
+    expect(md('<h2><a href="/other">Real link</a></h2>')).toBe('## [Real link](/other)');
+  });
+  it('marks data tables with summary and leaves layout tables alone', () => {
+    const d = dom(
+      '<table><tr><td>a</td><td>1</td></tr><tr><td>b</td><td>2</td></tr><tr><td>c</td><td>3</td></tr></table><table role="presentation"><tr><td>x</td><td>y</td></tr><tr><td>x</td><td>y</td></tr></table><table><tr><td><table><tr><td>n</td></tr></table></td><td>z</td></tr></table>',
+    );
+    prepassDocument(d);
+    const tables = [...d.querySelectorAll('table')];
+    expect(tables[0].getAttribute('summary')).toBe('data table');
+    expect(tables[1].getAttribute('summary')).toBeNull();
+    expect(tables[2].getAttribute('summary')).toBeNull();
+  });
+  it('tidyMarkdown keeps indentation inside fences and collapses runs outside', () => {
+    expect(tidyMarkdown('a      b\n\n```py\n    x = 1\n        y\n```\n\nc     d')).toBe(
+      'a  b\n\n```py\n    x = 1\n        y\n```\n\nc  d',
+    );
+  });
+  it('detectLang normalises aliases', () => {
+    const d = dom(
+      '<pre class="language-JavaScript"><code>x</code></pre><pre><code class="lang-py3">y</code></pre><pre class="line-numbers"><code>z</code></pre>',
+    );
+    const pres = [...d.querySelectorAll('pre')];
+    expect(detectLang(pres[0])).toBe('js');
+    expect(detectLang(pres[1])).toBe('python');
+    expect(detectLang(pres[2])).toBeUndefined();
   });
 });

@@ -6,6 +6,7 @@ import { WebVectorError } from '../errors.js';
 import type { ContentParser, ParseContext, ParsedDocument } from '../types.js';
 import { detectJsShell, guessLangFromScript, type JsShellSignals } from './extract-detect.js';
 import { extractMeta } from './extract-meta.js';
+import { prepassDocument } from './extract-prepass.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -73,12 +74,20 @@ export function decodeBytes(bytes: Uint8Array, charset?: string): string {
   }
 }
 
-function tidyMarkdown(md: string): string {
-  return sanitizeText(md)
-    .replace(/\r\n?/g, '\n')
-    .replace(/\\?\[\s*\[edit\]\([^)]*\)\s*\\?\]/g, '') // Wikipedia [edit] links
-    .replace(/\[\]\([^)]*\)/g, '') // empty links
-    .replace(/[ \t]+$/gm, '')
+/** Sanitise + light whitespace clean-up; fenced code blocks keep their indentation verbatim. */
+export function tidyMarkdown(md: string): string {
+  const parts = md.replace(/\r\n?/g, '\n').split(/(^```[^\n]*\n[\s\S]*?^```[ \t]*$)/m);
+  const out = parts.map((part, i) =>
+    i % 2 === 1
+      ? part.replace(CONTROL_CHARS, '')
+      : sanitizeText(part)
+          .replace(/\\?\[\s*\[edit\]\([^)]*\)\s*\\?\]/g, '') // Wikipedia [edit] links
+          .replace(/\[\]\([^)]*\)/g, '') // empty links
+          .replace(/\s*\[(?:#|¶|§)\]\([^)]*\)/g, '') // heading self-links that survived the DOM pass
+          .replace(/[ \t]+$/gm, ''),
+  );
+  return out
+    .join('')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -149,6 +158,9 @@ export class HtmlParser implements ContentParser {
     // JS-shell signals (empty #root, "enable JavaScript", hydration markers); decided at the end
     // against the amount of content actually extracted.
     const js = detectJsShell(html, document);
+    // Code/table fidelity pre-pass: highlighter soup → <pre><code class="language-x">, copy
+    // buttons and heading anchors removed, data tables marked so Readability keeps them.
+    const prepass = prepassDocument(document);
 
     let markdown = '';
     let parser = 'readability';
@@ -158,6 +170,8 @@ export class HtmlParser implements ContentParser {
       article = new Readability(clone as any, {
         charThreshold: this.opts.charThreshold ?? 200,
         keepClasses: false,
+        // Readability strips classes; keep the language markers so mdream emits fenced blocks.
+        classesToPreserve: prepass.languageClasses,
       }).parse();
     } catch {
       article = null;

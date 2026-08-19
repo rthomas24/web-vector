@@ -76,7 +76,6 @@ An SQLite database connection defaults to [journal\_mode=DELETE](https://www.sql
 
 > ```
 > PRAGMA journal_mode=WAL;
->
 > ```
 
 The journal\_mode pragma returns a string which is the new journal mode. On success, the pragma will return the string "wal". If the conversion to WAL could not be completed (for example, if the [VFS](https://www.sqlite.org/vfs.html) does not support the necessary shared-memory primitives) then the journaling mode will be unchanged and the string returned from the primitive will be the prior journaling mode (for example "delete").
@@ -163,7 +162,6 @@ One can explicitly change out of WAL mode using a pragma such as this:
 
 > ```
 > PRAGMA journal_mode=DELETE;
->
 > ```
 
 Deliberately changing out of WAL mode changes the database file format version numbers back to 1 so that older versions of SQLite can once again access the database file.

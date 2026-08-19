@@ -380,7 +380,6 @@ ${para('leakyBucket', 'conclusion')}`;
     name: 'docs-sphinx',
     gold: contentGold,
     spec: {
-      expectFail: 'C9 code/table fidelity pre-pass',
       url,
       type: 'Sphinx/pygments docs: div.highlight code, headerlink pilcrows, sphinxsidebar, related bar, dl signatures',
       minF1: 0.85,
@@ -932,7 +931,6 @@ ${para('conclusion')}`;
     name: 'code-shiki',
     gold,
     spec: {
-      expectFail: 'C9 code/table fidelity pre-pass',
       url,
       type: 'blog post with Shiki-highlighted blocks (span.line soup, data-language on pre)',
       minF1: 0.85,
@@ -972,7 +970,6 @@ ${para('distributed')}`;
     name: 'code-hljs-linenumbers',
     gold: gold2,
     spec: {
-      expectFail: 'C9 code/table fidelity pre-pass',
       url: url2,
       type: 'wiki snippet page with highlight.js code in a two-column line-number table plus a copy button',
       minF1: 0.8,
@@ -1007,7 +1004,6 @@ def retry(fn, attempts=5, base=0.2):
     name: 'code-codehilite',
     gold: gold3,
     spec: {
-      expectFail: 'C9 code/table fidelity pre-pass',
       url: url3,
       type: 'MkDocs/codehilite page: div.codehilite > pre, pre[data-lang], code.lang-bash with Prism line-numbers rows',
       minF1: 0.85,
@@ -1021,7 +1017,7 @@ def retry(fn, attempts=5, base=0.2):
 <div class="md-container"><nav class="md-nav md-nav--primary" aria-label="Navigation"><ul><li><a href="/recipes/retries">Retries</a></li><li><a href="/recipes/timeouts">Timeouts</a></li><li><a href="/recipes/bulkheads">Bulkheads</a></li></ul></nav>
 <main class="md-main"><article class="md-content__inner md-typeset"><h1>Retries with exponential backoff</h1>
 <p>Retrying too eagerly turns a brief outage into a thundering herd, so each attempt should wait longer than the last and add jitter so that clients do not synchronise.</p>
-<div class="codehilite"><pre><span></span><code>${py.replace(/(import|def|for|in|try|return|except|raise)/g, '<span class="k">$1</span>')}
+<div class="codehilite"><pre><span></span><code class="language-python">${py.replace(/(import|def|for|in|try|return|except|raise)/g, '<span class="k">$1</span>')}
 </code></pre></div>
 <p>The same idea in a shell one-liner:</p>
 <pre data-lang="bash" class="line-numbers"><code class="lang-bash">for i in 1 2 3 4 5; do curl -fsS https://api.example.io/ &amp;&amp; break; sleep $((RANDOM % (2 ** i))); done<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>

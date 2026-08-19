@@ -1,5 +1,4 @@
 {
-  "expectFail": "C9 code/table fidelity pre-pass",
   "url": "https://wiki.example.net/snippets/sliding-window-redis",
   "type": "wiki snippet page with highlight.js code in a two-column line-number table plus a copy button",
   "minF1": 0.8,

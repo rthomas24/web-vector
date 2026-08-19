@@ -1,5 +1,4 @@
 {
-  "expectFail": "C9 code/table fidelity pre-pass",
   "url": "https://sphinx.example.org/en/stable/library/ratelimit.html",
   "type": "Sphinx/pygments docs: div.highlight code, headerlink pilcrows, sphinxsidebar, related bar, dl signatures",
   "minF1": 0.85,

@@ -1,15 +1,12 @@
-## Path [#](https://nodejs.org/api/path.html#path)
+## Path
 
 The `node:path` module provides utilities for working with file and directory paths. It can be accessed using:
 
-```
-const path = require('node:path'); import path from 'node:path';
-
-javascript
-
+```cjs
+const path = require('node:path');
 ```
 
-### Windows vs. POSIX [#](https://nodejs.org/api/path.html#windows-vs-posix)
+### Windows vs. POSIX
 
 The default operation of the `node:path` module varies based on the operating system on which a Node.js application is running. Specifically, when running on a Windows operating system, the `node:path` module will assume that Windows-style paths are being used.
 
@@ -17,51 +14,39 @@ So using `path.basename()` might yield different results on POSIX and Windows:
 
 On POSIX:
 
-```
+```js
 path.basename('C:\\temp\\myfile.html');
 // Returns: 'C:\\temp\\myfile.html'
-
-js
-
 ```
 
 On Windows:
 
-```
+```js
 path.basename('C:\\temp\\myfile.html');
 // Returns: 'myfile.html'
-
-js
-
 ```
 
 To achieve consistent results when working with Windows file paths on any operating system, use [`path.win32`](https://nodejs.org/api/path.html#pathwin32):
 
 On POSIX and Windows:
 
-```
+```js
 path.win32.basename('C:\\temp\\myfile.html');
 // Returns: 'myfile.html'
-
-js
-
 ```
 
 To achieve consistent results when working with POSIX file paths on any operating system, use [`path.posix`](https://nodejs.org/api/path.html#pathposix):
 
 On POSIX and Windows:
 
-```
+```js
 path.posix.basename('/tmp/myfile.html');
 // Returns: 'myfile.html'
-
-js
-
 ```
 
 On Windows Node.js follows the concept of per-drive working directory. This behavior can be observed when using a drive path without a backslash. For example, `path.resolve('C:\\')` can potentially return a different result than `path.resolve('C:')`. For more information, see [this MSDN page](https://docs.microsoft.com/en-us/windows/desktop/FileIO/naming-a-file#fully-qualified-vs-relative-paths).
 
-### `path.basename(path[, suffix])`[#](https://nodejs.org/api/path.html#pathbasenamepath-suffix)
+### `path.basename(path[, suffix])`
 
 Added in: v0.1.25
 
@@ -81,33 +66,27 @@ Added in: v0.1.25
 
 The `path.basename()` method returns the last portion of a `path`, similar to the Unix `basename` command. Trailing [directory separators](https://nodejs.org/api/path.html#pathsep) are ignored.
 
-```
+```js
 path.basename('/foo/bar/baz/asdf/quux.html');
 // Returns: 'quux.html'
 
 path.basename('/foo/bar/baz/asdf/quux.html', '.html');
 // Returns: 'quux'
-
-js
-
 ```
 
 Although Windows usually treats file names, including file extensions, in a case-insensitive manner, this function does not. For example, `C:\\foo.html` and `C:\\foo.HTML` refer to the same file, but `basename` treats the extension as a case-sensitive string:
 
-```
+```js
 path.win32.basename('C:\\foo.html', '.html');
 // Returns: 'foo'
 
 path.win32.basename('C:\\foo.HTML', '.html');
 // Returns: 'foo.HTML'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` is not a string or if `suffix` is given and is not a string.
 
-### `path.delimiter`[#](https://nodejs.org/api/path.html#pathdelimiter)
+### `path.delimiter`
 
 Added in: v0.9.3
 
@@ -120,31 +99,25 @@ Provides the platform-specific path delimiter:
 
 For example, on POSIX:
 
-```
+```js
 console.log(process.env.PATH);
 // Prints: '/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin'
 
 process.env.PATH.split(path.delimiter);
 // Returns: ['/usr/bin', '/bin', '/usr/sbin', '/sbin', '/usr/local/bin']
-
-js
-
 ```
 
 On Windows:
 
-```
+```js
 console.log(process.env.PATH);
 // Prints: 'C:\Windows\system32;C:\Windows;C:\Program Files\node\'
 
 process.env.PATH.split(path.delimiter);
 // Returns ['C:\\Windows\\system32', 'C:\\Windows', 'C:\\Program Files\\node\\']
-
-js
-
 ```
 
-### `path.dirname(path)`[#](https://nodejs.org/api/path.html#pathdirnamepath)
+### `path.dirname(path)`
 
 Added in: v0.1.16
 
@@ -163,17 +136,14 @@ Added in: v0.1.16
 
 The `path.dirname()` method returns the directory name of a `path`, similar to the Unix `dirname` command. Trailing directory separators are ignored, see [`path.sep`](https://nodejs.org/api/path.html#pathsep).
 
-```
+```js
 path.dirname('/foo/bar/baz/asdf/quux');
 // Returns: '/foo/bar/baz/asdf'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` is not a string.
 
-### `path.extname(path)`[#](https://nodejs.org/api/path.html#pathextnamepath)
+### `path.extname(path)`
 
 Added in: v0.1.25
 
@@ -192,7 +162,7 @@ Added in: v0.1.25
 
 The `path.extname()` method returns the extension of the `path`, from the last occurrence of the `.` (period) character to end of string in the last portion of the `path`. If there is no `.` in the last portion of the `path`, or if there are no `.` characters other than the first character of the basename of `path` (see `path.basename()`) , an empty string is returned.
 
-```
+```js
 path.extname('index.html');
 // Returns: '.html'
 
@@ -210,14 +180,11 @@ path.extname('.index');
 
 path.extname('.index.md');
 // Returns: '.md'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` is not a string.
 
-### `path.format(pathObject)`[#](https://nodejs.org/api/path.html#pathformatpathobject)
+### `path.format(pathObject)`
 
 Added in: v0.11.15
 
@@ -248,7 +215,7 @@ When providing properties to the `pathObject` remember that there are combinatio
 
 For example, on POSIX:
 
-```
+```js
 // If `dir`, `root` and `base` are provided,
 // `${dir}${path.sep}${base}`
 // will be returned. `root` is ignored.
@@ -284,25 +251,19 @@ path.format({
   ext: 'txt',
 });
 // Returns: '/file.txt'
-
-js
-
 ```
 
 On Windows:
 
-```
+```js
 path.format({
   dir: 'C:\\path\\dir',
   base: 'file.txt',
 });
 // Returns: 'C:\\path\\dir\\file.txt'
-
-js
-
 ```
 
-### `path.matchesGlob(path, pattern)`[#](https://nodejs.org/api/path.html#pathmatchesglobpath-pattern)
+### `path.matchesGlob(path, pattern)`
 
 Added in: v22.5.0, v20.17.0
 
@@ -324,17 +285,14 @@ The `path.matchesGlob()` method determines if `path` matches the `pattern`.
 
 For example:
 
-```
+```js
 path.matchesGlob('/foo/bar', '/foo/*'); // true
 path.matchesGlob('/foo/bar*', 'foo/bird'); // false
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` or `pattern` are not strings.
 
-### `path.isAbsolute(path)`[#](https://nodejs.org/api/path.html#pathisabsolutepath)
+### `path.isAbsolute(path)`
 
 Added in: v0.11.2
 
@@ -347,35 +305,29 @@ If the given `path` is a zero-length string, `false` will be returned.
 
 For example, on POSIX:
 
-```
-path.isAbsolute('/foo/bar');  // true
-path.isAbsolute('/baz/..');  // true
+```js
+path.isAbsolute('/foo/bar');   // true
+path.isAbsolute('/baz/..');    // true
 path.isAbsolute('/baz/../..'); // true
-path.isAbsolute('qux/');  // false
-path.isAbsolute('.');  // false
-
-js
-
+path.isAbsolute('qux/');       // false
+path.isAbsolute('.');          // false
 ```
 
 On Windows:
 
-```
-path.isAbsolute('//server');  // true
+```js
+path.isAbsolute('//server');    // true
 path.isAbsolute('\\\\server');  // true
-path.isAbsolute('C:/foo/..');  // true
+path.isAbsolute('C:/foo/..');   // true
 path.isAbsolute('C:\\foo\\..'); // true
-path.isAbsolute('bar\\baz');  // false
-path.isAbsolute('bar/baz');  // false
-path.isAbsolute('.');  // false
-
-js
-
+path.isAbsolute('bar\\baz');    // false
+path.isAbsolute('bar/baz');     // false
+path.isAbsolute('.');           // false
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` is not a string.
 
-### `path.join([...paths])`[#](https://nodejs.org/api/path.html#pathjoinpaths)
+### `path.join([...paths])`
 
 Added in: v0.1.16
 
@@ -386,20 +338,17 @@ The `path.join()` method joins all given `path` segments together using the plat
 
 Zero-length `path` segments are ignored. If the joined path string is a zero-length string then `'.'` will be returned, representing the current working directory.
 
-```
+```js
 path.join('/foo', 'bar', 'baz/asdf', 'quux', '..');
 // Returns: '/foo/bar/baz/asdf'
 
 path.join('foo', {}, 'bar');
 // Throws 'TypeError: Path must be a string. Received {}'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if any of the path segments is not a string.
 
-### `path.normalize(path)`[#](https://nodejs.org/api/path.html#pathnormalizepath)
+### `path.normalize(path)`
 
 Added in: v0.1.23
 
@@ -416,37 +365,28 @@ On POSIX, the types of normalization applied by this function do not strictly ad
 
 For example, on POSIX:
 
-```
+```js
 path.normalize('/foo/bar//baz/asdf/quux/..');
 // Returns: '/foo/bar/baz/asdf'
-
-js
-
 ```
 
 On Windows:
 
-```
+```js
 path.normalize('C:\\temp\\\\foo\\bar\\..\\');
 // Returns: 'C:\\temp\\foo\\'
-
-js
-
 ```
 
 Since Windows recognizes multiple path separators, both separators will be replaced by instances of the Windows preferred separator (`\`):
 
-```
+```js
 path.win32.normalize('C:////temp\\\\/\\/\\/foo/bar');
 // Returns: 'C:\\temp\\foo\\bar'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` is not a string.
 
-### `path.parse(path)`[#](https://nodejs.org/api/path.html#pathparsepath)
+### `path.parse(path)`
 
 Added in: v0.11.15
 
@@ -465,63 +405,51 @@ The returned object will have the following properties:
 
 For example, on POSIX:
 
-```
+```js
 path.parse('/home/user/dir/file.txt');
 // Returns:
 // { root: '/',
-//  dir: '/home/user/dir',
-//  base: 'file.txt',
-//  ext: '.txt',
-//  name: 'file' }
-
-js
-
+//   dir: '/home/user/dir',
+//   base: 'file.txt',
+//   ext: '.txt',
+//   name: 'file' }
 ```
 
-```
+```text
 ┌─────────────────────┬────────────┐
-│  dir  │  base  │
-├──────┬  ├──────┬─────┤
-│ root │  │ name │ ext │
-"  /  home/user/dir / file  .txt "
+│          dir        │    base    │
+├──────┬              ├──────┬─────┤
+│ root │              │ name │ ext │
+"  /    home/user/dir / file  .txt "
 └──────┴──────────────┴──────┴─────┘
 (All spaces in the "" line should be ignored. They are purely for formatting.)
-
-text
-
 ```
 
 On Windows:
 
-```
+```js
 path.parse('C:\\path\\dir\\file.txt');
 // Returns:
 // { root: 'C:\\',
-//  dir: 'C:\\path\\dir',
-//  base: 'file.txt',
-//  ext: '.txt',
-//  name: 'file' }
-
-js
-
+//   dir: 'C:\\path\\dir',
+//   base: 'file.txt',
+//   ext: '.txt',
+//   name: 'file' }
 ```
 
-```
+```text
 ┌─────────────────────┬────────────┐
-│  dir  │  base  │
-├──────┬  ├──────┬─────┤
-│ root │  │ name │ ext │
-" C:\  path\dir  \ file  .txt "
+│          dir        │    base    │
+├──────┬              ├──────┬─────┤
+│ root │              │ name │ ext │
+" C:\      path\dir   \ file  .txt "
 └──────┴──────────────┴──────┴─────┘
 (All spaces in the "" line should be ignored. They are purely for formatting.)
-
-text
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if `path` is not a string.
 
-### `path.posix`[#](https://nodejs.org/api/path.html#pathposix)
+### `path.posix`
 
 Added in: v0.11.15
 
@@ -541,7 +469,7 @@ The `path.posix` property provides access to POSIX specific implementations of t
 
 The API is accessible via `require('node:path').posix` or `require('node:path/posix')`.
 
-### `path.relative(from, to)`[#](https://nodejs.org/api/path.html#pathrelativefrom-to)
+### `path.relative(from, to)`
 
 Added in: v0.5.0
 
@@ -565,27 +493,21 @@ If a zero-length string is passed as `from` or `to`, the current working directo
 
 For example, on POSIX:
 
-```
+```js
 path.relative('/data/orandea/test/aaa', '/data/orandea/impl/bbb');
 // Returns: '../../impl/bbb'
-
-js
-
 ```
 
 On Windows:
 
-```
+```js
 path.relative('C:\\orandea\\test\\aaa', 'C:\\orandea\\impl\\bbb');
 // Returns: '..\\..\\impl\\bbb'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if either `from` or `to` is not a string.
 
-### `path.resolve([...paths])`[#](https://nodejs.org/api/path.html#pathresolvepaths)
+### `path.resolve([...paths])`
 
 Added in: v0.3.4
 
@@ -604,7 +526,7 @@ Zero-length `path` segments are ignored.
 
 If no `path` segments are passed, `path.resolve()` will return the absolute path of the current working directory.
 
-```
+```js
 path.resolve('/foo/bar', './baz');
 // Returns: '/foo/bar/baz'
 
@@ -614,14 +536,11 @@ path.resolve('/foo/bar', '/tmp/file/');
 path.resolve('wwwroot', 'static_files/png/', '../gif/image.gif');
 // If the current working directory is /home/myself/node,
 // this returns '/home/myself/node/wwwroot/static_files/gif/image.gif'
-
-js
-
 ```
 
 A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if any of the arguments is not a string.
 
-### `path.sep`[#](https://nodejs.org/api/path.html#pathsep)
+### `path.sep`
 
 Added in: v0.7.9
 
@@ -634,27 +553,21 @@ Provides the platform-specific path segment separator:
 
 For example, on POSIX:
 
-```
+```js
 'foo/bar/baz'.split(path.sep);
 // Returns: ['foo', 'bar', 'baz']
-
-js
-
 ```
 
 On Windows:
 
-```
+```js
 'foo\\bar\\baz'.split(path.sep);
 // Returns: ['foo', 'bar', 'baz']
-
-js
-
 ```
 
 On Windows, both the forward slash (`/`) and backward slash (`\`) are accepted as path segment separators; however, the `path` methods only add backward slashes (`\`).
 
-### `path.toNamespacedPath(path)`[#](https://nodejs.org/api/path.html#pathtonamespacedpathpath)
+### `path.toNamespacedPath(path)`
 
 Added in: v9.0.0
 
@@ -665,7 +578,7 @@ On Windows systems only, returns an equivalent [namespace-prefixed path](https:/
 
 This method is meaningful only on Windows systems. On POSIX systems, the method is non-operational and always returns `path` without modifications.
 
-### `path.win32`[#](https://nodejs.org/api/path.html#pathwin32)
+### `path.win32`
 
 Added in: v0.11.15
 

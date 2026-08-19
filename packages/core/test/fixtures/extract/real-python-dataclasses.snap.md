@@ -6,38 +6,36 @@ This module provides a decorator and functions for automatically adding generate
 
 The member variables to use in these generated methods are defined using [**PEP 526**](https://peps.python.org/pep-0526/) type annotations. For example, this code:
 
-```
+```python
 from dataclasses import dataclass
 
 @dataclass
 class InventoryItem:
-"""Class for keeping track of an item in inventory."""
-  name: str
-  unit_price: float
-  quantity_on_hand: int = 0
+    """Class for keeping track of an item in inventory."""
+    name: str
+    unit_price: float
+    quantity_on_hand: int = 0
 
-  def total_cost(self) -> float:
-  return self.unit_price * self.quantity_on_hand
-
+    def total_cost(self) -> float:
+        return self.unit_price * self.quantity_on_hand
 ```
 
 will add, among other things, a `__init__()` that looks like:
 
-```
+```python
 def __init__(self, name: str, unit_price: float, quantity_on_hand: int = 0):
-  self.name = name
-  self.unit_price = unit_price
-  self.quantity_on_hand = quantity_on_hand
-
+    self.name = name
+    self.unit_price = unit_price
+    self.quantity_on_hand = quantity_on_hand
 ```
 
 Note that this method is automatically added to the class: it is not directly specified in the `InventoryItem` definition shown above.
 
 Added in version 3.7.
 
-## Module contents [¶](https://docs.python.org/3/library/dataclasses.html#module-contents "Link to this heading")
+## Module contents
 
-<dl><dt>@dataclasses.dataclass(***, *init=True*, *repr=True*, *eq=True*, *order=False*, *unsafe_hash=False*, *frozen=False*, *match_args=True*, *kw_only=False*, *slots=False*, *weakref_slot=False*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "Link to this definition")</dt>
+<dl><dt>@dataclasses.dataclass(***, *init=True*, *repr=True*, *eq=True*, *order=False*, *unsafe_hash=False*, *frozen=False*, *match_args=True*, *kw_only=False*, *slots=False*, *weakref_slot=False*)</dt>
 <dd>
 
 This function is a [decorator](https://docs.python.org/3/glossary.html#term-decorator) that is used to add generated [special methods](https://docs.python.org/3/glossary.html#term-special-method) to classes, as described below.
@@ -50,20 +48,19 @@ The <code>@dataclass</code> decorator will add various “dunder” methods to t
 
 If <code>@dataclass</code> is used just as a simple decorator with no parameters, it acts as if it has the default values documented in this signature. That is, these three uses of <code>@dataclass</code> are equivalent:
 
-```
+```python
 @dataclass
 class C:
-  ...
+    ...
 
 @dataclass()
 class C:
-  ...
+    ...
 
 @dataclass(init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False,
-  match_args=True, kw_only=False, slots=False, weakref_slot=False)
+           match_args=True, kw_only=False, slots=False, weakref_slot=False)
 class C:
-  ...
-
+    ...
 ```
 
 The parameters to <code>@dataclass</code> are:
@@ -128,36 +125,33 @@ The parameters to <code>@dataclass</code> are:
 
 <code>field</code>s may optionally specify a default value, using normal Python syntax:
 
-```
+```python
 @dataclass
 class C:
-  a: int  # 'a' has no default value
-  b: int = 0  # assign a default value for 'b'
-
+    a: int       # 'a' has no default value
+    b: int = 0   # assign a default value for 'b'
 ```
 
 In this example, both <code>a</code> and <code>b</code> will be included in the added [<code>__init__()</code>](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") method, which will be defined as:
 
-```
+```python
 def __init__(self, a: int, b: int = 0):
-
 ```
 
 [<code>TypeError</code>](https://docs.python.org/3/library/exceptions.html#TypeError "TypeError") will be raised if a field without a default value follows a field with a default value. This is true whether this occurs in a single class, or as a result of class inheritance.
 
-</dd></dl><dl><dt>dataclasses.field(***, *default=MISSING*, *default_factory=MISSING*, *init=True*, *repr=True*, *hash=None*, *compare=True*, *metadata=None*, *kw_only=MISSING*, *doc=None*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.field "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.field(***, *default=MISSING*, *default_factory=MISSING*, *init=True*, *repr=True*, *hash=None*, *compare=True*, *metadata=None*, *kw_only=MISSING*, *doc=None*)</dt>
 <dd>
 
 For common and simple use cases, no other functionality is required. There are, however, some dataclass features that require additional per-field information. To satisfy this need for additional information, you can replace the default field value with a call to the provided <code>field()</code> function. For example:
 
-```
+```python
 @dataclass
 class C:
-  mylist: list[int] = field(default_factory=list)
+    mylist: list[int] = field(default_factory=list)
 
 c = C()
 c.mylist += [1, 2, 3]
-
 ```
 
 As shown above, the [<code>MISSING</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.MISSING "dataclasses.MISSING") value is a sentinel object used to detect if some parameters are provided by the user. This sentinel is used because <code>None</code> is a valid value for some parameters with a distinct meaning. No code should directly use the <code>MISSING</code> value.
@@ -185,19 +179,18 @@ The parameters to <code>field()</code> are:
 
 If the default value of a field is specified by a call to <code>field()</code>, then the class attribute for this field will be replaced by the specified *default* value. If *default* is not provided, then the class attribute will be deleted. The intent is that after the [<code>@dataclass</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") decorator runs, the class attributes will all contain the default values for the fields, just as if the default value itself were specified. For example, after:
 
-```
+```python
 @dataclass
 class C:
-  x: int
-  y: int = field(repr=False)
-  z: int = field(repr=False, default=10)
-  t: int = 20
-
+    x: int
+    y: int = field(repr=False)
+    z: int = field(repr=False, default=10)
+    t: int = 20
 ```
 
 The class attribute <code>C.z</code> will be <code>10</code>, the class attribute <code>C.t</code> will be <code>20</code>, and the class attributes <code>C.x</code> and <code>C.y</code> will not be set.
 
-</dd></dl><dl><dt>*class*dataclasses.Field [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.Field "Link to this definition")</dt>
+</dd></dl><dl><dt>*class*dataclasses.Field</dt>
 <dd>
 
 <code>Field</code> objects describe each defined field. These objects are created internally, and are returned by the [<code>fields()</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.fields "dataclasses.fields") module-level method (see below). Users should never instantiate a <code>Field</code> object directly. Its documented attributes are:
@@ -208,73 +201,69 @@ The class attribute <code>C.z</code> will be <code>10</code>, the class attribut
 
 Other attributes may exist, but they are private and must not be inspected or relied on.
 
-</dd></dl><dl><dt>*class*dataclasses.InitVar [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar "Link to this definition")</dt>
+</dd></dl><dl><dt>*class*dataclasses.InitVar</dt>
 <dd>
 
 <code>InitVar[T]</code> type annotations describe variables that are [init-only](https://docs.python.org/3/library/dataclasses.html#dataclasses-init-only-variables). Fields annotated with <code>InitVar</code> are considered pseudo-fields, and thus are neither returned by the [<code>fields()</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.fields "dataclasses.fields") function nor used in any way except adding them as parameters to [<code>__init__()</code>](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") and an optional [<code>__post_init__()</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.__post_init__ "dataclasses.__post_init__").
 
-</dd></dl><dl><dt>dataclasses.fields(*class_or_instance*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.fields "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.fields(*class_or_instance*)</dt>
 <dd>
 
 Returns a tuple of [<code>Field</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.Field "dataclasses.Field") objects that define the fields for this dataclass. Accepts either a dataclass, or an instance of a dataclass. Raises [<code>TypeError</code>](https://docs.python.org/3/library/exceptions.html#TypeError "TypeError") if not passed a dataclass or instance of one. Does not return pseudo-fields which are <code>ClassVar</code> or <code>InitVar</code>.
 
-</dd></dl><dl><dt>dataclasses.asdict(*obj*, ***, *dict_factory=dict*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.asdict "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.asdict(*obj*, ***, *dict_factory=dict*)</dt>
 <dd>
 
 Converts the dataclass *obj* to a dict (by using the factory function *dict\_factory*). Each dataclass is converted to a dict of its fields, as <code>name: value</code> pairs. dataclasses, dicts, lists, and tuples are recursed into. Other objects are copied with [<code>copy.deepcopy()</code>](https://docs.python.org/3/library/copy.html#copy.deepcopy "copy.deepcopy").
 
 Example of using <code>asdict()</code> on nested dataclasses:
 
-```
+```python
 @dataclass
 class Point:
-  x: int
-  y: int
+     x: int
+     y: int
 
 @dataclass
 class C:
-  mylist: list[Point]
+     mylist: list[Point]
 
 p = Point(10, 20)
 assert asdict(p) == {'x': 10, 'y': 20}
 
 c = C([Point(0, 0), Point(10, 4)])
 assert asdict(c) == {'mylist': [{'x': 0, 'y': 0}, {'x': 10, 'y': 4}]}
-
 ```
 
 To create a shallow copy, the following workaround may be used:
 
-```
+```python
 {field.name: getattr(obj, field.name) for field in fields(obj)}
-
 ```
 
 <code>asdict()</code> raises [<code>TypeError</code>](https://docs.python.org/3/library/exceptions.html#TypeError "TypeError") if *obj* is not a dataclass instance.
 
-</dd></dl><dl><dt>dataclasses.astuple(*obj*, ***, *tuple_factory=tuple*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.astuple "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.astuple(*obj*, ***, *tuple_factory=tuple*)</dt>
 <dd>
 
 Converts the dataclass *obj* to a tuple (by using the factory function *tuple\_factory*). Each dataclass is converted to a tuple of its field values. dataclasses, dicts, lists, and tuples are recursed into. Other objects are copied with [<code>copy.deepcopy()</code>](https://docs.python.org/3/library/copy.html#copy.deepcopy "copy.deepcopy").
 
 Continuing from the previous example:
 
-```
+```python
 assert astuple(p) == (10, 20)
 assert astuple(c) == ([(0, 0), (10, 4)],)
-
 ```
 
 To create a shallow copy, the following workaround may be used:
 
-```
+```python
 tuple(getattr(obj, field.name) for field in dataclasses.fields(obj))
-
 ```
 
 <code>astuple()</code> raises [<code>TypeError</code>](https://docs.python.org/3/library/exceptions.html#TypeError "TypeError") if *obj* is not a dataclass instance.
 
-</dd></dl><dl><dt>dataclasses.make_dataclass(*cls_name*, *fields*, ***, *bases=()*, *namespace=None*, *init=True*, *repr=True*, *eq=True*, *order=False*, *unsafe_hash=False*, *frozen=False*, *match_args=True*, *kw_only=False*, *slots=False*, *weakref_slot=False*, *module=None*, *decorator=dataclass*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.make_dataclass "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.make_dataclass(*cls_name*, *fields*, ***, *bases=()*, *namespace=None*, *init=True*, *repr=True*, *eq=True*, *order=False*, *unsafe_hash=False*, *frozen=False*, *match_args=True*, *kw_only=False*, *slots=False*, *weakref_slot=False*, *module=None*, *decorator=dataclass*)</dt>
 <dd>
 
 Creates a new dataclass with name *cls\_name*, fields as defined in *fields*, base classes as given in *bases*, and initialized with a namespace as given in *namespace*. *fields* is an iterable whose elements are each either <code>name</code>, <code>(name, type)</code>, or <code>(name, type, Field)</code>. If just <code>name</code> is supplied, [<code>typing.Any</code>](https://docs.python.org/3/library/typing.html#typing.Any "typing.Any") is used for <code>type</code>. The values of *init*, *repr*, *eq*, *order*, *unsafe\_hash*, *frozen*, *match\_args*, *kw\_only*, *slots*, and *weakref\_slot* have the same meaning as they do in [<code>@dataclass</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass").
@@ -285,32 +274,30 @@ The *decorator* parameter is a callable that will be used to create the dataclas
 
 This function is not strictly required, because any Python mechanism for creating a new class with [<code>__annotations__</code>](https://docs.python.org/3/reference/datamodel.html#object.__annotations__ "object.__annotations__") can then apply the [<code>@dataclass</code>](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") function to convert that class to a dataclass. This function is provided as a convenience. For example:
 
-```
+```python
 C = make_dataclass('C',
-  [('x', int),
-  'y',
-  ('z', int, field(default=5))],
-  namespace={'add_one': lambda self: self.x + 1})
-
+                   [('x', int),
+                     'y',
+                    ('z', int, field(default=5))],
+                   namespace={'add_one': lambda self: self.x + 1})
 ```
 
 Is equivalent to:
 
-```
+```python
 @dataclass
 class C:
-  x: int
-  y: 'typing.Any'
-  z: int = 5
+    x: int
+    y: 'typing.Any'
+    z: int = 5
 
-  def add_one(self):
-  return self.x + 1
-
+    def add_one(self):
+        return self.x + 1
 ```
 
 Added in version 3.14: Added the *decorator* parameter.
 
-</dd></dl><dl><dt>dataclasses.replace(*obj*, */*, ***changes*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.replace "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.replace(*obj*, */*, ***changes*)</dt>
 <dd>
 
 Creates a new object of the same type as *obj*, replacing fields with values from *changes*. If *obj* is not a Data Class, raises [<code>TypeError</code>](https://docs.python.org/3/library/exceptions.html#TypeError "TypeError"). If keys in *changes* are not field names of the given dataclass, raises <code>TypeError</code>.
@@ -325,209 +312,199 @@ Be forewarned about how <code>init=False</code> fields work during a call to <co
 
 Dataclass instances are also supported by generic function [<code>copy.replace()</code>](https://docs.python.org/3/library/copy.html#copy.replace "copy.replace").
 
-</dd></dl><dl><dt>dataclasses.is_dataclass(*obj*) [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.is_dataclass "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.is_dataclass(*obj*)</dt>
 <dd>
 
 Return <code>True</code> if its parameter is a dataclass (including subclasses of a dataclass, but not including [generic aliases](https://docs.python.org/3/library/stdtypes.html#types-genericalias)) or an instance of one, otherwise return <code>False</code>.
 
 If you need to know if a class is an instance of a dataclass (and not a dataclass itself), then add a further check for <code>not isinstance(obj, type)</code>:
 
-```
+```python
 def is_dataclass_instance(obj):
-  return is_dataclass(obj) and not isinstance(obj, type)
-
+    return is_dataclass(obj) and not isinstance(obj, type)
 ```
 
-</dd></dl><dl><dt>dataclasses.MISSING [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.MISSING "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.MISSING</dt>
 <dd>
 
 A sentinel value signifying a missing default or default\_factory.
 
-</dd></dl><dl><dt>dataclasses.KW_ONLY [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.KW_ONLY "Link to this definition")</dt>
+</dd></dl><dl><dt>dataclasses.KW_ONLY</dt>
 <dd>
 
 A sentinel value used as a type annotation. Any fields after a pseudo-field with the type of <code>KW_ONLY</code> are marked as keyword-only fields. Note that a pseudo-field of type <code>KW_ONLY</code> is otherwise completely ignored. This includes the name of such a field. By convention, a name of <code>_</code> is used for a <code>KW_ONLY</code> field. Keyword-only fields signify [<code>__init__()</code>](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") parameters that must be specified as keywords when the class is instantiated.
 
 In this example, the fields <code>y</code> and <code>z</code> will be marked as keyword-only fields:
 
-```
+```python
 @dataclass
 class Point:
-  x: float
-  _: KW_ONLY
-  y: float
-  z: float
+    x: float
+    _: KW_ONLY
+    y: float
+    z: float
 
 p = Point(0, y=1.5, z=2.0)
-
 ```
 
 In a single dataclass, it is an error to specify more than one field whose type is <code>KW_ONLY</code>.
 
 Added in version 3.10.
 
-</dd></dl><dl><dt>*exception*dataclasses.FrozenInstanceError [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.FrozenInstanceError "Link to this definition")</dt>
+</dd></dl><dl><dt>*exception*dataclasses.FrozenInstanceError</dt>
 <dd>
 
 Raised when an implicitly defined [<code>__setattr__()</code>](https://docs.python.org/3/reference/datamodel.html#object.__setattr__ "object.__setattr__") or [<code>__delattr__()</code>](https://docs.python.org/3/reference/datamodel.html#object.__delattr__ "object.__delattr__") is called on a dataclass which was defined with <code>frozen=True</code>. It is a subclass of [<code>AttributeError</code>](https://docs.python.org/3/library/exceptions.html#AttributeError "AttributeError").
 
 </dd></dl>
 
-## Post-init processing [¶](https://docs.python.org/3/library/dataclasses.html#post-init-processing "Link to this heading")
+## Post-init processing
 
-<dl><dt>dataclasses.__post_init__() [¶](https://docs.python.org/3/library/dataclasses.html#dataclasses.__post_init__ "Link to this definition")</dt>
+<dl><dt>dataclasses.__post_init__()</dt>
 <dd>
 
 When defined on the class, it will be called by the generated [<code>__init__()</code>](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__"), normally as <code>self.__post_init__()</code>. However, if any <code>InitVar</code> fields are defined, they will also be passed to <code>__post_init__()</code> in the order they were defined in the class. If no <code>__init__()</code> method is generated, then <code>__post_init__()</code> will not automatically be called.
 
 Among other uses, this allows for initializing field values that depend on one or more other fields. For example:
 
-```
+```python
 @dataclass
 class C:
-  a: float
-  b: float
-  c: float = field(init=False)
+    a: float
+    b: float
+    c: float = field(init=False)
 
-  def __post_init__(self):
-  self.c = self.a + self.b
-
+    def __post_init__(self):
+        self.c = self.a + self.b
 ```
 
 </dd></dl>
 
 The [`__init__()`](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") method generated by [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") does not call base class `__init__()` methods. If the base class has an `__init__()` method that has to be called, it is common to call this method in a [`__post_init__()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.__post_init__ "dataclasses.__post_init__") method:
 
-```
+```python
 class Rectangle:
-  def __init__(self, height, width):
-  self.height = height
-  self.width = width
+    def __init__(self, height, width):
+        self.height = height
+        self.width = width
 
 @dataclass
 class Square(Rectangle):
-  side: float
+    side: float
 
-  def __post_init__(self):
-  super().__init__(self.side, self.side)
-
+    def __post_init__(self):
+        super().__init__(self.side, self.side)
 ```
 
 Note, however, that in general the dataclass-generated `__init__()` methods don’t need to be called, since the derived dataclass will take care of initializing all fields of any base class that is a dataclass itself.
 
 See the section below on init-only variables for ways to pass parameters to `__post_init__()`. Also see the warning about how [`replace()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.replace "dataclasses.replace") handles `init=False` fields.
 
-## Class variables [¶](https://docs.python.org/3/library/dataclasses.html#class-variables "Link to this heading")
+## Class variables
 
 One of the few places where [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") actually inspects the type of a field is to determine if a field is a class variable as defined in [**PEP 526**](https://peps.python.org/pep-0526/). It does this by checking if the type of the field is [`typing.ClassVar`](https://docs.python.org/3/library/typing.html#typing.ClassVar "typing.ClassVar"). If a field is a `ClassVar`, it is excluded from consideration as a field and is ignored by the dataclass mechanisms. Such `ClassVar` pseudo-fields are not returned by the module-level [`fields()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.fields "dataclasses.fields") function.
 
-## Init-only variables [¶](https://docs.python.org/3/library/dataclasses.html#init-only-variables "Link to this heading")
+## Init-only variables
 
 Another place where [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") inspects a type annotation is to determine if a field is an init-only variable. It does this by seeing if the type of a field is of type [`InitVar`](https://docs.python.org/3/library/dataclasses.html#dataclasses.InitVar "dataclasses.InitVar"). If a field is an `InitVar`, it is considered a pseudo-field called an init-only field. As it is not a true field, it is not returned by the module-level [`fields()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.fields "dataclasses.fields") function. Init-only fields are added as parameters to the generated [`__init__()`](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") method, and are passed to the optional [`__post_init__()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.__post_init__ "dataclasses.__post_init__") method. They are not otherwise used by dataclasses.
 
 For example, suppose a field will be initialized from a database, if a value is not provided when creating the class:
 
-```
+```python
 @dataclass
 class C:
-  i: int
-  j: int | None = None
-  database: InitVar[DatabaseType | None] = None
+    i: int
+    j: int | None = None
+    database: InitVar[DatabaseType | None] = None
 
-  def __post_init__(self, database):
-  if self.j is None and database is not None:
-  self.j = database.lookup('j')
+    def __post_init__(self, database):
+        if self.j is None and database is not None:
+            self.j = database.lookup('j')
 
 c = C(10, database=my_database)
-
 ```
 
 In this case, [`fields()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.fields "dataclasses.fields") will return [`Field`](https://docs.python.org/3/library/dataclasses.html#dataclasses.Field "dataclasses.Field") objects for `i` and `j`, but not for `database`.
 
-## Frozen instances [¶](https://docs.python.org/3/library/dataclasses.html#frozen-instances "Link to this heading")
+## Frozen instances
 
 It is not possible to create truly immutable Python objects. However, by passing `frozen=True` to the [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") decorator you can emulate immutability. In that case, dataclasses will add [`__setattr__()`](https://docs.python.org/3/reference/datamodel.html#object.__setattr__ "object.__setattr__") and [`__delattr__()`](https://docs.python.org/3/reference/datamodel.html#object.__delattr__ "object.__delattr__") methods to the class. These methods will raise a [`FrozenInstanceError`](https://docs.python.org/3/library/dataclasses.html#dataclasses.FrozenInstanceError "dataclasses.FrozenInstanceError") when invoked.
 
 There is a tiny performance penalty when using `frozen=True`: [`__init__()`](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") cannot use simple assignment to initialize fields, and must use `object.__setattr__()`.
 
-## Inheritance [¶](https://docs.python.org/3/library/dataclasses.html#inheritance "Link to this heading")
+## Inheritance
 
 When the dataclass is being created by the [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") decorator, it looks through all of the class’s base classes in reverse MRO (that is, starting at [`object`](https://docs.python.org/3/library/functions.html#object "object")) and, for each dataclass that it finds, adds the fields from that base class to an ordered mapping of fields. After all of the base class fields are added, it adds its own fields to the ordered mapping. All of the generated methods will use this combined, calculated ordered mapping of fields. Because the fields are in insertion order, derived classes override base classes. An example:
 
-```
+```python
 @dataclass
 class Base:
-  x: Any = 15.0
-  y: int = 0
+    x: Any = 15.0
+    y: int = 0
 
 @dataclass
 class C(Base):
-  z: int = 10
-  x: int = 15
-
+    z: int = 10
+    x: int = 15
 ```
 
 The final list of fields is, in order, `x`, `y`, `z`. The final type of `x` is [`int`](https://docs.python.org/3/library/functions.html#int "int"), as specified in class `C`.
 
 The generated [`__init__()`](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") method for `C` will look like:
 
-```
+```python
 def __init__(self, x: int = 15, y: int = 0, z: int = 10):
-
 ```
 
-## Re-ordering of keyword-only parameters in `__init__()`[¶](https://docs.python.org/3/library/dataclasses.html#re-ordering-of-keyword-only-parameters-in-init "Link to this heading")
+## Re-ordering of keyword-only parameters in `__init__()`
 
 After the parameters needed for [`__init__()`](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") are computed, any keyword-only parameters are moved to come after all regular (non-keyword-only) parameters. This is a requirement of how keyword-only parameters are implemented in Python: they must come after non-keyword-only parameters.
 
 In this example, `Base.y`, `Base.w`, and `D.t` are keyword-only fields, and `Base.x` and `D.z` are regular fields:
 
-```
+```python
 @dataclass
 class Base:
-  x: Any = 15.0
-  _: KW_ONLY
-  y: int = 0
-  w: int = 1
+    x: Any = 15.0
+    _: KW_ONLY
+    y: int = 0
+    w: int = 1
 
 @dataclass
 class D(Base):
-  z: int = 10
-  t: int = field(kw_only=True, default=0)
-
+    z: int = 10
+    t: int = field(kw_only=True, default=0)
 ```
 
 The generated `__init__()` method for `D` will look like:
 
-```
+```python
 def __init__(self, x: Any = 15.0, z: int = 10, *, y: int = 0, w: int = 1, t: int = 0):
-
 ```
 
 Note that the parameters have been re-ordered from how they appear in the list of fields: parameters derived from regular fields are followed by parameters derived from keyword-only fields.
 
 The relative ordering of keyword-only parameters is maintained in the re-ordered `__init__()` parameter list.
 
-## Default factory functions [¶](https://docs.python.org/3/library/dataclasses.html#default-factory-functions "Link to this heading")
+## Default factory functions
 
 If a [`field()`](https://docs.python.org/3/library/dataclasses.html#dataclasses.field "dataclasses.field") specifies a *default\_factory*, it is called with zero arguments when a default value for the field is needed. For example, to create a new instance of a list, use:
 
-```
+```python
 mylist: list = field(default_factory=list)
-
 ```
 
 If a field is excluded from [`__init__()`](https://docs.python.org/3/reference/datamodel.html#object.__init__ "object.__init__") (using `init=False`) and the field also specifies *default\_factory*, then the default factory function will always be called from the generated `__init__()` function. This happens because there is no other way to give the field an initial value.
 
-## Mutable default values [¶](https://docs.python.org/3/library/dataclasses.html#mutable-default-values "Link to this heading")
+## Mutable default values
 
 Python stores default member variable values in class attributes. Consider this example, not using dataclasses:
 
-```
+```python
 class C:
-  x = []
-  def add(self, element):
-  self.x.append(element)
+    x = []
+    def add(self, element):
+        self.x.append(element)
 
 o1 = C()
 o2 = C()
@@ -535,52 +512,48 @@ o1.add(1)
 o2.add(2)
 assert o1.x == [1, 2]
 assert o1.x is o2.x
-
 ```
 
 Note that the two instances of class `C` share the same class variable `x`, as expected.
 
 Using dataclasses, *if* this code was valid:
 
-```
+```python
 @dataclass
 class D:
-  x: list = []  # This code raises ValueError
-  def add(self, element):
-  self.x.append(element)
-
+    x: list = []      # This code raises ValueError
+    def add(self, element):
+        self.x.append(element)
 ```
 
 it would generate code similar to:
 
-```
+```python
 class D:
-  x = []
-  def __init__(self, x=x):
-  self.x = x
-  def add(self, element):
-  self.x.append(element)
+    x = []
+    def __init__(self, x=x):
+        self.x = x
+    def add(self, element):
+        self.x.append(element)
 
 assert D().x is D().x
-
 ```
 
 This has the same issue as the original example using class `C`. That is, two instances of class `D` that do not specify a value for `x` when creating a class instance will share the same copy of `x`. Because dataclasses just use normal Python class creation they also share this behavior. There is no general way for Data Classes to detect this condition. Instead, the [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") decorator will raise a [`ValueError`](https://docs.python.org/3/library/exceptions.html#ValueError "ValueError") if it detects an unhashable default parameter. The assumption is that if a value is unhashable, it is mutable. This is a partial solution, but it does protect against many common errors.
 
 Using default factory functions is a way to create new instances of mutable types as default values for fields:
 
-```
+```python
 @dataclass
 class D:
-  x: list = field(default_factory=list)
+    x: list = field(default_factory=list)
 
 assert D().x is not D().x
-
 ```
 
 Changed in version 3.11: Instead of looking for and disallowing objects of type [`list`](https://docs.python.org/3/library/stdtypes.html#list "list"), [`dict`](https://docs.python.org/3/library/stdtypes.html#dict "dict"), or [`set`](https://docs.python.org/3/library/stdtypes.html#set "set"), unhashable objects are now not allowed as default values. Unhashability is used to approximate mutability.
 
-## Descriptor-typed fields [¶](https://docs.python.org/3/library/dataclasses.html#descriptor-typed-fields "Link to this heading")
+## Descriptor-typed fields
 
 Fields that are assigned [descriptor objects](https://docs.python.org/3/reference/datamodel.html#descriptors) as their default value have the following special behaviors:
 
@@ -588,32 +561,31 @@ Fields that are assigned [descriptor objects](https://docs.python.org/3/referenc
 - Similarly, when getting or setting the field, the descriptor’s [`__get__()`](https://docs.python.org/3/reference/datamodel.html#object.__get__ "object.__get__") or `__set__()` method is called rather than returning or overwriting the descriptor object.
 - To determine whether a field contains a default value, [`@dataclass`](https://docs.python.org/3/library/dataclasses.html#dataclasses.dataclass "dataclasses.dataclass") will call the descriptor’s `__get__()` method using its class access form: `descriptor.__get__(obj=None, type=cls)`. If the descriptor returns a value in this case, it will be used as the field’s default. On the other hand, if the descriptor raises [`AttributeError`](https://docs.python.org/3/library/exceptions.html#AttributeError "AttributeError") in this situation, no default value will be provided for the field.
 
-```
+```python
 class IntConversionDescriptor:
-  def __init__(self, *, default):
-  self._default = default
+    def __init__(self, *, default):
+        self._default = default
 
-  def __set_name__(self, owner, name):
-  self._name = "_" + name
+    def __set_name__(self, owner, name):
+        self._name = "_" + name
 
-  def __get__(self, obj, type):
-  if obj is None:
-  return self._default
+    def __get__(self, obj, type):
+        if obj is None:
+            return self._default
 
-  return getattr(obj, self._name, self._default)
+        return getattr(obj, self._name, self._default)
 
-  def __set__(self, obj, value):
-  setattr(obj, self._name, int(value))
+    def __set__(self, obj, value):
+        setattr(obj, self._name, int(value))
 
 @dataclass
 class InventoryItem:
-  quantity_on_hand: IntConversionDescriptor = IntConversionDescriptor(default=100)
+    quantity_on_hand: IntConversionDescriptor = IntConversionDescriptor(default=100)
 
 i = InventoryItem()
-print(i.quantity_on_hand)  # 100
-i.quantity_on_hand = 2.5  # calls __set__ with 2.5
-print(i.quantity_on_hand)  # 2
-
+print(i.quantity_on_hand)   # 100
+i.quantity_on_hand = 2.5    # calls __set__ with 2.5
+print(i.quantity_on_hand)   # 2
 ```
 
 Note that if a field is annotated with a descriptor type, but is not assigned a descriptor object as its default value, the field will act like a normal field.
