@@ -8,16 +8,48 @@ import type { ResearchOptions } from '../types.js';
  */
 export const WEB_RESEARCH_TOOL_NAME = 'webvector_research';
 
-export const WEB_RESEARCH_DESCRIPTION =
-  'Research a question on the live web. Runs a web search, reads the FULL content of the top pages (HTML/PDF), embeds them, and returns only the passages most relevant to the query, each with its source URL, title and relevance score. Prefer this over plain web search when you need facts, quotes, numbers, code, or up-to-date details from actual page content. Returns cited passages (not whole pages). Pass related_queries to widen coverage and session_id to reuse pages already read in this conversation.';
+/**
+ * Tool descriptions follow the "Best for / Not for / Returns / Common mistakes / Example" pattern
+ * with the key sentence first, and each stays under 2 KB (Claude Code truncates there). They are
+ * static: no tier/version text (that lives in the server instructions and webvector_status), so
+ * tools/list is deterministic and prompt-cache friendly. The untrusted-content notice is in the
+ * results themselves, not here.
+ */
+export const WEB_RESEARCH_DESCRIPTION = [
+  'Research a question on the live web: one call runs a search, reads the FULL content of the top pages (HTML/PDF), and returns only the passages that answer the query, each cited as [n] Title — url.',
+  'Best for: facts, quotes, numbers, code, API/CLI details, comparisons, "what changed in", anything where a snippet is not enough or knowledge may be stale.',
+  'Not for: reading one known URL (use webvector_fetch); just listing result links (use webvector_search); questions answerable without the web.',
+  'Returns: ranked passages ([n] Title — url + verbatim text), a Sources list, suggested follow-up queries; trimmed to max_tokens with an explicit "N omitted" footer. Zero passages is not an error — the result says what to try next.',
+  'Common mistakes: long conversational queries (use 3–8 specific keywords incl. names/versions/years); calling repeatedly with tiny variations instead of one call with 2–3 related_queries; passing a URL as the query; hand-tuning top_k/max_pages when depth: "thorough" does it in one word.',
+  'Example: {"query": "Node 24 AbortSignal.any behaviour", "related_queries": ["AbortSignal.any example", "AbortSignal.any memory leak fix"], "depth": "balanced"}.',
+].join(' ');
 
 export const WEB_FETCH_TOOL_NAME = 'webvector_fetch';
-export const WEB_FETCH_DESCRIPTION =
-  'Fetch a single URL and return its main content as Markdown (HTML, PDF and text supported). Use when you already know the exact page you need — typically a URL the user gave you or one returned by webvector_search/webvector_research. Optionally pass a query to return only the most relevant passages instead of the whole page.';
+export const WEB_FETCH_DESCRIPTION = [
+  'Fetch one URL and return its main content as clean Markdown (HTML, PDF, plain text), or — with query — only the passages of that page relevant to the query.',
+  'Best for: a URL the user gave you, a Source from webvector_research/webvector_search you want in full, docs/changelogs/README pages, PDFs.',
+  'Not for: discovering pages (use webvector_search) or answering open questions (use webvector_research); pages that need login or JavaScript rendering.',
+  'Returns: "# Title", the URL, then Markdown; long pages are cut at max_length (default 20000 chars) on a paragraph boundary with "Content truncated at char A of B — call again with start_index=A"; include_links appends a deduped link list; selector/exclude_selectors keep or drop parts of the DOM (CSS).',
+  'Common mistakes: fetching every search result instead of asking webvector_research once; forgetting start_index for the rest of a long page; passing max_length far above what you will read.',
+  'Example: {"url": "https://nodejs.org/api/globals.html", "query": "AbortSignal.any"} or {"url": "https://example.com/spec", "start_index": 20000}.',
+].join(' ');
 
 export const WEB_SEARCH_TOOL_NAME = 'webvector_search';
-export const WEB_SEARCH_DESCRIPTION =
-  'Run a web search and return result URLs, titles and snippets (no page fetching). Cheaper than webvector_research; use it to discover pages or when snippets are enough.';
+export const WEB_SEARCH_DESCRIPTION = [
+  'Run a web search and return result URLs, titles and snippets only — no page content is fetched.',
+  'Best for: checking what exists (which sites/pages cover a topic), finding an official URL to pass to webvector_fetch, quick freshness checks, or inspecting the SERP when webvector_research returned no passages.',
+  'Not for: answering questions from content — snippets are ~150 characters and often wrong; use webvector_research for that.',
+  'Returns: numbered results "rank. Title / url / snippet" plus a one-line hint to read a result with webvector_fetch.',
+  'Common mistakes: quoting snippets as facts; searching and then fetching each result by hand instead of one webvector_research call; domain filters with schemes or paths (use bare domains like "docs.python.org").',
+  'Example: {"query": "MCP specification 2026-07-28 changelog", "count": 5, "freshness": "year"}.',
+].join(' ');
+
+export const WEBVECTOR_STATUS_TOOL_NAME = 'webvector_status';
+export const WEBVECTOR_STATUS_DESCRIPTION =
+  'Show the resolved WebVector configuration (secrets redacted), the active search/embedding providers and tier (lexical or semantic), and session counts. Best for debugging "why did research return nothing" or checking which providers/keys are active. Not for research. Takes no arguments.';
+
+/** Claude Code truncates tool descriptions at 2 KB; keep every description under this. */
+export const MAX_DESCRIPTION_BYTES = 2048;
 
 export type WebVectorToolName = 'webvector_research' | 'webvector_fetch' | 'webvector_search';
 /** Pre-0.2 names, still accepted by the runners and exposable as MCP aliases (`--legacy-tool-names`). */

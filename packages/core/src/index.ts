@@ -65,6 +65,7 @@ export type {
 export {
   canonicalToolName,
   LEGACY_TOOL_NAMES,
+  MAX_DESCRIPTION_BYTES,
   TOOL_NAMES,
   toResearchOptions,
   WEB_FETCH_DESCRIPTION,
@@ -73,6 +74,8 @@ export {
   WEB_RESEARCH_TOOL_NAME,
   WEB_SEARCH_DESCRIPTION,
   WEB_SEARCH_TOOL_NAME,
+  WEBVECTOR_STATUS_DESCRIPTION,
+  WEBVECTOR_STATUS_TOOL_NAME,
   webFetchInputSchema,
   webFetchToolDefinition,
   webResearchInputSchema,

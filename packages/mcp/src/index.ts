@@ -28,6 +28,8 @@ import {
   WEB_RESEARCH_TOOL_NAME,
   WEB_SEARCH_DESCRIPTION,
   WEB_SEARCH_TOOL_NAME,
+  WEBVECTOR_STATUS_DESCRIPTION,
+  WEBVECTOR_STATUS_TOOL_NAME,
   WebVector,
   type WebVectorConfig,
   WebVectorError,
@@ -109,7 +111,7 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
         WEB_RESEARCH_TOOL_NAME,
         WEB_FETCH_TOOL_NAME,
         WEB_SEARCH_TOOL_NAME,
-        'webvector_status',
+        WEBVECTOR_STATUS_TOOL_NAME,
       ]
     ).map((t) => LEGACY_TOOL_NAMES[t] ?? t),
   );
@@ -310,13 +312,12 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
     );
   }
 
-  if (tools.has('webvector_status')) {
+  if (tools.has(WEBVECTOR_STATUS_TOOL_NAME)) {
     server.registerTool(
-      'webvector_status',
+      WEBVECTOR_STATUS_TOOL_NAME,
       {
         title: 'WebVector status',
-        description:
-          'Show the resolved WebVector configuration (secrets redacted), active providers, and research sessions. Useful for debugging.',
+        description: WEBVECTOR_STATUS_DESCRIPTION,
         inputSchema: z.object({}),
         annotations: {
           readOnlyHint: true,
