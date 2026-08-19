@@ -12,7 +12,9 @@
       "!**/node_modules",
       "!**/.webvector-cache",
       "!**/test/fixtures",
-      "!scratch"
+      "!scratch",
+      "!packages/core/schema",
+      "!docs/pricing.json"
     ]
   },
   "formatter": {

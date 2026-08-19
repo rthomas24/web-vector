@@ -5,6 +5,7 @@
  * threading a parameter through every stage.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { OtelTracer } from '../telemetry/otel.js';
 import type {
   EmbeddingProvider,
   EmbedOptions,
@@ -53,8 +54,11 @@ export function approxTokenCount(texts: string[]): number {
   return Math.ceil(chars / 4);
 }
 
-/** Wrap an embedder so every embed() request is attributed to the ambient usage meter. */
-export function meteredEmbedder(inner: EmbeddingProvider): EmbeddingProvider {
+/**
+ * Wrap an embedder so every embed() request is attributed to the ambient usage meter (and, when
+ * tracing is on, recorded as an `embeddings <model>` span with GenAI attributes).
+ */
+export function meteredEmbedder(inner: EmbeddingProvider, tracer?: OtelTracer): EmbeddingProvider {
   return {
     id: inner.id,
     model: inner.model,
@@ -63,19 +67,33 @@ export function meteredEmbedder(inner: EmbeddingProvider): EmbeddingProvider {
     limits: () => inner.limits(),
     init: inner.init ? () => inner.init!() : undefined,
     async embed(texts: string[], opts?: EmbedOptions) {
+      const tokens = approxTokenCount(texts);
       const m = currentUsage();
       if (m && texts.length) {
         m.usage.embed.requests++;
         m.usage.embed.texts += texts.length;
-        m.usage.embed.tokens = (m.usage.embed.tokens ?? 0) + approxTokenCount(texts);
+        m.usage.embed.tokens = (m.usage.embed.tokens ?? 0) + tokens;
       }
-      return inner.embed(texts, opts);
+      if (!tracer?.enabled) return inner.embed(texts, opts);
+      return tracer.span(
+        `embeddings ${inner.model}`,
+        {
+          'gen_ai.operation.name': 'embeddings',
+          'gen_ai.provider.name': inner.id,
+          'gen_ai.request.model': inner.model,
+          'gen_ai.usage.input_tokens': tokens,
+          'webvector.embed.texts': texts.length,
+          'webvector.embed.kind': opts?.kind ?? 'document',
+        },
+        () => inner.embed(texts, opts),
+        'client',
+      );
     },
   };
 }
 
-/** Wrap a reranker so calls are attributed to the ambient usage meter. */
-export function meteredReranker(inner: Reranker): Reranker {
+/** Wrap a reranker so calls are attributed to the ambient usage meter (and traced). */
+export function meteredReranker(inner: Reranker, tracer?: OtelTracer): Reranker {
   return {
     id: inner.id,
     async rerank(
@@ -89,7 +107,18 @@ export function meteredReranker(inner: Reranker): Reranker {
         m.usage.rerank.requests++;
         m.usage.rerank.documents += chunks.length;
       }
-      return inner.rerank(query, chunks, opts);
+      if (!tracer?.enabled) return inner.rerank(query, chunks, opts);
+      return tracer.span(
+        `rerank ${inner.id}`,
+        {
+          'gen_ai.operation.name': 'rerank',
+          'gen_ai.provider.name': inner.id,
+          'webvector.rerank.documents': chunks.length,
+          ...(tracer.captureContent ? { 'webvector.query': query } : {}),
+        },
+        () => inner.rerank(query, chunks, opts),
+        'client',
+      );
     },
   };
 }

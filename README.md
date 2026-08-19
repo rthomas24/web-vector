@@ -281,7 +281,7 @@ WebVector fetches URLs chosen by a search engine — i.e. content an attacker ca
 - **Etiquette**: robots.txt honoured (incl. `Crawl-delay`), identifiable User-Agent, per-host minimum interval, `Retry-After` respected.
 - **Parsing without execution**: HTML is parsed with linkedom (no scripts, no sub-resource loading), PDFs with pdf.js in no-eval mode; callers only ever receive Markdown/plain text with control characters stripped.
 - **Secrets**: read from env/config, never logged; redacted in errors, in `webvector config`, and in the MCP `webvector_status` tool. The only files written are the page/embedding cache (`~/.cache/webvector/pages.sqlite`, set `ingestion.cache.dir: false` to keep everything in memory) and, if you choose `store.provider: sqlite`, the vector store (`~/.local/share/webvector/store.sqlite`).
-- **No telemetry, ever.**
+- **No telemetry, ever.** (Opt-in OpenTelemetry *spans* via `telemetry.otel` go only to an SDK *you* register — nothing is bundled or sent by WebVector.)
 - **MCP over HTTP** binds to `127.0.0.1` only, validates `Host`/`Origin` (DNS-rebinding protection), supports a bearer token, and refuses to bind elsewhere without `--allow-remote` **and** a token.
 - **DNS rebinding is closed at connect time**: the SSRF check runs inside the DNS lookup used to open the socket, so the address checked is the address dialled.
 - **DuckDuckGo note**: the keyless provider talks to DuckDuckGo's public HTML endpoints with a browser-like User-Agent (there is no official API). It is rate-limited and fragile by nature; heavy or commercial use should switch to a keyed provider (`brave`, `serper`, `tavily`). Page fetches always use the honest `WebVector/…` User-Agent.

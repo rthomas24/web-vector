@@ -118,8 +118,10 @@ Nothing here sends data anywhere by itself.
 | key | default | env | notes |
 |---|---|---|---|
 | `telemetry.pricing` | `false` | `WEBVECTOR_PRICING` | `true` adds `stats.usage.estimatedCostUsd` from a bundled list-price table (an **estimate**, labelled as such via `pricingNote`); an object overrides entries: `{ embed: { 'openai/text-embedding-3-small': 0.02 }, search: { brave: 5 }, rerank: { cohere: 2 } }` (USD per 1M tokens / per 1 000 calls). Table: `docs/pricing.json` |
-| `telemetry.otel` | `false` | `WEBVECTOR_OTEL` | emit OpenTelemetry spans via `@opentelemetry/api` (optional peer; no-op without an SDK) |
-| `telemetry.captureContent` | `false` | — | include query text / passage excerpts in span attributes |
+| `telemetry.otel` | `false` | `WEBVECTOR_OTEL` | emit OpenTelemetry spans via `@opentelemetry/api` (optional peer: `npm i @opentelemetry/api`); WebVector never registers a provider/exporter, so spans are no-ops until your app sets up an SDK (NodeSDK / NodeTracerProvider with a context manager) |
+| `telemetry.captureContent` | `false` | — | include the query (`webvector.query`) and full URLs (`url.full`) in span attributes; off = counts, hosts and ids only |
+
+Span shape (GenAI semantic conventions, still "Development" upstream): `execute_tool webvector_research` (`gen_ai.operation.name=execute_tool`, `gen_ai.tool.name`) → children `search <provider>`, `fetch <host>` (`server.address`, `webvector.fetch.cache: hit|revalidated|miss`, `error.type`), `embeddings <model>` (`gen_ai.operation.name=embeddings`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` ≈ chars/4), `rerank <provider>`, `retrieval` (`webvector.retrieve.*`). Query embeddings nest under `retrieval`.
 
 ### `stats.usage` and the `usage` event
 

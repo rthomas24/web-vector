@@ -26,6 +26,8 @@ export default defineConfig({
   fixedExtension: false,
   external: [
     '@huggingface/transformers',
+    '@opentelemetry/api',
+    'sqlite-vec',
     '@qdrant/js-client-rest',
     'ai',
     'chromadb',

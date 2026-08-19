@@ -30,6 +30,7 @@ import {
   documentFromProviderContent,
   ingestUrl,
 } from '../ingest/index.js';
+import { hostOf } from '../telemetry/otel.js';
 import type {
   CacheMode,
   Failure,
@@ -291,7 +292,30 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     if (!query) throw new WebVectorError('Query must not be empty.', { code: 'INVALID_CONFIG' });
     const c = await this.ensure();
     const meter = this.newMeter(c);
-    return meter.run(() => this.doResearch(c, meter, query, opts));
+    return c.otel.span(
+      'execute_tool webvector_research',
+      {
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'webvector_research',
+        'gen_ai.tool.type': 'function',
+        'webvector.top_k': opts.topK,
+        'webvector.max_pages': opts.maxPages,
+        'webvector.session_id': opts.sessionId,
+        ...(c.otel.captureContent ? { 'webvector.query': query } : {}),
+      },
+      async (span) => {
+        const res = await meter.run(() => this.doResearch(c, meter, query, opts));
+        span.set({
+          'webvector.passages': res.passages.length,
+          'webvector.sources.ok': res.stats.ingest.ok,
+          'webvector.sources.failed': res.stats.ingest.failed,
+          'webvector.degraded': res.degraded,
+          'webvector.http.requests': res.stats.usage?.http.requests,
+          'webvector.http.cache_hits': res.stats.usage?.http.cacheHits,
+        });
+        return res;
+      },
+    );
   }
 
   private async doResearch(
@@ -332,20 +356,29 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const ts = Date.now();
     progress({ stage: 'search', done: 0, total: 1, message: `Searching: ${query}` });
     this.emit('search:start', { queries: [query, ...related], provider: c.search.id });
-    const searched = await runSearchStage(c, {
-      query,
-      related,
-      maxPages,
-      failures,
-      options: {
-        ...this.defaultSearchOptions(),
-        count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
-        freshness: opts.freshness ?? cfg.search.freshness,
-        domainsAllow: opts.domainsAllow,
-        domainsBlock: opts.domainsBlock,
-        signal,
+    const searched = await c.otel.span(
+      `search ${c.search.id}`,
+      { 'webvector.search.provider': c.search.id, 'webvector.search.queries': 1 + related.length },
+      async (span) => {
+        const out = await runSearchStage(c, {
+          query,
+          related,
+          maxPages,
+          failures,
+          options: {
+            ...this.defaultSearchOptions(),
+            count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
+            freshness: opts.freshness ?? cfg.search.freshness,
+            domainsAllow: opts.domainsAllow,
+            domainsBlock: opts.domainsBlock,
+            signal,
+          },
+        });
+        span.set({ 'webvector.search.results': out.results.length });
+        return out;
       },
-    });
+      'client',
+    );
     const results = searched.results;
     meter.usage.search.calls += searched.attempts.length;
     const searchMs = Date.now() - ts;
@@ -533,17 +566,29 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const hasChunks =
       session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
     if (hasChunks) {
-      const r = await runRetrieveStage(c, cfg.retrieval, {
-        session,
-        queries,
-        relatedQueries: related,
-        searchResults: results,
-        topK,
-        rerank: opts.rerank,
-        signal,
-        warnings,
-        explain: opts.explain,
-      });
+      const r = await c.otel.span(
+        'retrieval',
+        { 'webvector.retrieve.queries': queries.length, 'webvector.retrieve.top_k': topK },
+        async (span) => {
+          const out = await runRetrieveStage(c, cfg.retrieval, {
+            session,
+            queries,
+            relatedQueries: related,
+            searchResults: results,
+            topK,
+            rerank: opts.rerank,
+            signal,
+            warnings,
+            explain: opts.explain,
+          });
+          span.set({
+            'webvector.retrieve.candidates': out.candidates,
+            'webvector.retrieve.passages': out.passages.length,
+            'webvector.retrieve.reranked': out.reranked,
+          });
+          return out;
+        },
+      );
       passages = r.passages;
       candidates = r.candidates;
       reranked = r.reranked;
@@ -644,18 +689,36 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         ms: 0,
       };
     }
-    const outcome = await c.coordinator.ingest(
-      canonicalizeUrl(r.url),
-      () =>
-        ingestUrl(r.url, {
-          fetcher: c.fetcher,
-          parsers: c.parsers,
-          cache: c.pageCache,
-          cachePolicy,
-          logger: this.logger,
-          signal,
-        }),
-      { bypassNegative: cachePolicy?.mode === 'bypass' },
+    const outcome = await c.otel.span(
+      `fetch ${hostOf(r.url)}`,
+      {
+        'server.address': hostOf(r.url),
+        ...(c.otel.captureContent ? { 'url.full': r.url } : {}),
+      },
+      async (span) => {
+        const o = await c.coordinator.ingest(
+          canonicalizeUrl(r.url),
+          () =>
+            ingestUrl(r.url, {
+              fetcher: c.fetcher,
+              parsers: c.parsers,
+              cache: c.pageCache,
+              cachePolicy,
+              logger: this.logger,
+              signal,
+            }),
+          { bypassNegative: cachePolicy?.mode === 'bypass' },
+        );
+        span.set({
+          'webvector.fetch.cache': o.revalidated ? 'revalidated' : o.cached ? 'hit' : 'miss',
+          'webvector.fetch.coalesced': !!o.coalesced,
+          'webvector.fetch.bytes': o.page?.bytes,
+          'webvector.fetch.ok': o.ok,
+          'error.type': o.failure?.code,
+        });
+        return o;
+      },
+      'client',
     );
     this.countHttp(meter, outcome);
     if (!outcome.ok || !outcome.page)

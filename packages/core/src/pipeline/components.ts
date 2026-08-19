@@ -18,6 +18,7 @@ import { probeRuntime } from '../runtime.js';
 import { buildSearchStack, type FallbackSearchProvider } from '../search/index.js';
 import { createVectorStore } from '../stores/index.js';
 import { MemoryVectorStore } from '../stores/memory.js';
+import { OtelTracer } from '../telemetry/otel.js';
 import type {
   ContentParser,
   EmbeddingProvider,
@@ -50,6 +51,8 @@ export interface Components {
   sessions: SessionRegistry;
   /** Lexical index options (shared by registered and ephemeral sessions). */
   bm25Options: BM25Options;
+  /** OpenTelemetry spans (no-op unless telemetry.otel and @opentelemetry/api are present). */
+  otel: OtelTracer;
 }
 
 export function bm25OptionsFrom(b: WebVectorFileConfig['retrieval']['bm25']): BM25Options {
@@ -92,10 +95,14 @@ export async function buildComponents(
     logger,
   });
 
+  const otel = cfg.telemetry.otel
+    ? await OtelTracer.create({ captureContent: cfg.telemetry.captureContent }, logger)
+    : OtelTracer.disabled();
+
   const rawEmbedder = code.embeddings?.instance ?? (await resolveEmbedder(cfg, code, logger));
   await rawEmbedder?.init?.();
   // Metered wrapper: attributes embed() requests to the calling research()/fetch() (stats.usage).
-  const embedder = rawEmbedder ? meteredEmbedder(rawEmbedder) : undefined;
+  const embedder = rawEmbedder ? meteredEmbedder(rawEmbedder, otel) : undefined;
   const dimensions = embedder ? await embedder.dimensions() : 0;
 
   let sharedStore = code.store?.instance;
@@ -154,7 +161,7 @@ export async function buildComponents(
   const expander =
     code.retrieval?.expander ?? (llm ? new LlmExpander(llm) : new HeuristicExpander());
   const rawReranker = code.retrieval?.reranker ?? resolveReranker(cfg, llm, logger);
-  const reranker = rawReranker ? meteredReranker(rawReranker) : undefined;
+  const reranker = rawReranker ? meteredReranker(rawReranker, otel) : undefined;
   const countTokens = await loadTokenCounter();
 
   logger.info(
@@ -175,6 +182,7 @@ export async function buildComponents(
     countTokens,
     sessions,
     bm25Options,
+    otel,
   };
 }
 
