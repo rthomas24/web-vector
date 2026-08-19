@@ -204,6 +204,7 @@ export async function parseResource(
       };
     }
     if (res.contentSignal && !doc.contentSignal) doc.contentSignal = res.contentSignal;
+    if (res.textFragment && !doc.textFragment) doc.textFragment = res.textFragment;
     const page: CachedPage = {
       doc: { ...doc, url: res.url },
       pageHash: sha256(doc.markdown),

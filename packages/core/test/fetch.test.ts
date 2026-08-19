@@ -13,6 +13,7 @@ import {
   parseServedMarkdown,
 } from '../src/ingest/markdown-clean.js';
 import { contentSignalFor, parseContentSignalGroups } from '../src/ingest/robots.js';
+import { canonicalizeUrl, cleanUrl, normalizeUrl } from '../src/util/url.js';
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -482,5 +483,83 @@ describe('content signals', () => {
     // The signal is copied onto the parsed document.
     const out = await parseResource(r, {});
     expect(out.page?.doc.contentSignal?.aiInput).toBe(false);
+  });
+});
+
+// ─── C11 URL hygiene + text-fragment hint ────────────────────────────────────
+
+describe('url hygiene', () => {
+  it('unwraps redirect wrappers, folds AMP/mobile variants, keeps the text fragment', () => {
+    expect(
+      cleanUrl('https://www.google.com/url?q=https://example.com/a%3Fx%3D1&sa=U&ved=abc').url,
+    ).toBe('https://example.com/a?x=1');
+    expect(cleanUrl('https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.com%2Fp&h=AT').url).toBe(
+      'https://example.com/p',
+    );
+    expect(cleanUrl('https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fq&rut=1').url).toBe(
+      'https://example.com/q',
+    );
+    expect(cleanUrl('https://amp.theguardian.com/world/2026/article').url).toBe(
+      'https://theguardian.com/world/2026/article',
+    );
+    expect(cleanUrl('https://www.example.com/news/story/amp/').url).toBe(
+      'https://www.example.com/news/story',
+    );
+    expect(cleanUrl('https://www.example.com/news/story?amp=1&id=7').url).toBe(
+      'https://www.example.com/news/story?id=7',
+    );
+    expect(cleanUrl('https://www.example.com/news/story?outputType=amp').url).toBe(
+      'https://www.example.com/news/story',
+    );
+    expect(cleanUrl('https://www.example.com/news/story.amp.html').url).toBe(
+      'https://www.example.com/news/story.html',
+    );
+    expect(
+      cleanUrl('https://www-example-com.cdn.ampproject.org/c/s/www.example.com/news/story?x=1').url,
+    ).toBe('https://www.example.com/news/story?x=1');
+    expect(cleanUrl('https://en.m.wikipedia.org/wiki/Okapi_BM25').url).toBe(
+      'https://en.wikipedia.org/wiki/Okapi_BM25',
+    );
+    const tf = cleanUrl(
+      'https://example.com/doc#:~:text=reciprocal%20rank%20fusion&text=prefix-,start%20phrase,end%20phrase,-suffix',
+    );
+    expect(tf.url).toBe('https://example.com/doc');
+    expect(tf.textFragment).toBe('reciprocal rank fusion … start phrase … end phrase');
+    expect(tf.rewritten).toBe(false);
+    // untouched URLs
+    expect(cleanUrl('https://amp.dev/documentation/').url).toBe('https://amp.dev/documentation/');
+    expect(cleanUrl('https://www.google.com/search?q=cats').url).toBe(
+      'https://www.google.com/search?q=cats',
+    );
+    // canonical dedupe key folds the same variants
+    expect(canonicalizeUrl('https://en.m.wikipedia.org/wiki/X?utm_source=a')).toBe(
+      canonicalizeUrl('https://en.wikipedia.org/wiki/X'),
+    );
+    expect(normalizeUrl('https://www.google.com/url?q=https://example.com/a')).toBe(
+      'https://example.com/a',
+    );
+  });
+
+  it('fetcher applies hygiene before robots/fetch and passes the text fragment through', async () => {
+    let hit = '';
+    server.use(
+      http.get('https://target.example/page', ({ request }) => {
+        hit = request.url;
+        return HttpResponse.text(
+          '# Target\n\nThe page body, long enough for a document to exist.',
+          {
+            headers: { 'content-type': 'text/markdown' },
+          },
+        );
+      }),
+    );
+    const r = await fetcher().fetch(
+      'https://www.google.com/url?q=https://target.example/page%23:~:text=page%2520body&sa=U',
+    );
+    expect(hit).toBe('https://target.example/page');
+    expect(r.url).toBe('https://target.example/page');
+    expect(r.textFragment).toBe('page body');
+    const out = await parseResource(r, {});
+    expect(out.page?.doc.textFragment).toBe('page body');
   });
 });

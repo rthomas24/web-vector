@@ -7,6 +7,7 @@ import {
   retry,
   withTimeout,
 } from '../util/concurrency.js';
+import { cleanUrl } from '../util/url.js';
 import { RobotsCache } from './robots.js';
 import { assertSafeUrl, createGuardedDispatcher, isGuardedLookupError } from './ssrf.js';
 
@@ -60,6 +61,8 @@ export interface FetchedResource {
   headers: Headers;
   /** Content-usage signal (header wins over robots.txt); absent when none was declared or `contentSignals: 'ignore'`. */
   contentSignal?: ContentSignal;
+  /** Decoded `#:~:text=` fragment from the requested URL (a retrieval hint), if any. */
+  textFragment?: string;
 }
 
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -119,8 +122,15 @@ export class Fetcher {
     return this.fetchImpl(url, { ...init, ...(dispatcher ? ({ dispatcher } as RequestInit) : {}) });
   }
 
-  /** Fetch a URL honouring all guards. Throws WebVectorError with a per-URL failure code. */
+  /**
+   * Fetch a URL honouring all guards. Throws WebVectorError with a per-URL failure code.
+   * URL hygiene runs first (redirect wrappers unwrapped, AMP/mobile variants folded, `#:~:text=`
+   * preserved as `textFragment`); `FetchedResource.url` is the cleaned URL.
+   */
   async fetch(url: string, signal?: AbortSignal): Promise<FetchedResource> {
+    const cleaned = cleanUrl(url);
+    if (cleaned.rewritten) this.opts.logger?.debug(`fetch: url hygiene ${url} → ${cleaned.url}`);
+    url = cleaned.url;
     const parsed = new URL(url);
     await assertSafeUrl(parsed, {
       allowPrivateNetworks: this.opts.allowPrivateNetworks,
@@ -170,6 +180,7 @@ export class Fetcher {
         res.contentSignal = sig;
       }
     }
+    if (cleaned.textFragment) res.textFragment = cleaned.textFragment;
     return res;
   }
 
