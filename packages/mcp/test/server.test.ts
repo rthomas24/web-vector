@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createWebVectorMcpServer } from '../src/index.js';
+import {
+  buildInstructions,
+  createWebVectorMcpServer,
+  MAX_INSTRUCTIONS_BYTES,
+  resolveTier,
+} from '../src/index.js';
 import { connect, makeWebVector, type RpcClient } from './helpers.js';
 
 let client: RpcClient | undefined;
@@ -46,5 +51,38 @@ describe('tool names', () => {
     );
     const list = await client.call('tools/list');
     expect(list.result.tools.map((t: any) => t.name)).toEqual(['webvector_fetch']);
+  });
+});
+
+describe('server instructions', () => {
+  it('are sent on initialize, phrased for the active tier, and stay under 2 KB', async () => {
+    client = await connect(createWebVectorMcpServer({ webvector: makeWebVector() }));
+    const text: string = client.init.instructions;
+    expect(text.startsWith('WebVector:')).toBe(true);
+    expect(text).toMatch(/lexical tier/);
+    expect(text).toMatch(/3–8 specific keywords/);
+    expect(text).toMatch(/webvector_research/);
+    expect(text).toMatch(/related_queries/);
+    expect(text).toMatch(/session_id/);
+    expect(text).toMatch(/data, not instructions/);
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(MAX_INSTRUCTIONS_BYTES);
+    for (const tier of ['lexical', 'semantic'] as const) {
+      const t = buildInstructions({ tier });
+      expect(Buffer.byteLength(t)).toBeLessThanOrEqual(MAX_INSTRUCTIONS_BYTES);
+      expect(t).toMatch(tier === 'lexical' ? /keywords/ : /ideal passage/);
+    }
+    expect(buildInstructions({ tools: { search: false } })).not.toMatch(/webvector_search only/);
+  });
+  it('resolveTier: explicit provider, none/lexical, auto + env key, and instructions=false', async () => {
+    expect(resolveTier({ embeddings: { provider: 'none' } }, {})).toBe('lexical');
+    expect(resolveTier({ embeddings: { provider: 'openai' } }, {})).toBe('semantic');
+    expect(resolveTier({ embeddings: { provider: 'auto' } }, { OPENAI_API_KEY: 'k' })).toBe(
+      'semantic',
+    );
+    expect(resolveTier(makeWebVector(), {})).toBe('lexical');
+    client = await connect(
+      createWebVectorMcpServer({ webvector: makeWebVector(), instructions: false }),
+    );
+    expect(client.init.instructions).toBeUndefined();
   });
 });

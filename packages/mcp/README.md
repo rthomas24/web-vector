@@ -19,6 +19,8 @@ Claude Desktop / Cursor / Windsurf / VS Code (`mcp.json`):
 
 Tools: `webvector_research` (query, related_queries?, top_k?, max_pages?, freshness?, domains_allow?, domains_block?, session_id?), `webvector_fetch` (url, query?), `webvector_search` (query), `webvector_status`. Progress notifications and `structuredContent` are supported; cancellation is honoured. `--legacy-tool-names` also registers the pre-0.2 names (`web_research`, `web_fetch`, `web_search`) as aliases for one release.
 
+The server sends `instructions` (≤ 2 KB, phrased for the active lexical/semantic tier) that tell the model when to use research vs fetch vs search and how to phrase queries; Claude Code loads these plus the tool names at startup. Override with `--instructions-file <path>` or drop them with `--no-instructions`.
+
 HTTP mode is localhost-only by default; `--token <t>` (or `WEBVECTOR_MCP_TOKEN`) requires a bearer token, and `--host 0.0.0.0 --allow-remote --token <t>` is needed to bind elsewhere (put TLS/auth in front).
 
 Configure via environment (`WEBVECTOR_SEARCH_PROVIDER`, `WEBVECTOR_EMBEDDINGS_PROVIDER`, provider API keys, `WEBVECTOR_STORE_MODE=session`, …) or a `webvector.config.yaml` in the working directory. Programmatic use: `createWebVectorMcpServer()`, `serveWebVectorStdio()`, `serveWebVectorHttp()`.

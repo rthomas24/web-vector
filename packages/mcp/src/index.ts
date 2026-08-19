@@ -37,6 +37,14 @@ import {
   webSearchInputSchema,
 } from 'webvector';
 import { z } from 'zod';
+import { buildInstructions, resolveTier, type Tier } from './instructions.js';
+
+export {
+  buildInstructions,
+  MAX_INSTRUCTIONS_BYTES,
+  resolveTier,
+  type Tier,
+} from './instructions.js';
 
 export const VERSION = '0.1.0';
 
@@ -62,6 +70,13 @@ export interface CreateServerOptions {
    * Claude Code's WebSearch/WebFetch. Kept for one release.
    */
   legacyToolNames?: boolean;
+  /**
+   * Server instructions sent to clients (Claude Code loads these + tool names at startup). Default:
+   * built for the active tier (see `buildInstructions`). Pass `false` to send none.
+   */
+  instructions?: string | false;
+  /** Retrieval tier used to phrase the default instructions (default: detected from config/env). */
+  tier?: Tier;
   /** Server name/version reported to clients. */
   name?: string;
   version?: string;
@@ -88,10 +103,6 @@ function errorResult(err: unknown) {
  * `createMcpHandler(() => createWebVectorMcpServer(opts))`.
  */
 export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpServer {
-  const server = new McpServer({
-    name: opts.name ?? 'webvector',
-    version: opts.version ?? VERSION,
-  });
   const tools = new Set(
     (
       opts.tools ?? [
@@ -101,6 +112,22 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
         'webvector_status',
       ]
     ).map((t) => LEGACY_TOOL_NAMES[t] ?? t),
+  );
+  const instructions =
+    opts.instructions === false
+      ? undefined
+      : (opts.instructions ??
+        buildInstructions({
+          tier: opts.tier ?? resolveTier(opts.webvector ?? opts.config),
+          tools: {
+            research: tools.has(WEB_RESEARCH_TOOL_NAME),
+            fetch: tools.has(WEB_FETCH_TOOL_NAME),
+            search: tools.has(WEB_SEARCH_TOOL_NAME),
+          },
+        }));
+  const server = new McpServer(
+    { name: opts.name ?? 'webvector', version: opts.version ?? VERSION },
+    instructions ? { instructions } : undefined,
   );
   const legacyNames = new Map<string, string>(
     Object.entries(LEGACY_TOOL_NAMES).map(([legacy, c]) => [c, legacy]),
@@ -331,7 +358,17 @@ export interface StdioOptions extends CreateServerOptions {}
 
 /** Serve over stdio (the `npx -y webvector-mcp` path). Returns the handle; call `.close()` to stop. */
 export function serveWebVectorStdio(opts: StdioOptions = {}) {
-  return serveStdio(() => createWebVectorMcpServer(opts));
+  return serveStdio(async () => createWebVectorMcpServer(await resolveServerOptions(opts)));
+}
+
+/**
+ * Resolve the shared WebVector once per process (config file + env, no model load) so the
+ * instructions/tier are computed once and stay static across requests.
+ */
+export async function resolveServerOptions<T extends CreateServerOptions>(opts: T): Promise<T> {
+  const webvector = opts.webvector ?? (await getSharedWebVector(opts.config));
+  const tier = opts.tier ?? resolveTier(webvector);
+  return { ...opts, webvector, tier };
 }
 
 export interface HttpOptions extends CreateServerOptions {
@@ -358,7 +395,8 @@ export async function serveWebVectorHttp(opts: HttpOptions = {}) {
     import('@modelcontextprotocol/node'),
     import('node:http'),
   ]);
-  const handler = createMcpHandler(() => createWebVectorMcpServer(opts));
+  const resolved = await resolveServerOptions(opts);
+  const handler = createMcpHandler(() => createWebVectorMcpServer(resolved));
   const nodeHandler = toNodeHandler(handler);
   const hostGuard = localhostHostValidation();
   const originGuard = localhostOriginValidation();

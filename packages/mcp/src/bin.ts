@@ -3,6 +3,7 @@
  * webvector-mcp — stdio by default; `--http [--port 3333] [--host 127.0.0.1] [--path /mcp]`.
  * Configuration comes from webvector.config.* / environment variables (see README).
  */
+import { readFileSync } from 'node:fs';
 import { type CreateServerOptions, serveWebVectorHttp, serveWebVectorStdio } from './index.js';
 
 const args = process.argv.slice(2);
@@ -21,6 +22,8 @@ Usage:
      [--port N] [--path /mcp] [--token T | WEBVECTOR_MCP_TOKEN=T]
      [--host H --allow-remote --token T]   expose beyond localhost — put TLS/auth in front
   --legacy-tool-names           also expose web_research / web_fetch / web_search as aliases (one release)
+  --instructions-file <path>    replace the built-in server instructions (≤ 2 KB; Claude Code truncates there)
+  --no-instructions             send no server instructions
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …
@@ -33,8 +36,14 @@ Run \`npx webvector-cli doctor\` to diagnose configuration.`);
   process.exit(0);
 }
 
+const instructionsFile = flag('--instructions-file');
 const serverOptions: CreateServerOptions = {
   legacyToolNames: args.includes('--legacy-tool-names'),
+  instructions: args.includes('--no-instructions')
+    ? false
+    : instructionsFile && instructionsFile !== 'true'
+      ? readFileSync(instructionsFile, 'utf8').trim()
+      : undefined,
 };
 
 if (args.includes('--http')) {
