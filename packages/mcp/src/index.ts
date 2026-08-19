@@ -10,6 +10,8 @@
  * Built on the MCP TypeScript SDK v2 (`@modelcontextprotocol/server`). Works over stdio
  * (`npx -y webvector-mcp`) and stateless Streamable HTTP (`webvector-mcp --http`).
  */
+
+import { randomBytes } from 'node:crypto';
 import {
   McpServer,
   type StandardSchemaWithJSON,
@@ -20,12 +22,15 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import {
   DEFAULT_FETCH_MAX_LENGTH,
   LEGACY_TOOL_NAMES,
+  type ProgressEvent,
   type ResearchResult,
   type ResponseFormat,
   redactConfig,
   renderResearch,
   runFetchTool,
   suggestedQueriesFor,
+  ToolGuard,
+  type ToolGuardOptions,
   toResearchOptions,
   toSlimOutput,
   WEB_FETCH_DESCRIPTION,
@@ -38,7 +43,6 @@ import {
   WEBVECTOR_STATUS_TOOL_NAME,
   WebVector,
   type WebVectorConfig,
-  WebVectorError,
   webFetchInputSchema,
   webResearchInputSchema,
   webResearchOutputSchema,
@@ -47,6 +51,8 @@ import {
 } from 'webvector';
 import { z } from 'zod';
 import { buildInstructions, resolveTier, type Tier } from './instructions.js';
+import { registerPrompts } from './prompts.js';
+import { argumentError, errorResult, NO_PASSAGES_HINT, validateDomains } from './results.js';
 
 export {
   buildInstructions,
@@ -54,6 +60,8 @@ export {
   resolveTier,
   type Tier,
 } from './instructions.js';
+export { PROMPTS, registerPrompts } from './prompts.js';
+export { errorResult, hintFor, NO_PASSAGES_HINT, validateDomains } from './results.js';
 
 export const VERSION = '0.1.0';
 
@@ -128,9 +136,45 @@ export interface CreateServerOptions {
   instructions?: string | false;
   /** Retrieval tier used to phrase the default instructions (default: detected from config/env). */
   tier?: Tier;
+  /**
+   * `auto` (default): on stdio every call without session_id shares one process-wide session so
+   * pages already read are reused; over HTTP a session_id is minted per call and returned in the
+   * result for the client to pass back. `off`: never mint (core `store.mode` still applies).
+   */
+  sessionMode?: 'auto' | 'off';
+  /** Set by the serve helpers; drives the session strategy (default `stdio`). */
+  transport?: 'stdio' | 'http';
+  /** Operator guardrails: max uses, allowed/blocked domains, user location (see ToolGuard). */
+  guardOptions?: ToolGuardOptions;
+  /** Share one guard across servers/requests (HTTP mode: one per process). Default: built from guardOptions. */
+  guard?: ToolGuard;
+  /** Cap for per-call `deadline_ms` (ms). Default: the core `ingestion.totalDeadlineMs` cap applies. */
+  maxDeadlineMs?: number;
   /** Server name/version reported to clients. */
   name?: string;
   version?: string;
+}
+
+/** One process-wide session id (stdio: one client per process). */
+let processSession: string | undefined;
+export function processSessionId(): string {
+  processSession ??= `wv_${randomBytes(6).toString('base64url')}`;
+  return processSession;
+}
+
+/** Progress text like "fetched 5/8 pages (2 failed) · embedding". */
+export function progressMessage(e: ProgressEvent): string {
+  switch (e.stage) {
+    case 'search':
+      return e.done ? `search: ${e.message}` : `searching…`;
+    case 'ingest':
+      if (e.done === 0) return `fetching ${e.total} pages…`;
+      return `fetched ${e.done}/${e.total} pages${e.failed ? ` (${e.failed} failed)` : ''}${e.done < e.total ? ' · embedding' : ''}`;
+    case 'retrieve':
+      return e.done ? `retrieved: ${e.message}` : 'ranking passages…';
+    default:
+      return `${e.stage}: ${e.message}`;
+  }
 }
 
 /** Lazily create a shared WebVector from config/env (one per process). */
@@ -138,15 +182,6 @@ let shared: Promise<WebVector> | undefined;
 export function getSharedWebVector(config?: WebVectorConfig): Promise<WebVector> {
   if (!shared) shared = WebVector.create(config ?? {});
   return shared;
-}
-
-function errorResult(err: unknown) {
-  const e = WebVectorError.from(err, { code: 'INTERNAL' });
-  return {
-    content: [{ type: 'text' as const, text: `Error (${e.code}): ${e.describe()}` }],
-    isError: true,
-    structuredContent: { error: e.toJSON() },
-  };
 }
 
 /**
@@ -218,6 +253,54 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
   );
   const defaultFormat: ResponseFormat = opts.defaultResponseFormat ?? 'concise';
   const structured: StructuredMode = opts.structured ?? 'slim';
+  const guard = opts.guard ?? new ToolGuard(opts.guardOptions ?? {});
+  const transport = opts.transport ?? 'stdio';
+  const sessionMode = opts.sessionMode ?? 'auto';
+  const deadlineCap = opts.maxDeadlineMs;
+
+  /**
+   * Server-minted sessions (SEP-2567 style: opaque handle as a plain tool arg). stdio = one client
+   * → one process-wide session so follow-ups reuse pages; HTTP = mint per call and hand the id back.
+   * `store.mode: session|persistent` already reuse pages, so nothing is minted then.
+   */
+  const sessionFor = (wv: WebVector, requested: string | undefined) => {
+    if (requested) return { id: requested, minted: false };
+    if (sessionMode === 'off' || wv.config.store.mode !== 'ephemeral')
+      return { id: undefined, minted: false };
+    if (transport === 'http')
+      return { id: `wv_${randomBytes(6).toString('base64url')}`, minted: true };
+    return { id: processSessionId(), minted: false };
+  };
+  const progressNotifier = (ctx: Parameters<ToolCallback<typeof webResearchInputSchema>>[1]) => {
+    const progressToken = ctx.mcpReq._meta?.progressToken;
+    if (progressToken === undefined) return undefined;
+    let last = '';
+    return (e: ProgressEvent) => {
+      const message = progressMessage(e);
+      if (message === last) return;
+      last = message;
+      void ctx.mcpReq
+        .notify({
+          method: 'notifications/progress',
+          params: {
+            progressToken,
+            progress:
+              e.stage === 'ingest' ? e.done : e.stage === 'retrieve' && e.done ? e.total : 0,
+            total: e.stage === 'ingest' || e.stage === 'retrieve' ? e.total : undefined,
+            message,
+          },
+        })
+        .catch(() => {});
+    };
+  };
+  let freshnessSupported: boolean | undefined;
+  const checkFreshness = async (wv: WebVector, freshness: unknown): Promise<string | undefined> => {
+    if (!freshness) return undefined;
+    freshnessSupported ??= (await wv.capabilities()).search.supportsFreshness;
+    return freshnessSupported
+      ? undefined
+      : `_Note: the active search provider ignores freshness; results are not date-filtered._`;
+  };
 
   if (tools.has(WEB_RESEARCH_TOOL_NAME)) {
     register(
@@ -236,52 +319,71 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
       },
       async (args, ctx) => {
         try {
+          const allow = validateDomains('domains_allow', args.domains_allow);
+          if (!allow.ok) return argumentError('INVALID_ARGUMENT', allow.message, allow.hint);
+          const block = validateDomains('domains_block', args.domains_block);
+          if (!block.ok) return argumentError('INVALID_ARGUMENT', block.message, block.hint);
+          guard.consume();
           const wv = await wvp();
-          const progressToken = ctx.mcpReq._meta?.progressToken;
-          const notify =
-            progressToken === undefined
-              ? undefined
-              : async (progress: number, total: number, message: string) => {
-                  try {
-                    await ctx.mcpReq.notify({
-                      method: 'notifications/progress',
-                      params: { progressToken, progress, total, message },
-                    });
-                  } catch {
-                    /* ignore */
-                  }
-                };
-          let step = 0;
+          const input = guard.applyDomains({
+            ...args,
+            domains_allow: allow.domains,
+            domains_block: block.domains,
+          });
           const maxTokens = clamp(
             args.max_tokens ?? defaultMaxTokens,
             MIN_MAX_TOKENS,
             MAX_MAX_TOKENS,
           );
           const format = args.response_format ?? defaultFormat;
-          const res = await wv.research(
-            args.query,
-            toResearchOptions(args, {
-              signal: ctx.mcpReq.signal,
-              maxOutputTokens: maxTokens,
-              responseFormat: format,
-              onProgress: notify
-                ? (p) => void notify(++step, 100, `${p.stage}: ${p.message}`)
-                : undefined,
-            }),
-          );
+          const session = sessionFor(wv, args.session_id);
+          const deadline = deadlineCap
+            ? Math.min(args.deadline_ms ?? deadlineCap, deadlineCap)
+            : args.deadline_ms;
+          const [res, freshnessNote] = await Promise.all([
+            wv.research(
+              args.query,
+              toResearchOptions(input, {
+                signal: ctx.mcpReq.signal,
+                maxOutputTokens: maxTokens,
+                responseFormat: format,
+                sessionId: session.id,
+                deadlineMs: deadline,
+                onProgress: progressNotifier(ctx),
+                ...guard.searchLocation(),
+              }),
+            ),
+            checkFreshness(wv, args.freshness),
+          ]);
           const suggested = suggestedQueriesFor(res);
+          const footer: string[] = [];
+          if (freshnessNote) footer.push(freshnessNote);
+          if (res.degraded === 'partial' && res.degradedReason)
+            footer.push(`_Partial result: ${res.degradedReason}._`);
+          if (session.minted)
+            footer.push(`_session_id: ${session.id} — pass it back to reuse these pages._`);
           const rendered = renderResearch(res, {
             ...wv.renderOptions(),
             maxTokens,
             format,
             untrustedNotice: true,
             suggestedQueries: suggested,
+            footerLine: footer.join('\n') || undefined,
           });
+          let text = rendered.markdown;
+          let hint: string | undefined;
+          if (res.passages.length === 0) {
+            hint = NO_PASSAGES_HINT;
+            text = `${text}\n\n${hint}`;
+          } else if (freshnessNote) hint = freshnessNote.replace(/^_|_$/g, '');
           return {
-            content: [{ type: 'text', text: rendered.markdown }],
+            content: [{ type: 'text', text }],
             ...structuredResearch(structured, res, {
               suggested_queries: suggested,
               omitted: rendered.omitted,
+              session_id: session.minted ? session.id : undefined,
+              hint: hint?.replace(/^_|_$/g, ''),
+              retryable: res.passages.length === 0 ? true : undefined,
             }),
           };
         } catch (err) {
@@ -310,6 +412,8 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
       },
       async (args, ctx) => {
         try {
+          guard.assertUrlAllowed(args.url);
+          guard.consume();
           const wv = await wvp();
           if (args.query) {
             const res = await wv.fetchAndRetrieve(args.url, args.query, {
@@ -321,9 +425,21 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
               maxTokens: defaultMaxTokens,
               format: args.response_format ?? defaultFormat,
             });
+            const text =
+              res.passages.length === 0
+                ? `${rendered.markdown}\n\n_No passages of this page matched the query. Try a broader query, or call again without query to read the page._`
+                : rendered.markdown;
             return {
-              content: [{ type: 'text', text: rendered.markdown }],
-              ...structuredResearch(structured, res, { omitted: rendered.omitted }),
+              content: [{ type: 'text', text }],
+              ...structuredResearch(structured, res, {
+                omitted: rendered.omitted,
+                ...(res.passages.length === 0
+                  ? {
+                      hint: 'Broaden the query or omit it to read the whole page.',
+                      retryable: true,
+                    }
+                  : {}),
+              }),
             };
           }
           const out = await runFetchTool(wv, args, {
@@ -358,21 +474,56 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
       },
       async (args, ctx) => {
         try {
+          const allow = validateDomains('domains_allow', args.domains_allow);
+          if (!allow.ok) return argumentError('INVALID_ARGUMENT', allow.message, allow.hint);
+          const block = validateDomains('domains_block', args.domains_block);
+          if (!block.ok) return argumentError('INVALID_ARGUMENT', block.message, block.hint);
+          guard.consume();
           const wv = await wvp();
-          const results = await wv.search(args.query, {
-            count: args.count,
-            freshness: args.freshness,
-            domainsAllow: args.domains_allow,
-            domainsBlock: args.domains_block,
-            signal: ctx.mcpReq.signal,
+          const input = guard.applyDomains({
+            ...args,
+            domains_allow: allow.domains,
+            domains_block: block.domains,
           });
-          const text =
-            results
-              .map(
-                (r) => `${r.rank}. ${r.title}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ''}`,
-              )
-              .join('\n') || 'No results.';
-          return { content: [{ type: 'text', text }], structuredContent: { results } };
+          const [results, freshnessNote] = await Promise.all([
+            wv.search(args.query, {
+              count: args.count,
+              freshness: args.freshness,
+              domainsAllow: input.domains_allow,
+              domainsBlock: input.domains_block,
+              signal: ctx.mcpReq.signal,
+              ...guard.searchLocation(),
+            }),
+            checkFreshness(wv, args.freshness),
+          ]);
+          const lines = results.map(
+            (r) => `${r.rank}. ${r.title}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ''}`,
+          );
+          const parts = [
+            lines.join('\n') ||
+              '_No results. Try fewer/other keywords, drop freshness or domain filters._',
+          ];
+          if (freshnessNote) parts.push(freshnessNote);
+          if (results.length)
+            parts.push(
+              `→ To read a result: ${WEB_FETCH_TOOL_NAME}(url) — or ${WEB_FETCH_TOOL_NAME}(url, query) for only the relevant passages.`,
+            );
+          return {
+            content: [{ type: 'text', text: parts.join('\n\n') }],
+            ...(structured === 'off'
+              ? {}
+              : {
+                  structuredContent: {
+                    results,
+                    ...(results.length === 0
+                      ? {
+                          hint: 'Try fewer/other keywords, drop freshness or domain filters.',
+                          retryable: true,
+                        }
+                      : {}),
+                  },
+                }),
+          };
         } catch (err) {
           return errorResult(err);
         }
@@ -397,10 +548,28 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
       async () => {
         try {
           const wv = await wvp();
-          const sessions = await wv.listSessions();
+          const [sessions, caps] = await Promise.all([wv.listSessions(), wv.capabilities()]);
           const status = {
             version: VERSION,
+            tier: caps.tier,
+            providers: caps,
             config: redactConfig(wv.config),
+            server: {
+              transport,
+              sessionMode,
+              structured,
+              defaultResponseFormat: defaultFormat,
+              maxTokens: defaultMaxTokens,
+              uses: guard.uses,
+              ...(guard.remaining !== undefined ? { remainingUses: guard.remaining } : {}),
+              ...(guard.opts.allowedDomains?.length
+                ? { allowedDomains: guard.opts.allowedDomains }
+                : {}),
+              ...(guard.opts.blockedDomains?.length
+                ? { blockedDomains: guard.opts.blockedDomains }
+                : {}),
+              ...(guard.opts.userLocation ? { userLocation: guard.opts.userLocation } : {}),
+            },
             // Counts only: session ids are client-chosen and must not leak between clients.
             sessions: {
               count: sessions.length,
@@ -418,6 +587,8 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
     );
   }
 
+  registerPrompts(server, tools);
+
   // Deterministic tools/list order: canonical tools first, then legacy aliases (prompt-cache friendly).
   for (const add of aliases) add();
   return server;
@@ -427,17 +598,22 @@ export interface StdioOptions extends CreateServerOptions {}
 
 /** Serve over stdio (the `npx -y webvector-mcp` path). Returns the handle; call `.close()` to stop. */
 export function serveWebVectorStdio(opts: StdioOptions = {}) {
-  return serveStdio(async () => createWebVectorMcpServer(await resolveServerOptions(opts)));
+  const resolved = resolveServerOptions(opts, 'stdio');
+  return serveStdio(async () => createWebVectorMcpServer(await resolved));
 }
 
 /**
  * Resolve the shared WebVector once per process (config file + env, no model load) so the
  * instructions/tier are computed once and stay static across requests.
  */
-export async function resolveServerOptions<T extends CreateServerOptions>(opts: T): Promise<T> {
+export async function resolveServerOptions<T extends CreateServerOptions>(
+  opts: T,
+  transport: 'stdio' | 'http' = opts.transport ?? 'stdio',
+): Promise<T> {
   const webvector = opts.webvector ?? (await getSharedWebVector(opts.config));
   const tier = opts.tier ?? resolveTier(webvector);
-  return { ...opts, webvector, tier };
+  const guard = opts.guard ?? new ToolGuard(opts.guardOptions ?? {});
+  return { ...opts, webvector, tier, transport, guard };
 }
 
 export interface HttpOptions extends CreateServerOptions {
@@ -464,7 +640,7 @@ export async function serveWebVectorHttp(opts: HttpOptions = {}) {
     import('@modelcontextprotocol/node'),
     import('node:http'),
   ]);
-  const resolved = await resolveServerOptions(opts);
+  const resolved = await resolveServerOptions(opts, 'http');
   const handler = createMcpHandler(() => createWebVectorMcpServer(resolved));
   const nodeHandler = toNodeHandler(handler);
   const hostGuard = localhostHostValidation();

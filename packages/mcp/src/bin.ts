@@ -4,6 +4,7 @@
  * Configuration comes from webvector.config.* / environment variables (see README).
  */
 import { readFileSync } from 'node:fs';
+import { parseUserLocation } from 'webvector';
 import { type CreateServerOptions, serveWebVectorHttp, serveWebVectorStdio } from './index.js';
 
 const args = process.argv.slice(2);
@@ -28,6 +29,12 @@ Usage:
   --structured off|slim|full    how much structuredContent to return next to the text (default slim)
   --max-tokens N                default token budget per result, 500–20000 (default 4000; env WEBVECTOR_MCP_MAX_TOKENS)
   --fetch-max-length N          default max_length for webvector_fetch in chars (default 20000)
+  --session-mode auto|off       auto (default): stdio shares one process-wide session; HTTP mints a session_id per call
+  --max-uses N                  refuse further web tool calls after N (in-band MAX_USES_EXCEEDED; env WEBVECTOR_MCP_MAX_USES)
+  --allowed-domains a,b         only search/fetch these domains (env WEBVECTOR_MCP_ALLOWED_DOMAINS)
+  --blocked-domains a,b         never search/fetch these domains (env WEBVECTOR_MCP_BLOCKED_DOMAINS)
+  --user-location US[,en]       search country / language passthrough (env WEBVECTOR_MCP_USER_LOCATION)
+  --max-deadline-ms N           cap for per-call deadline_ms
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …
@@ -58,6 +65,15 @@ const numFlag = (name: string, env?: string): number | undefined => {
   const v = flag(name) ?? (env ? process.env[env] : undefined);
   return v && v !== 'true' && Number.isFinite(Number(v)) ? Number(v) : undefined;
 };
+const listFlag = (name: string, env?: string): string[] | undefined => {
+  const v = flag(name) ?? (env ? process.env[env] : undefined);
+  if (!v || v === 'true') return undefined;
+  const items = v
+    .split(/[,\s]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+};
 const maxTokensRaw = flag('--max-tokens') ?? process.env.WEBVECTOR_MCP_MAX_TOKENS;
 const serverOptions: CreateServerOptions = {
   legacyToolNames: args.includes('--legacy-tool-names'),
@@ -76,6 +92,19 @@ const serverOptions: CreateServerOptions = {
       ? Number(maxTokensRaw)
       : undefined,
   fetchMaxLength: numFlag('--fetch-max-length', 'WEBVECTOR_MCP_FETCH_MAX_LENGTH'),
+  sessionMode: enumFlag('--session-mode', ['auto', 'off'] as const, 'WEBVECTOR_MCP_SESSION_MODE'),
+  maxDeadlineMs: numFlag('--max-deadline-ms', 'WEBVECTOR_MCP_MAX_DEADLINE_MS'),
+  guardOptions: {
+    maxUses: numFlag('--max-uses', 'WEBVECTOR_MCP_MAX_USES'),
+    allowedDomains: listFlag('--allowed-domains', 'WEBVECTOR_MCP_ALLOWED_DOMAINS'),
+    blockedDomains: listFlag('--blocked-domains', 'WEBVECTOR_MCP_BLOCKED_DOMAINS'),
+    userLocation: parseUserLocation(
+      (() => {
+        const v = flag('--user-location') ?? process.env.WEBVECTOR_MCP_USER_LOCATION;
+        return v && v !== 'true' ? v : undefined;
+      })(),
+    ),
+  },
   instructions: args.includes('--no-instructions')
     ? false
     : instructionsFile && instructionsFile !== 'true'
