@@ -307,3 +307,14 @@ describe('robots.txt hardening', () => {
     expect(followed).toBe(false);
   });
 });
+
+describe('PageCache key variant', () => {
+  it('namespaces entries by variant so negotiated markdown is not served to another mode', async () => {
+    const { PageCache } = await import('../src/ingest/index.js');
+    const base = { enabled: true, ttlMs: 60_000, maxPages: 10, dir: false as const };
+    const a = new PageCache({ ...base });
+    const b = new PageCache({ ...base, variant: 'off' });
+    expect(a.keyFor('https://x.example/p')).not.toBe(b.keyFor('https://x.example/p'));
+    expect(a.keyFor('https://x.example/p?utm_source=z')).toBe(a.keyFor('https://x.example/p'));
+  });
+});

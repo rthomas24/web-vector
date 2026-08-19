@@ -153,7 +153,14 @@ export async function buildComponents(
     strategy: cfg.ingestion.html.strategy,
     useJsonLdBody: cfg.ingestion.html.useJsonLdBody,
   });
-  const pageCache = await PageCache.create(cfg.ingestion.cache, logger);
+  const pageCache = await PageCache.create(
+    {
+      ...cfg.ingestion.cache,
+      // Non-default content negotiation gets its own cache namespace (served markdown ≠ HTML).
+      variant: cfg.ingestion.acceptMarkdown === 'prefer' ? undefined : cfg.ingestion.acceptMarkdown,
+    },
+    logger,
+  );
   if (pageCache.backend === 'sqlite') logger.debug(`page cache: sqlite at ${pageCache.location}`);
   const coordinator = new FetchCoordinator({ negativeTtlMs: cfg.ingestion.cache.negativeTtlMs });
   const embeddingCache = new EmbeddingCache({

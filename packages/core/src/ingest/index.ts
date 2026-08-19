@@ -111,6 +111,11 @@ export interface PageCacheOptions {
   /** An already-open cache database to use (created by `PageCache.create`). */
   db?: CacheDb;
   env?: NodeJS.ProcessEnv;
+  /**
+   * Cache-key variant, folded into every key. Used for content negotiation: pages fetched with a
+   * non-default `ingestion.acceptMarkdown` mode must not be served to another mode.
+   */
+  variant?: string;
 }
 
 export type CacheLookup =
@@ -150,6 +155,12 @@ export class PageCache {
   private writes = 0;
   /** Counters since construction (surfaced by `webvector cache stats` / doctor). */
   readonly counters = { hits: 0, diskHits: 0, misses: 0, stale: 0, notModified: 0, writes: 0 };
+
+  /** Cache key for a URL: canonical form plus the configured variant (if any). */
+  keyFor(url: string): string {
+    const key = canonicalizeUrl(url);
+    return this.opts.variant ? `${key}#v=${this.opts.variant}` : key;
+  }
 
   constructor(private readonly opts: PageCacheOptions) {
     this.maxBytes = opts.maxBytes ?? 256 * 1024 * 1024;
@@ -221,7 +232,7 @@ export class PageCache {
   /** Any stored entry regardless of age (memory first, then disk). Does not count as a hit. */
   getStale(url: string): CachedPage | undefined {
     if (!this.opts.enabled) return undefined;
-    const key = canonicalizeUrl(url);
+    const key = this.keyFor(url);
     const mem = this.lru.get(key);
     if (mem) return mem;
     return this.readDisk(key);
@@ -301,7 +312,7 @@ export class PageCache {
 
   /** After a 304: refresh `fetchedAt` (and any new validators) in memory and on disk. */
   restamp(url: string, entry: CachedPage, validators: PageValidators = {}): CachedPage {
-    const key = canonicalizeUrl(url);
+    const key = this.keyFor(url);
     const now = Date.now();
     const page: CachedPage = {
       ...entry,
@@ -330,7 +341,7 @@ export class PageCache {
 
   set(url: string, page: CachedPage): void {
     if (!this.opts.enabled) return;
-    const key = canonicalizeUrl(url);
+    const key = this.keyFor(url);
     const size = page.doc.markdown.length;
     if (size > this.maxBytes) return; // never cache something bigger than the whole budget
     const prev = this.lru.get(key);
@@ -345,7 +356,7 @@ export class PageCache {
   }
 
   delete(url: string): boolean {
-    const key = canonicalizeUrl(url);
+    const key = this.keyFor(url);
     const had = this.lru.delete(key);
     let disk = false;
     if (this.db) {
