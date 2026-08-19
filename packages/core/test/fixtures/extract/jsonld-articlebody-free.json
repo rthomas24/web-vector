@@ -1,0 +1,12 @@
+{
+  "expectFail": "JSON-LD articleBody recovery",
+  "url": "https://amp.example.com/story/leaky-buckets",
+  "type": "thin DOM (title + broken lazy-load placeholders) with a free (isAccessibleForFree:true) Article whose articleBody holds the text",
+  "minF1": 0.6,
+  "mustContain": [
+    "smooths traffic instead of tolerating bursts"
+  ],
+  "mustNotContain": [
+    "FOOTER-MARKER-TEXT"
+  ]
+}

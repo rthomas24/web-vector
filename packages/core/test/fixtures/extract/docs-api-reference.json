@@ -1,0 +1,17 @@
+{
+  "url": "https://mintlify.example.com/api-reference/limits/get",
+  "type": "Mintlify-style API reference (JSON-LD TechArticle), nav+main layout, params table, code with data-language",
+  "minF1": 0.85,
+  "mustContain": [
+    "\"remaining\": 942",
+    "exempt from rate limiting",
+    "One of minute, hour or day"
+  ],
+  "mustNotContain": [
+    "API-NAV-MARKER",
+    "Copy the contents",
+    "Powered by Mintlify"
+  ],
+  "minCodeBlocks": 1,
+  "minTableRows": 2
+}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Retries with exponential backoff - Example Recipes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+<nav class="md-header" aria-label="Header"><a href="/">Example Recipes DOCS-NAV-MARKER</a><a href="/recipes">Recipes</a><a href="/reference">Reference</a></nav>
+<div class="md-container"><nav class="md-nav md-nav--primary" aria-label="Navigation"><ul><li><a href="/recipes/retries">Retries</a></li><li><a href="/recipes/timeouts">Timeouts</a></li><li><a href="/recipes/bulkheads">Bulkheads</a></li></ul></nav>
+<main class="md-main"><article class="md-content__inner md-typeset"><h1>Retries with exponential backoff</h1>
+<p>Retrying too eagerly turns a brief outage into a thundering herd, so each attempt should wait longer than the last and add jitter so that clients do not synchronise.</p>
+<div class="codehilite"><pre><span></span><code><span class="k">import</span> time
+
+<span class="k">def</span> re<span class="k">try</span>(fn, attempts=5, base=0.2):
+    <span class="k">for</span> i <span class="k">in</span> range(attempts):
+        <span class="k">try</span>:
+            <span class="k">return</span> fn()
+        <span class="k">except</span> TransientError:
+            time.sleep(base * 2 ** i)
+    <span class="k">raise</span> GaveUp()
+</code></pre></div>
+<p>The same idea in a shell one-liner:</p>
+<pre data-lang="bash" class="line-numbers"><code class="lang-bash">for i in 1 2 3 4 5; do curl -fsS https://api.example.io/ &amp;&amp; break; sleep $((RANDOM % (2 ** i))); done<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>Combine retries with a rate limiter on the client so a retry storm cannot exceed the quota.</p>
+</article></main></div>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

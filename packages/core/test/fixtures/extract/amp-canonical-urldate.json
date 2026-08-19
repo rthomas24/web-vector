@@ -1,0 +1,13 @@
+{
+  "expectFail": "C6 ranking-grade metadata",
+  "url": "https://amp.example-news.com/amp/2024/07/09/leaky-bucket-outage",
+  "type": "AMP mirror page: no date metadata (date only in the URL path), rel=canonical pointing at the desktop URL, og:url",
+  "minF1": 0.9,
+  "mustContain": [
+    "one-line change to the drain rate"
+  ],
+  "meta": {
+    "canonicalUrl": "https://www.example-news.com/2024/07/09/leaky-bucket-outage",
+    "publishedAt": "2024-07-09"
+  }
+}

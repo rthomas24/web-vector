@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Get rate limit status - Example API</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Get rate limit status","dateModified":"2026-02-20"}</script><meta name="generator" content="Mintlify">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<div id="navbar" class="navbar"><a href="/">Example API</a><nav aria-label="Primary"><a href="/docs">Guides</a><a href="/api-reference">API Reference</a><a href="/changelog">Changelog</a></nav><button>Search...</button><a href="https://dashboard.example.com">Dashboard</a></div>
+<div class="flex">
+<nav id="sidebar" class="sidebar" aria-label="Sidebar"><ul><li class="group">Limits API-NAV-MARKER<ul><li><a href="/api-reference/limits/get" aria-current="page">Get rate limit status</a></li><li><a href="/api-reference/limits/reset">Reset a limit</a></li></ul></li><li class="group">Keys<ul><li><a href="/api-reference/keys/list">List keys</a></li><li><a href="/api-reference/keys/create">Create key</a></li><li><a href="/api-reference/keys/revoke">Revoke key</a></li></ul></li></ul></nav>
+<main id="content-area" class="relative">
+<div class="eyebrow">Limits</div>
+
+<h1>Get rate limit status</h1>
+<p><code>GET /v1/limits</code></p>
+<p>Returns the caller's current quota, the number of requests remaining in the window and the reset time. The endpoint itself is exempt from rate limiting so that clients can poll it while backing off.</p>
+<h2>Query parameters</h2>
+<table><thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td>key</td><td>string</td><td>API key to inspect (defaults to the caller's key)</td></tr><tr><td>window</td><td>string</td><td>One of minute, hour or day</td></tr></tbody></table>
+<h2>Response</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">JSON</span><button class="copy-button" aria-label="Copy the contents from the code block">Copy</button></div><pre class="language-json" data-language="json"><code>{
+  "limit": 1000,
+  "remaining": 942,
+  "reset": "2026-04-01T12:00:00Z"
+}</code></pre></div>
+<div class="callout"><p>Remaining counts are eventually consistent across regions and may lag by a few seconds.</p></div>
+<h2>Errors</h2>
+<p>Servers commonly signal limits with the RateLimit-Limit, RateLimit-Remaining and RateLimit-Reset headers, and answer rejected requests with HTTP status 429 Too Many Requests together with a Retry-After header. Clients that honour Retry-After avoid making the overload worse.</p>
+</main>
+<aside class="toc"><p>On this page</p><ul><li><a href="#query-parameters">Query parameters</a></li><li><a href="#response">Response</a></li><li><a href="#errors">Errors</a></li></ul></aside>
+</div>
+<footer><a href="https://mintlify.com">Powered by Mintlify</a> · <a href="/privacy">Privacy</a> FOOTER-MARKER-TEXT</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

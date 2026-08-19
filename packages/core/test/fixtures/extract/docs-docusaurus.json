@@ -1,0 +1,21 @@
+{
+  "url": "https://docs.example.io/guides/rate-limits",
+  "type": "Docusaurus docs page: sidebar nav, TOC aside, prev/next pagination, Prism token spans with Copy button, admonition, table",
+  "minF1": 0.85,
+  "mustContain": [
+    "refillPerSecond",
+    "RateLimit-Reset",
+    "Limits apply per API key"
+  ],
+  "mustNotContain": [
+    "SIDEBAR-MARKER",
+    "Copy code to clipboard",
+    "Edit this page",
+    "Was this page helpful"
+  ],
+  "minCodeBlocks": 1,
+  "minTableRows": 3,
+  "meta": {
+    "title": "Rate limits"
+  }
+}

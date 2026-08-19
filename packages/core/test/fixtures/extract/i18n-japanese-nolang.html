@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>レート制限のしくみ | Example Tech</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:type" content="article">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Example Tech</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header><main><article><h1>レート制限のしくみ</h1><p>レート制限は、短時間に大量のリクエストが集中してサービスが過負荷になるのを防ぐ仕組みです。負荷がかかったときに予測不能に失敗する代わりに、制限されたサービスは超過分のリクエストを制御された方法で拒否または遅延させ、いつ再試行してよいかをクライアントに伝えます。</p><h2>トークンバケット</h2><p>トークンバケットアルゴリズムは、利用可能なトークンのカウンターを保持し、一定の速度で最大容量まで補充します。各リクエストはトークンを一つ消費し、バケットが空のときはリクエストが拒否されます。アイドル中にトークンが蓄積されるため、長期的な平均レートを超えることなく短いバーストを許容できます。</p><h2>リーキーバケット</h2><p>リーキーバケットはバーストを許容する代わりにトラフィックを平滑化します。リクエストは一定の速度で排出されるキューに入り、キューが満杯のときに到着したリクエストは破棄されます。</p></article></main>
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Example Tech</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Example Tech Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

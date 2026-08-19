@@ -1,0 +1,6 @@
+{
+  "url": "https://app.example.com/dashboard",
+  "type": "CRA/Vite React shell: empty #root, noscript enable-JS, large bundle reference",
+  "failure": "PARSE_NEEDS_JS",
+  "expectFail": "C3 JS-shell detection"
+}

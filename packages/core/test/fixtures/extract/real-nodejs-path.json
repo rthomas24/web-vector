@@ -1,0 +1,12 @@
+{
+  "url": "https://nodejs.org/api/path.html",
+  "type": "real: Node.js API docs",
+  "minF1": 0.9,
+  "mustContain": [
+    "path.basename",
+    "path.resolve",
+    "path.sep"
+  ],
+  "minCodeBlocks": 5,
+  "minChars": 8000
+}

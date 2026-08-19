@@ -1,0 +1,14 @@
+{
+  "url": "https://forum.example.org/t/parsers-recursive-descent-vs-pratt/9921",
+  "type": "Discourse-like forum thread (DiscussionForumPosting) with 4 posts, avatars, like buttons, suggested topics",
+  "minF1": 0.75,
+  "mustContain": [
+    "deleted eleven grammar rules",
+    "synchronise on statement boundaries",
+    "composes fine with statement-level"
+  ],
+  "mustNotContain": [
+    "SUGGESTED-TOPICS-MARKER",
+    "FOOTER-MARKER-TEXT"
+  ]
+}

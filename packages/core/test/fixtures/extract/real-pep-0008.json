@@ -1,0 +1,11 @@
+{
+  "url": "https://peps.python.org/pep-0008/",
+  "type": "real: PEP page (Sphinx-based with header table and TOC)",
+  "minF1": 0.9,
+  "mustContain": [
+    "Maximum Line Length",
+    "79 characters",
+    "Imports"
+  ],
+  "minChars": 15000
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>RFC 9999 - The RateLimit Header Fields for HTTP</title><meta name="citation_title" content="The RateLimit Header Fields for HTTP"></head><body>
+<pre>Internet Engineering Task Force (IETF)                    N. Okafor, Ed.
+Request for Comments: 9999                                Example Labs
+Category: Standards Track                                    April 2026
+ISSN: 2070-1721
+
+
+              <span class="h1">The RateLimit Header Fields for HTTP</span>
+
+Abstract
+
+   This document defines the RateLimit-Limit, RateLimit-Remaining and
+   RateLimit-Reset header fields for HTTP, allowing servers to publish
+   current service limits and clients to shape their request policy
+   accordingly.
+
+<span class="h2"><a class="selflink" id="section-1" href="#section-1">1</a>.  Introduction</span>
+
+   Rate limiting is a common technique for protecting services. Servers
+   have historically used a variety of non-standard fields such as
+   X-RateLimit-Limit; this document defines standard fields with well
+   defined semantics.
+
+<span class="h2"><a class="selflink" id="section-2" href="#section-2">2</a>.  Header Field Definitions</span>
+
+<span class="h3"><a class="selflink" id="section-2.1" href="#section-2.1">2.1</a>.  RateLimit-Limit</span>
+
+   The RateLimit-Limit field indicates the maximum number of requests
+   the server is willing to accept from the client in the current
+   window.
+
+     RateLimit-Limit: 100
+
+
+
+<span class="grey">Okafor                       Standards Track                    [Page 1]</span></pre>
+<hr class='noprint'/><!--NewPage--><pre class='newpage'><span id="page-2" ></span><span class="grey"><a href="./rfc9999">RFC 9999</a>                RateLimit Header Fields               April 2026</span>
+
+
+<span class="h3"><a class="selflink" id="section-2.2" href="#section-2.2">2.2</a>.  RateLimit-Remaining</span>
+
+   The RateLimit-Remaining field indicates the number of requests
+   remaining in the current window. It MUST NOT be greater than
+   RateLimit-Limit.
+
+<span class="h3"><a class="selflink" id="section-2.3" href="#section-2.3">2.3</a>.  RateLimit-Reset</span>
+
+   The RateLimit-Reset field indicates the number of seconds until the
+   window resets. Clients SHOULD wait at least this long before
+   retrying after a 429 response.
+
+<span class="h2"><a class="selflink" id="section-3" href="#section-3">3</a>.  Security Considerations</span>
+
+   Publishing limits reveals capacity information that an attacker could
+   use to plan a denial of service; servers MAY publish reduced values.
+
+
+
+<span class="grey">Okafor                       Standards Track                    [Page 2]</span></pre>
+</body></html>

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rate limiter implementations compared</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<header class="site-header" role="banner">
+  <a class="logo" href="/">Example Compare</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header><main><h1>Rate limiter implementations compared</h1>
+<p>The table below lists common implementations, the algorithm each uses and whether it can share state across instances.</p>
+<table><caption>Rate limiter implementations compared</caption><thead><tr><th>Implementation</th><th>Algorithm</th><th>Distributed</th><th>Main knob</th></tr></thead><tbody><tr><td>nginx limit_req</td><td>leaky bucket</td><td>yes</td><td>zone size</td></tr><tr><td>Envoy local ratelimit</td><td>token bucket</td><td>yes</td><td>tokens_per_fill</td></tr><tr><td>Cloudflare Rate Limiting</td><td>sliding window</td><td>no</td><td>period</td></tr><tr><td>Redis cell</td><td>GCRA</td><td>yes</td><td>burst</td></tr><tr><td>Kong rate-limiting</td><td>fixed window</td><td>yes</td><td>policy</td></tr><tr><td>Traefik RateLimit</td><td>token bucket</td><td>yes</td><td>burst</td></tr><tr><td>Spring Bucket4j</td><td>token bucket</td><td>yes</td><td>bandwidth</td></tr><tr><td>Guava RateLimiter</td><td>smooth bursty</td><td>no</td><td>permitsPerSecond</td></tr></tbody></table>
+<p>Column "Main knob" names the option you will tune first.</p></main>
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at Example Compare</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 Example Compare Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

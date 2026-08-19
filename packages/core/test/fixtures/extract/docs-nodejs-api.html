@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Limiter | Node-ish v24.3.0 Documentation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+<div id="content" class="clearfix">
+<div id="column2" class="interior"><div id="intro" class="interior"><a href="/" title="Go back to the home page">Node-ish</a></div><ul><li><a class="nav-documentation" href="documentation.html">About this documentation NODE-NAV-MARKER</a></li><li><a class="nav-assert" href="assert.html">Assert</a></li><li><a class="nav-buffer" href="buffer.html">Buffer</a></li><li><a class="nav-limiter active" href="limiter.html">Limiter</a></li><li><a class="nav-path" href="path.html">Path</a></li><li><a class="nav-stream" href="stream.html">Stream</a></li></ul></div>
+<div id="column1" data-id="limiter" class="interior">
+<header class="header"><div class="header-container"><h1>Node-ish v24.3.0 documentation</h1><button class="theme-toggle-btn" aria-label="Toggle dark mode">☾</button></div><div id="gtoc"><ul><li class="pinned-header">Node-ish v24.3.0</li><li class="picker-header"><a href="#">Index</a></li><li class="picker-header"><a href="#">View on single page</a></li><li class="picker-header"><a href="#">Print</a></li><li class="picker-header"><a href="https://github.com/nodeish/node/edit/main/doc/api/limiter.md">Edit on GitHub</a></li></ul></div><hr></header>
+<details id="toc" open><summary>Table of contents</summary><ul><li><a href="#limiter">Limiter</a><ul><li><a href="#class-tokenbucket">Class: TokenBucket</a></li><li><a href="#class-leakybucket">Class: LeakyBucket</a></li></ul></li></ul></details>
+<div id="apicontent">
+<h2>Limiter<span><a class="mark" href="#limiter" id="limiter">#</a></span></h2>
+<div class="api_stability api_stability_2"><a href="documentation.html#stability-index">Stability: 2</a> - Stable</div>
+<p><strong>Source Code:</strong> <a href="https://github.com/nodeish/node/blob/v24.3.0/lib/limiter.js">lib/limiter.js</a></p>
+<p>The <code>node:limiter</code> module provides token bucket and leaky bucket primitives for shaping outbound traffic.</p>
+<section><h3>Class: TokenBucket<span><a class="mark" href="#class-tokenbucket" id="class-tokenbucket">#</a></span></h3><div class="api_metadata"><span>Added in: v24.3.0</span></div>
+<h4>new TokenBucket(options)<span><a class="mark" href="#new-tokenbucketoptions" id="new-tokenbucketoptions">#</a></span></h4>
+<ul><li><code>options</code> {Object}<ul><li><code>capacity</code> {number} Maximum tokens. <strong>Default:</strong> <code>100</code>.</li><li><code>refillPerSecond</code> {number} Tokens added per second. <strong>Default:</strong> <code>10</code>.</li></ul></li></ul>
+<h4>bucket.tryAcquire([tokens])<span><a class="mark" href="#buckettryacquiretokens" id="buckettryacquiretokens">#</a></span></h4>
+<ul><li><code>tokens</code> {number} <strong>Default:</strong> <code>1</code></li><li>Returns: {boolean}</li></ul>
+<p>Consumes <code>tokens</code> if available and returns <code>true</code>; otherwise returns <code>false</code> immediately.</p>
+<pre><code class="language-js"><span class="hljs-keyword">const</span> { <span class="hljs-title class_">TokenBucket</span> } = <span class="hljs-built_in">require</span>(<span class="hljs-string">'node:limiter'</span>);
+<span class="hljs-keyword">const</span> bucket = <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenBucket</span>({ <span class="hljs-attr">capacity</span>: <span class="hljs-number">5</span>, <span class="hljs-attr">refillPerSecond</span>: <span class="hljs-number">1</span> });
+<span class="hljs-title function_">console</span>.<span class="hljs-title function_">log</span>(bucket.<span class="hljs-title function_">tryAcquire</span>()); <span class="hljs-comment">// true</span></code> <button class="copy-button">copy</button></pre>
+</section>
+<section><h3>Class: LeakyBucket<span><a class="mark" href="#class-leakybucket" id="class-leakybucket">#</a></span></h3><p>A leaky bucket smooths traffic instead of tolerating bursts: requests enter a queue that drains at a constant rate, and requests arriving when the queue is full are dropped. It produces a very even output rate at the cost of added latency for bursty clients.</p></section>
+</div></div></div>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

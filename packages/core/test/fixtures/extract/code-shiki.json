@@ -1,0 +1,12 @@
+{
+  "expectFail": "C9 code/table fidelity pre-pass",
+  "url": "https://blog.example.dev/posts/token-bucket-in-go",
+  "type": "blog post with Shiki-highlighted blocks (span.line soup, data-language on pre)",
+  "minF1": 0.85,
+  "mustContain": [
+    "func (b *Bucket) Take() bool",
+    "go test ./... -run TestBurst",
+    "```go"
+  ],
+  "minCodeBlocks": 2
+}

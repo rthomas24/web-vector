@@ -1,0 +1,15 @@
+{
+  "expectFail": "C9 code/table fidelity pre-pass",
+  "url": "https://docs.example.io/recipes/retries",
+  "type": "MkDocs/codehilite page: div.codehilite > pre, pre[data-lang], code.lang-bash with Prism line-numbers rows",
+  "minF1": 0.85,
+  "mustContain": [
+    "except TransientError",
+    "```python",
+    "RANDOM % (2 ** i)"
+  ],
+  "mustNotContain": [
+    "DOCS-NAV-MARKER"
+  ],
+  "minCodeBlocks": 2
+}

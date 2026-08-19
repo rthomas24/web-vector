@@ -1,0 +1,15 @@
+{
+  "url": "https://arxiv.example.org/html/2601.01234v2",
+  "type": "arXiv HTML (LaTeXML): ltx_page_main, abstract, sections, math alttext, results table, references, TOC nav",
+  "minF1": 0.8,
+  "mustContain": [
+    "reduces spurious rejections by 37%",
+    "Adaptive bucket",
+    "RFC 7231"
+  ],
+  "mustNotContain": [
+    "ARXIV-TOC-MARKER",
+    "Report issue for preceding element"
+  ],
+  "minTableRows": 2
+}

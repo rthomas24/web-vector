@@ -1,0 +1,14 @@
+{
+  "url": "https://media.example.co.uk/tech/http-caching",
+  "type": "article behind a full-screen cookie/consent overlay (fixed div with long legal text) plus content underneath",
+  "minF1": 0.85,
+  "mustContain": [
+    "s-maxage",
+    "Accept-Encoding"
+  ],
+  "mustNotContain": [
+    "COOKIE-WALL-MARKER",
+    "legitimate interest",
+    "FOOTER-MARKER-TEXT"
+  ]
+}

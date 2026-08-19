@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Two ways to parse expressions – SSR Example</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+<div id="__next">
+<header class="site-header" role="banner">
+  <a class="logo" href="/">SSR Example</a>
+  <nav aria-label="Main navigation" class="main-nav">
+    <ul><li><a href="/home">Home</a></li><li><a href="/products">Products</a></li><li><a href="/pricing">Pricing</a></li><li><a href="/docs">Docs</a></li><li><a href="/blog">Blog</a></li><li><a href="/careers">Careers</a></li><li><a href="/contact">Contact</a></li></ul>
+  </nav>
+  <form class="search" action="/search"><input name="q" placeholder="Search the site"><button type="submit">Search</button></form>
+  <a class="btn" href="/login">Sign in</a> <a class="btn" href="/signup">Start free trial</a>
+</header><main><h1>Two ways to parse expressions</h1><div class="post-skeleton" aria-busy="true"><div class="line"></div><div class="line"></div></div></main>
+<footer class="site-footer" role="contentinfo">
+  <div class="footer-cols">
+    <div><h4>Company</h4><ul><li><a href="/about">About us</a></li><li><a href="/careers">Careers at SSR Example</a></li><li><a href="/press">Press kit</a></li></ul></div>
+    <div><h4>Resources</h4><ul><li><a href="/docs">Documentation</a></li><li><a href="/status">System status</a></li><li><a href="/changelog">Changelog</a></li></ul></div>
+    <div><h4>Legal</h4><ul><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li><li><a href="/cookies">Cookie settings</a></li></ul></div>
+  </div>
+  <form class="newsletter" action="/subscribe"><label>Subscribe to our newsletter</label><input type="email" placeholder="you@example.com"><button>Subscribe</button></form>
+  <p class="copyright">© 2026 SSR Example Inc. All rights reserved. FOOTER-MARKER-TEXT</p>
+</footer></div>
+<script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{"post":{"slug":"parsers-client","title":"Two ways to parse expressions","content":"<p>A tokenizer turns a stream of characters into tokens such as identifiers, numbers and punctuation. The parser then consumes those tokens and builds a tree that reflects the grammar of the language, reporting an error at the first token that cannot continue any valid production.</p><p>Recursive descent parsers implement one function per grammar rule. Each function consumes the tokens that rule expects and calls the functions of the rules it references, so the call stack mirrors the shape of the parse tree while it is being built.</p><h2>Pratt parsing</h2><p>Pratt parsing handles operator precedence by giving each operator a binding power. A loop keeps extending the current expression while the next operator binds more tightly than the surrounding context allows, which avoids one grammar rule per precedence level.</p><h2>Recovering from errors</h2><p>Good error recovery matters more than speed for interactive tools. A common strategy is to synchronise on statement boundaries: after an error the parser skips tokens until it sees a semicolon or a keyword that starts a statement, then continues so that one typo does not hide every later error.</p>","tags":["parsing"]},"related":[{"title":"x","excerpt":"short"}]}},"page":"/blog/[slug]","query":{"slug":"parsers-client"},"buildId":"k9s8d7f6"}</script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

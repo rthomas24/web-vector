@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ratelimit — Rate limiting primitives — Example 3.14 documentation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="sphinx">
+<style>.site-header{display:flex}.hidden{display:none}</style>
+</head>
+<body>
+
+<div class="related" role="navigation" aria-label="Related"><h3>Navigation</h3><ul><li class="right"><a href="../genindex.html" title="General Index">index</a> |</li><li class="right"><a href="../py-modindex.html">modules</a> |</li><li class="right"><a href="threading.html">next</a> |</li><li class="right"><a href="queue.html">previous</a> |</li><li><a href="../index.html">Example 3.14 documentation</a> »</li><li><a href="index.html">The Standard Library</a> »</li><li class="nav-item">ratelimit</li></ul></div>
+<div class="document"><div class="documentwrapper"><div class="bodywrapper"><div class="body" role="main">
+<section id="module-ratelimit">
+
+<h1>ratelimit — Rate limiting primitives<a class="headerlink" href="#ratelimit" title="Link to this heading">¶</a></h1>
+<p><strong>Source code:</strong> <a href="https://github.com/example/ratelimit/blob/main/ratelimit.py">ratelimit.py</a></p>
+<p>Rate limiting protects a service from being overwhelmed by too many requests in a short window. Instead of failing unpredictably under load, a rate-limited service rejects or delays excess requests in a controlled way, and tells the client when it may try again.</p>
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h2>
+<dl class="py class"><dt id="ratelimit.TokenBucket"><em class="property">class </em><span class="sig-name descname">TokenBucket</span>(<em class="sig-param">capacity</em>, <em class="sig-param">refill_rate</em>)</dt>
+<dd><p>The token bucket algorithm keeps a counter of available tokens that refills at a fixed rate up to a maximum capacity. Each request consumes one token; when the bucket is empty the request is rejected. Because tokens accumulate while the service is idle, the bucket tolerates short bursts without exceeding the long-term average rate.</p>
+<dl class="py method"><dt id="ratelimit.TokenBucket.try_acquire"><span class="sig-name descname">try_acquire</span>(<em>tokens=1</em>)</dt><dd><p>Return True and consume tokens if enough are available; otherwise return False without blocking.</p></dd></dl>
+</dd></dl>
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading">¶</a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">ratelimit</span> <span class="kn">import</span> <span class="n">TokenBucket</span>
+
+<span class="n">bucket</span> <span class="o">=</span> <span class="n">TokenBucket</span><span class="p">(</span><span class="n">capacity</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">refill_rate</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">bucket</span><span class="o">.</span><span class="n">try_acquire</span><span class="p">():</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;rate limited&quot;</span><span class="p">)</span>
+</pre></div></div>
+<h2>Choosing an algorithm<a class="headerlink" href="#choosing" title="Link to this heading">¶</a></h2>
+<p>A leaky bucket smooths traffic instead of tolerating bursts: requests enter a queue that drains at a constant rate, and requests arriving when the queue is full are dropped. It produces a very even output rate at the cost of added latency for bursty clients.</p>
+<p>Choosing an algorithm is mostly a question of what you want to protect: a database that degrades under bursts prefers a leaky bucket, an API that sells quota to customers prefers a token bucket, and a shared cache with limited memory prefers sliding windows.</p>
+</section>
+</div></div></div>
+<div class="sphinxsidebar" role="navigation" aria-label="Main"><div class="sphinxsidebarwrapper">
+<h3><a href="../contents.html">Table of Contents SPHINX-SIDEBAR-MARKER</a></h3>
+<ul><li><a class="reference internal" href="#">ratelimit — Rate limiting primitives</a><ul><li><a class="reference internal" href="#classes">Classes</a></li><li><a class="reference internal" href="#example">Example</a></li><li><a class="reference internal" href="#choosing">Choosing an algorithm</a></li></ul></li></ul>
+<h4>Previous topic</h4><p class="topless"><a href="queue.html">queue — A synchronized queue class</a></p>
+<h4>Next topic</h4><p class="topless"><a href="threading.html">threading — Thread-based parallelism</a></p>
+<div role="note" aria-label="source link"><h3>This page</h3><ul class="this-page-menu"><li><a href="../bugs.html">Report a bug</a></li><li><a href="https://github.com/example/docs/blob/main/library/ratelimit.rst">Show source</a></li></ul></div>
+<div id="searchbox" style="display: none" role="search"><h3 id="searchlabel">Quick search</h3><form class="search" action="../search.html" method="get"><input type="text" name="q"><input type="submit" value="Go"></form></div>
+</div></div><div class="clearer"></div></div>
+<div class="footer">© Copyright 2001-2026, Example Software Foundation. FOOTER-MARKER-TEXT <a href="../copyright.html">Copyright</a> | <a href="../license.html">License</a></div>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());</script>
+</body>
+</html>

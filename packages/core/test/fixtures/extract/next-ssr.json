@@ -1,0 +1,13 @@
+{
+  "url": "https://ssr.example.com/blog/parsers",
+  "type": "Next.js Pages Router SSR page: full content in DOM plus a 60 KB __NEXT_DATA__ script that must not be mistaken for a shell",
+  "minF1": 0.9,
+  "mustContain": [
+    "binding power",
+    "synchronise on statement boundaries"
+  ],
+  "mustNotContain": [
+    "NEXT-DATA-MARKER",
+    "FOOTER-MARKER-TEXT"
+  ]
+}

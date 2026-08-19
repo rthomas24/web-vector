@@ -1,0 +1,15 @@
+{
+  "url": "https://en.wikipedia.org/wiki/Okapi_BM25",
+  "type": "real: Wikipedia article (infobox-less, math, references, navboxes)",
+  "minF1": 0.9,
+  "mustContain": [
+    "ranking function",
+    "IDF"
+  ],
+  "mustNotContain": [
+    "Jump to content",
+    "Retrieved from",
+    "Privacy policy"
+  ],
+  "minChars": 3000
+}
