@@ -25,7 +25,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/rthomas24/web-vector",
+    "url": "git+https://github.com/rthomas24/web-vector.git",
     "directory": "packages/core"
   },
   "files": [

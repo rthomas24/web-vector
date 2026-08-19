@@ -19,11 +19,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/rthomas24/web-vector",
+    "url": "git+https://github.com/rthomas24/web-vector.git",
     "directory": "packages/mcp"
   },
   "bin": {
-    "webvector-mcp": "./dist/bin.js"
+    "webvector-mcp": "dist/bin.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

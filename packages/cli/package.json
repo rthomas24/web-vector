@@ -17,11 +17,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/rthomas24/web-vector",
+    "url": "git+https://github.com/rthomas24/web-vector.git",
     "directory": "packages/cli"
   },
   "bin": {
-    "webvector": "./dist/cli.js"
+    "webvector": "dist/cli.js"
   },
   "files": [
     "dist",
