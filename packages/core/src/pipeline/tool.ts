@@ -1,18 +1,40 @@
 import { z } from 'zod';
 import type { ResearchOptions } from '../types.js';
 
-export const WEB_RESEARCH_TOOL_NAME = 'web_research';
+/**
+ * Canonical (namespaced) tool names. `webvector_*` avoids colliding with Anthropic's built-in
+ * `web_search`/`web_fetch` server tools and Claude Code's WebSearch/WebFetch, and lets permission
+ * rules, hooks and tool-search target them unambiguously.
+ */
+export const WEB_RESEARCH_TOOL_NAME = 'webvector_research';
 
 export const WEB_RESEARCH_DESCRIPTION =
   'Research a question on the live web. Runs a web search, reads the FULL content of the top pages (HTML/PDF), embeds them, and returns only the passages most relevant to the query, each with its source URL, title and relevance score. Prefer this over plain web search when you need facts, quotes, numbers, code, or up-to-date details from actual page content. Returns cited passages (not whole pages). Pass related_queries to widen coverage and session_id to reuse pages already read in this conversation.';
 
-export const WEB_FETCH_TOOL_NAME = 'web_fetch';
+export const WEB_FETCH_TOOL_NAME = 'webvector_fetch';
 export const WEB_FETCH_DESCRIPTION =
-  'Fetch a single URL and return its main content as Markdown (HTML, PDF and text supported). Use when you already know the exact page you need — typically a URL the user gave you or one returned by web_search/web_research. Optionally pass a query to return only the most relevant passages instead of the whole page.';
+  'Fetch a single URL and return its main content as Markdown (HTML, PDF and text supported). Use when you already know the exact page you need — typically a URL the user gave you or one returned by webvector_search/webvector_research. Optionally pass a query to return only the most relevant passages instead of the whole page.';
 
-export const WEB_SEARCH_TOOL_NAME = 'web_search';
+export const WEB_SEARCH_TOOL_NAME = 'webvector_search';
 export const WEB_SEARCH_DESCRIPTION =
-  'Run a web search and return result URLs, titles and snippets (no page fetching). Cheaper than web_research; use it to discover pages or when snippets are enough.';
+  'Run a web search and return result URLs, titles and snippets (no page fetching). Cheaper than webvector_research; use it to discover pages or when snippets are enough.';
+
+export type WebVectorToolName = 'webvector_research' | 'webvector_fetch' | 'webvector_search';
+/** Pre-0.2 names, still accepted by the runners and exposable as MCP aliases (`--legacy-tool-names`). */
+export const LEGACY_TOOL_NAMES: Record<string, WebVectorToolName> = {
+  web_research: WEB_RESEARCH_TOOL_NAME,
+  web_fetch: WEB_FETCH_TOOL_NAME,
+  web_search: WEB_SEARCH_TOOL_NAME,
+};
+export const TOOL_NAMES: readonly WebVectorToolName[] = [
+  WEB_RESEARCH_TOOL_NAME,
+  WEB_FETCH_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+];
+/** Map a legacy or canonical tool name to its canonical form (unknown names pass through). */
+export function canonicalToolName(name: string): string {
+  return LEGACY_TOOL_NAMES[name] ?? name;
+}
 
 export const webResearchInputSchema = z.object({
   query: z

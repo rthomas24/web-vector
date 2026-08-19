@@ -1,6 +1,6 @@
 # webvector-mcp
 
-MCP server for [WebVector](https://github.com/rthomas24/web-vector): gives any MCP client a `web_research` tool that searches the web, reads the full pages, ranks them and returns only the relevant, cited passages. Zero-config and ~12 MB (DuckDuckGo + lexical BM25 ranking). Built on the MCP TypeScript SDK v2.
+MCP server for [WebVector](https://github.com/rthomas24/web-vector): gives any MCP client a `webvector_research` tool that searches the web, reads the full pages, ranks them and returns only the relevant, cited passages. Zero-config and ~12 MB (DuckDuckGo + lexical BM25 ranking). Built on the MCP TypeScript SDK v2.
 
 ```bash
 npx -y webvector-mcp            # stdio, lexical tier (no downloads beyond the package)
@@ -17,7 +17,7 @@ Claude Desktop / Cursor / Windsurf / VS Code (`mcp.json`):
 { "mcpServers": { "webvector": { "command": "npx", "args": ["-y", "webvector-mcp"], "env": { "BRAVE_API_KEY": "optional" } } } }
 ```
 
-Tools: `web_research` (query, related_queries?, top_k?, max_pages?, freshness?, domains_allow?, domains_block?, session_id?), `web_fetch` (url, query?), `web_search` (query), `webvector_status`. Progress notifications and `structuredContent` are supported; cancellation is honoured.
+Tools: `webvector_research` (query, related_queries?, top_k?, max_pages?, freshness?, domains_allow?, domains_block?, session_id?), `webvector_fetch` (url, query?), `webvector_search` (query), `webvector_status`. Progress notifications and `structuredContent` are supported; cancellation is honoured. `--legacy-tool-names` also registers the pre-0.2 names (`web_research`, `web_fetch`, `web_search`) as aliases for one release.
 
 HTTP mode is localhost-only by default; `--token <t>` (or `WEBVECTOR_MCP_TOKEN`) requires a bearer token, and `--host 0.0.0.0 --allow-remote --token <t>` is needed to bind elsewhere (put TLS/auth in front).
 

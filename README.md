@@ -73,7 +73,7 @@ npx -y webvector-cli doctor
 
 ## 2. Use it as an MCP server
 
-The MCP server exposes four tools — `web_research` (the main one), `web_fetch`, `web_search`, `webvector_status` — to any MCP client.
+The MCP server exposes four tools — `webvector_research` (the main one), `webvector_fetch`, `webvector_search`, `webvector_status` — to any MCP client. (The pre-0.2 names `web_research`/`web_fetch`/`web_search` collided with Anthropic's built-in server tools and Claude Code's WebSearch/WebFetch; pass `--legacy-tool-names` to keep them as aliases for one release.)
 
 **Claude Code**
 
@@ -105,7 +105,7 @@ That's the lexical tier. For on-device semantic search, install the model runtim
 
 **Over HTTP** (for agent frameworks): `npx -y webvector-mcp --http --port 3333` → `http://127.0.0.1:3333/mcp` (Streamable HTTP, localhost only). Add `--token <secret>` (or `WEBVECTOR_MCP_TOKEN`) to require `Authorization: Bearer <secret>`; binding to any other address needs `--host 0.0.0.0 --allow-remote --token …` and belongs behind TLS/your own auth. `GET /health` for liveness.
 
-Every `web_research` result comes back both as compact Markdown (for the model) and as `structuredContent` (for your app), with progress notifications during the run.
+Every `webvector_research` result comes back both as compact Markdown (for the model) and as `structuredContent` (for your app), with progress notifications during the run.
 
 ## 3. Use it as a library
 

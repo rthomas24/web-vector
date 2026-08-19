@@ -3,7 +3,7 @@
  * webvector-mcp — stdio by default; `--http [--port 3333] [--host 127.0.0.1] [--path /mcp]`.
  * Configuration comes from webvector.config.* / environment variables (see README).
  */
-import { serveWebVectorHttp, serveWebVectorStdio } from './index.js';
+import { type CreateServerOptions, serveWebVectorHttp, serveWebVectorStdio } from './index.js';
 
 const args = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -20,6 +20,7 @@ Usage:
   webvector-mcp --http          Streamable HTTP on http://127.0.0.1:3333/mcp (localhost only)
      [--port N] [--path /mcp] [--token T | WEBVECTOR_MCP_TOKEN=T]
      [--host H --allow-remote --token T]   expose beyond localhost — put TLS/auth in front
+  --legacy-tool-names           also expose web_research / web_fetch / web_search as aliases (one release)
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …
@@ -32,6 +33,10 @@ Run \`npx webvector-cli doctor\` to diagnose configuration.`);
   process.exit(0);
 }
 
+const serverOptions: CreateServerOptions = {
+  legacyToolNames: args.includes('--legacy-tool-names'),
+};
+
 if (args.includes('--http')) {
   const port = Number(flag('--port') ?? process.env.PORT ?? 3333);
   // Deliberately NOT process.env.HOST: PaaS images often set HOST=0.0.0.0, which would silently expose the server.
@@ -39,7 +44,14 @@ if (args.includes('--http')) {
   const path = flag('--path') ?? '/mcp';
   const allowRemote = args.includes('--allow-remote');
   const token = flag('--token') ?? process.env.WEBVECTOR_MCP_TOKEN;
-  serveWebVectorHttp({ port, host, path, allowRemote, token: token === 'true' ? undefined : token })
+  serveWebVectorHttp({
+    ...serverOptions,
+    port,
+    host,
+    path,
+    allowRemote,
+    token: token === 'true' ? undefined : token,
+  })
     .then(({ close }) => {
       const shutdown = () => void close().finally(() => process.exit(0));
       process.on('SIGINT', shutdown);
@@ -52,7 +64,7 @@ if (args.includes('--http')) {
 } else {
   // Anything a dependency prints with console.log would corrupt the JSON-RPC stream on stdout.
   console.log = (...a: unknown[]) => console.error(...a);
-  const handle = serveWebVectorStdio();
+  const handle = serveWebVectorStdio(serverOptions);
   const shutdown = () => void Promise.resolve(handle.close()).finally(() => process.exit(0));
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);

@@ -23,11 +23,14 @@
 import { WebVectorError } from '../errors.js';
 import { renderMarkdown } from '../pipeline/format.js';
 import {
+  canonicalToolName,
   type JsonSchema,
+  TOOL_NAMES,
   toResearchOptions,
   WEB_FETCH_TOOL_NAME,
   WEB_RESEARCH_TOOL_NAME,
   WEB_SEARCH_TOOL_NAME,
+  type WebVectorToolName,
   webFetchInputSchema,
   webFetchToolDefinition,
   webResearchInputSchema,
@@ -44,16 +47,18 @@ export interface AnthropicToolDefinition {
   cache_control?: { type: 'ephemeral' };
 }
 
-/** Anthropic tool definitions for web_research (+ optionally web_fetch / web_search). */
+export type ToolInclude = WebVectorToolName | 'web_research' | 'web_fetch' | 'web_search';
+
+/** Anthropic tool definitions for webvector_research (+ optionally webvector_fetch / webvector_search). */
 export function anthropicTools(
-  opts: { include?: ('web_research' | 'web_fetch' | 'web_search')[]; cacheControl?: boolean } = {},
+  opts: { include?: ToolInclude[]; cacheControl?: boolean } = {},
 ): AnthropicToolDefinition[] {
-  const include = opts.include ?? ['web_research', 'web_fetch', 'web_search'];
+  const include = (opts.include ?? TOOL_NAMES).map(canonicalToolName);
   const defs = [
     webResearchToolDefinition(),
     webFetchToolDefinition(),
     webSearchToolDefinition(),
-  ].filter((d) => include.includes(d.name as any));
+  ].filter((d) => include.includes(d.name));
   return defs.map((d, i) => ({
     name: d.name,
     description: d.description,
@@ -89,6 +94,7 @@ export async function runTool(
   opts: { signal?: AbortSignal; maxOutputTokens?: number } = {},
 ): Promise<ToolRunResult> {
   try {
+    name = canonicalToolName(name);
     if (name === WEB_RESEARCH_TOOL_NAME) {
       const parsed = webResearchInputSchema.parse(input);
       const res = await wv.research(

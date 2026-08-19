@@ -13,6 +13,8 @@
 import { importOptional } from '../errors.js';
 import { renderMarkdown } from '../pipeline/format.js';
 import {
+  canonicalToolName,
+  TOOL_NAMES,
   toResearchOptions,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_TOOL_NAME,
@@ -25,12 +27,13 @@ import {
   webSearchInputSchema,
 } from '../pipeline/tool.js';
 import type { WebVector } from '../pipeline/webvector.js';
+import type { ToolInclude } from './anthropic.js';
 
-/** Build LangChain `tool()` instances for web_research, web_fetch, web_search. */
+/** Build LangChain `tool()` instances for webvector_research, webvector_fetch, webvector_search. */
 export async function langchainTools(
   wv: WebVector,
   opts: {
-    include?: ('web_research' | 'web_fetch' | 'web_search')[];
+    include?: ToolInclude[];
     maxOutputTokens?: number;
   } = {},
 ): Promise<any[]> {
@@ -39,9 +42,9 @@ export async function langchainTools(
     'the LangChain integration (webvector/langchain)',
   );
   const tool = mod.tool;
-  const include = opts.include ?? ['web_research', 'web_fetch', 'web_search'];
+  const include = (opts.include ?? TOOL_NAMES).map(canonicalToolName);
   const out: any[] = [];
-  if (include.includes('web_research')) {
+  if (include.includes(WEB_RESEARCH_TOOL_NAME)) {
     out.push(
       tool(
         async (input: any, runtime: any) => {
@@ -63,7 +66,7 @@ export async function langchainTools(
       ),
     );
   }
-  if (include.includes('web_fetch')) {
+  if (include.includes(WEB_FETCH_TOOL_NAME)) {
     out.push(
       tool(
         async (input: any, runtime: any) => {
@@ -87,7 +90,7 @@ export async function langchainTools(
       ),
     );
   }
-  if (include.includes('web_search')) {
+  if (include.includes(WEB_SEARCH_TOOL_NAME)) {
     out.push(
       tool(
         async (input: any, runtime: any) => {

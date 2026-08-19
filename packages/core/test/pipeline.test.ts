@@ -258,15 +258,15 @@ describe('WebVector pipeline (mocked)', () => {
 describe('tool schemas + bindings', () => {
   it('json schema definitions are valid and strict mode works', () => {
     const d = webResearchToolDefinition();
-    expect(d.name).toBe('web_research');
+    expect(d.name).toBe('webvector_research');
     expect((d.inputSchema as any).properties.query.type).toBe('string');
     expect((d.inputSchema as any).required).toEqual(['query']);
     const strict = webResearchToolDefinition({ strict: true }).inputSchema as any;
     expect(strict.additionalProperties).toBe(false);
     expect(strict.required.sort()).toEqual(Object.keys(strict.properties).sort());
     expect(strict.properties.top_k.type).toEqual(['integer', 'null']);
-    expect(webFetchToolDefinition().name).toBe('web_fetch');
-    expect(webSearchToolDefinition().name).toBe('web_search');
+    expect(webFetchToolDefinition().name).toBe('webvector_fetch');
+    expect(webSearchToolDefinition().name).toBe('webvector_search');
     expect(webResearchInputSchema.safeParse({ query: 'x' }).success).toBe(false); // min 2
     expect(webResearchInputSchema.safeParse({ query: 'ok', top_k: 500 }).success).toBe(false);
   });
@@ -274,15 +274,19 @@ describe('tool schemas + bindings', () => {
     mockSites();
     const wv = make();
     expect(anthropicTools().map((t) => t.name)).toEqual([
-      'web_research',
-      'web_fetch',
-      'web_search',
+      'webvector_research',
+      'webvector_fetch',
+      'webvector_search',
     ]);
     expect(
-      anthropicTools({ include: ['web_research'], cacheControl: true })[0]!.cache_control,
+      anthropicTools({ include: ['webvector_research'], cacheControl: true })[0]!.cache_control,
     ).toEqual({ type: 'ephemeral' });
+    // legacy names still select and run the same tools
+    expect(anthropicTools({ include: ['web_fetch'] }).map((t) => t.name)).toEqual([
+      'webvector_fetch',
+    ]);
     const oa = openaiTools();
-    expect(oa[0]).toMatchObject({ type: 'function', name: 'web_research', strict: true });
+    expect(oa[0]).toMatchObject({ type: 'function', name: 'webvector_research', strict: true });
     const r = await runOpenAITool(
       wv,
       'web_research',
@@ -299,9 +303,9 @@ describe('tool schemas + bindings', () => {
     );
     expect(r.isError).toBeUndefined();
     expect(r.content).toContain('[1]');
-    const s = await runAnthropicTool(wv, 'web_search', { query: 'x', count: 2 });
+    const s = await runAnthropicTool(wv, 'webvector_search', { query: 'x', count: 2 });
     expect(s.content).toContain('1. RRF intro');
-    const bad = await runAnthropicTool(wv, 'web_fetch', { url: 'https://down.example/x' });
+    const bad = await runAnthropicTool(wv, 'webvector_fetch', { url: 'https://down.example/x' });
     expect(bad.isError).toBe(true);
     expect(bad.content).toMatch(/FETCH_HTTP_ERROR/);
     const unknown = await runAnthropicTool(wv, 'nope', {});

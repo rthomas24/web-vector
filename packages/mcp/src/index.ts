@@ -1,16 +1,24 @@
 /**
  * webvector-mcp — MCP server exposing WebVector as tools:
- *   web_research   search → read full pages → embed → cited passages (the main tool)
- *   web_fetch      one URL → Markdown (optionally query-focused passages)
- *   web_search     SERP only
- *   webvector_status  resolved config, provider health, sessions
+ *   webvector_research  search → read full pages → embed → cited passages (the main tool)
+ *   webvector_fetch     one URL → Markdown (optionally query-focused passages)
+ *   webvector_search    SERP only
+ *   webvector_status    resolved config, provider health, sessions
+ * The pre-0.2 names (web_research/web_fetch/web_search) are available as aliases behind
+ * `--legacy-tool-names` for one release.
  *
  * Built on the MCP TypeScript SDK v2 (`@modelcontextprotocol/server`). Works over stdio
  * (`npx -y webvector-mcp`) and stateless Streamable HTTP (`webvector-mcp --http`).
  */
-import { McpServer } from '@modelcontextprotocol/server';
+import {
+  McpServer,
+  type StandardSchemaWithJSON,
+  type ToolAnnotations,
+  type ToolCallback,
+} from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import {
+  LEGACY_TOOL_NAMES,
   redactConfig,
   renderMarkdown,
   toResearchOptions,
@@ -38,8 +46,22 @@ export interface CreateServerOptions {
   config?: WebVectorConfig;
   /** Approx token budget for markdown returned to the model (default 4000). */
   maxOutputTokens?: number;
-  /** Which tools to expose (default all). */
-  tools?: ('web_research' | 'web_fetch' | 'web_search' | 'webvector_status')[];
+  /** Which tools to expose (default all). Legacy names (`web_research`, …) are accepted here too. */
+  tools?: (
+    | 'webvector_research'
+    | 'webvector_fetch'
+    | 'webvector_search'
+    | 'webvector_status'
+    | 'web_research'
+    | 'web_fetch'
+    | 'web_search'
+  )[];
+  /**
+   * Also register the pre-0.2 tool names (`web_research`, `web_fetch`, `web_search`) as aliases of the
+   * namespaced tools. Off by default: those names collide with Anthropic's built-in server tools and
+   * Claude Code's WebSearch/WebFetch. Kept for one release.
+   */
+  legacyToolNames?: boolean;
   /** Server name/version reported to clients. */
   name?: string;
   version?: string;
@@ -71,14 +93,50 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
     version: opts.version ?? VERSION,
   });
   const tools = new Set(
-    opts.tools ?? ['web_research', 'web_fetch', 'web_search', 'webvector_status'],
+    (
+      opts.tools ?? [
+        WEB_RESEARCH_TOOL_NAME,
+        WEB_FETCH_TOOL_NAME,
+        WEB_SEARCH_TOOL_NAME,
+        'webvector_status',
+      ]
+    ).map((t) => LEGACY_TOOL_NAMES[t] ?? t),
   );
+  const legacyNames = new Map<string, string>(
+    Object.entries(LEGACY_TOOL_NAMES).map(([legacy, c]) => [c, legacy]),
+  );
+  /** Register a tool and, when enabled, its legacy alias (same config/handler; alias appended after the canonical tools). */
+  const aliases: (() => void)[] = [];
+  const register = <In extends StandardSchemaWithJSON, Out extends StandardSchemaWithJSON>(
+    name: string,
+    config: {
+      title?: string;
+      description?: string;
+      inputSchema?: In;
+      outputSchema?: Out;
+      annotations?: ToolAnnotations;
+      _meta?: Record<string, unknown>;
+    },
+    cb: ToolCallback<In>,
+  ) => {
+    server.registerTool(name, config, cb);
+    const legacy = legacyNames.get(name);
+    if (opts.legacyToolNames && legacy) {
+      aliases.push(() =>
+        server.registerTool(
+          legacy,
+          { ...config, title: `${config.title ?? name} (alias of ${name})` },
+          cb,
+        ),
+      );
+    }
+  };
   const wvp = () =>
     opts.webvector ? Promise.resolve(opts.webvector) : getSharedWebVector(opts.config);
   const maxTokens = opts.maxOutputTokens ?? 4000;
 
-  if (tools.has('web_research')) {
-    server.registerTool(
+  if (tools.has(WEB_RESEARCH_TOOL_NAME)) {
+    register(
       WEB_RESEARCH_TOOL_NAME,
       {
         title: 'Web research (search → read pages → cited passages)',
@@ -133,8 +191,8 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
     );
   }
 
-  if (tools.has('web_fetch')) {
-    server.registerTool(
+  if (tools.has(WEB_FETCH_TOOL_NAME)) {
+    register(
       WEB_FETCH_TOOL_NAME,
       {
         title: 'Fetch a URL as Markdown',
@@ -187,8 +245,8 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
     );
   }
 
-  if (tools.has('web_search')) {
-    server.registerTool(
+  if (tools.has(WEB_SEARCH_TOOL_NAME)) {
+    register(
       WEB_SEARCH_TOOL_NAME,
       {
         title: 'Web search (SERP only)',
@@ -264,6 +322,8 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
     );
   }
 
+  // Deterministic tools/list order: canonical tools first, then legacy aliases (prompt-cache friendly).
+  for (const add of aliases) add();
   return server;
 }
 

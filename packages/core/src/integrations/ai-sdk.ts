@@ -11,7 +11,7 @@
  * const wv = new WebVector();
  * const { text } = await generateText({
  *   model: anthropic('claude-sonnet-5'),
- *   tools: { web_research: await webResearchTool(wv) },
+ *   tools: { webvector_research: await webResearchTool(wv) },
  *   stopWhen: isStepCount(5),
  *   prompt: 'What changed in the MCP spec in 2026?',
  * });
@@ -23,8 +23,11 @@ import { renderMarkdown } from '../pipeline/format.js';
 import {
   toResearchOptions,
   WEB_FETCH_DESCRIPTION,
+  WEB_FETCH_TOOL_NAME,
   WEB_RESEARCH_DESCRIPTION,
+  WEB_RESEARCH_TOOL_NAME,
   WEB_SEARCH_DESCRIPTION,
+  WEB_SEARCH_TOOL_NAME,
   type WebFetchInput,
   type WebResearchInput,
   type WebSearchInput,
@@ -59,7 +62,7 @@ export interface AiSdkToolOptions {
   defaults?: Partial<Parameters<WebVector['research']>[1]>;
 }
 
-/** `web_research` as an AI SDK tool. */
+/** `webvector_research` as an AI SDK tool. */
 export async function webResearchTool(
   wv: WebVector,
   opts: AiSdkToolOptions = {},
@@ -90,7 +93,7 @@ export async function webResearchTool(
   } as any) as Tool<WebResearchInput, ResearchResult>;
 }
 
-/** `web_fetch` as an AI SDK tool. */
+/** `webvector_fetch` as an AI SDK tool. */
 export async function webFetchTool(wv: WebVector): Promise<Tool<WebFetchInput, unknown>> {
   const { tool } = await ai();
   return tool({
@@ -123,7 +126,7 @@ export async function webFetchTool(wv: WebVector): Promise<Tool<WebFetchInput, u
   } as any) as Tool<WebFetchInput, unknown>;
 }
 
-/** `web_search` as an AI SDK tool. */
+/** `webvector_search` as an AI SDK tool. */
 export async function webSearchTool(wv: WebVector): Promise<Tool<WebSearchInput, unknown>> {
   const { tool } = await ai();
   return tool({
@@ -150,7 +153,11 @@ export async function webVectorTools(
     webFetchTool(wv),
     webSearchTool(wv),
   ]);
-  return { web_research: research, web_fetch: fetch, web_search: search };
+  return {
+    [WEB_RESEARCH_TOOL_NAME]: research,
+    [WEB_FETCH_TOOL_NAME]: fetch,
+    [WEB_SEARCH_TOOL_NAME]: search,
+  };
 }
 
 function stripForModel(r: ResearchResult) {

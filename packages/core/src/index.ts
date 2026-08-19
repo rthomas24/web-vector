@@ -60,8 +60,12 @@ export type {
   WebFetchInput,
   WebResearchInput,
   WebSearchInput,
+  WebVectorToolName,
 } from './pipeline/tool.js';
 export {
+  canonicalToolName,
+  LEGACY_TOOL_NAMES,
+  TOOL_NAMES,
   toResearchOptions,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_TOOL_NAME,

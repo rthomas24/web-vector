@@ -41,7 +41,7 @@ d('webvector-mcp stdio', () => {
   });
   afterAll(() => proc.kill());
 
-  it('initializes, lists tools, and runs web_research with progress + structuredContent', async () => {
+  it('initializes, lists tools, and runs webvector_research with progress + structuredContent', async () => {
     const init = await send('initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
@@ -53,16 +53,16 @@ d('webvector-mcp stdio', () => {
     );
     const tools = await send('tools/list', {});
     expect(tools.result.tools.map((t: any) => t.name).sort()).toEqual([
-      'web_fetch',
-      'web_research',
-      'web_search',
+      'webvector_fetch',
+      'webvector_research',
+      'webvector_search',
       'webvector_status',
     ]);
-    const research = tools.result.tools.find((t: any) => t.name === 'web_research');
+    const research = tools.result.tools.find((t: any) => t.name === 'webvector_research');
     expect(research.inputSchema.properties.query).toBeDefined();
     expect(research.annotations.readOnlyHint).toBe(true);
     const r = await send('tools/call', {
-      name: 'web_research',
+      name: 'webvector_research',
       arguments: { query: 'what is reciprocal rank fusion', top_k: 3, max_pages: 4 },
       _meta: { progressToken: 'p1' },
     });
@@ -75,7 +75,7 @@ d('webvector-mcp stdio', () => {
       ),
     ).toBe(true);
     const bad = await send('tools/call', {
-      name: 'web_fetch',
+      name: 'webvector_fetch',
       arguments: { url: 'http://127.0.0.1:1/x' },
     });
     expect(bad.result.isError).toBe(true);

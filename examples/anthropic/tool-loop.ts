@@ -5,7 +5,7 @@ import { anthropicTools, runAnthropicTool } from 'webvector/anthropic';
 
 const client = new Anthropic();
 const wv = new WebVector();
-const tools = anthropicTools({ include: ['web_research', 'web_fetch'] });
+const tools = anthropicTools({ include: ['webvector_research', 'webvector_fetch'] });
 const messages: any[] = [
   { role: 'user', content: 'Explain reciprocal rank fusion and cite two sources.' },
 ];

@@ -1,7 +1,7 @@
 {
   "name": "webvector-mcp",
   "version": "0.1.0",
-  "description": "MCP server for WebVector: web_research (search → read full pages → rank → cited passages), web_fetch, web_search. Zero-config `npx -y webvector-mcp` (~12 MB, lexical); add @huggingface/transformers or an API key for semantic search.",
+  "description": "MCP server for WebVector: webvector_research (search → read full pages → rank → cited passages), webvector_fetch, webvector_search. Zero-config `npx -y webvector-mcp` (~12 MB, lexical); add @huggingface/transformers or an API key for semantic search.",
   "license": "MIT",
   "type": "module",
   "engines": {
