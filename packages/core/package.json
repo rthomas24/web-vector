@@ -1,6 +1,6 @@
 {
   "name": "webvector",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Provider-agnostic web research for AI agents: search → full-page ingestion → embeddings → semantic retrieval → cited passages. One tool call.",
   "license": "MIT",
   "type": "module",

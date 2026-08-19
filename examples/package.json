@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "webvector": "^0.1.0",
-    "webvector-mcp": "^0.1.0"
+    "webvector": "^0.2.0",
+    "webvector-mcp": "^0.2.0"
   }
 }
