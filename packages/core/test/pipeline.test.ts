@@ -127,6 +127,7 @@ describe('WebVector pipeline (mocked)', () => {
     expect(res.queries[0]).toBe('reciprocal rank fusion formula');
     expect(res.markdown).toContain('# Web research: reciprocal rank fusion formula');
     expect(res.markdown).toContain('## Sources');
+    expect(res.stats.retrieve.tokensReturned).toBeGreaterThan(0);
     expect(events).toEqual(['search', 'ingest', 'retrieve', 'format']);
     await wv.close();
   });
@@ -365,6 +366,38 @@ describe('tool schemas + bindings', () => {
     const md = renderMarkdown(res, { maxTokens: 500 });
     expect(md.length).toBeLessThan(500 * 4 + 1500);
     expect((md.match(/\*\*\[\d+\]\*\*/g) ?? []).length).toBeLessThan(20);
+    expect(md).toMatch(
+      /_\d+ more passages omitted \(indices [\d, ]+\)\. Ask again with a larger budget or fetch \[\d+\] for detail\._/,
+    );
+  });
+  it('packPassages keeps the top passage and one per source before filling by score/token', async () => {
+    const { packPassages } = await import('../src/pipeline/format.js');
+    const mk = (index: number, url: string, score: number, len: number): any => ({
+      index,
+      url,
+      score,
+      text: 'x'.repeat(len),
+      title: 't',
+    });
+    const passages = [
+      mk(1, 'https://a', 1, 4000), // top-1: big
+      mk(2, 'https://a', 0.9, 400),
+      mk(3, 'https://b', 0.5, 400), // best of source b
+      mk(4, 'https://a', 0.8, 400),
+      mk(5, 'https://c', 0.2, 400), // best of source c
+    ];
+    const rendered = passages.map((p) => p.text as string);
+    // 1000 tokens of budget = 4000 chars: top-1 alone fills it → nothing else fits.
+    let packed = packPassages(passages, rendered, 1001);
+    expect(packed.included.map((p) => p.index)).toEqual([1]);
+    expect(packed.omitted).toEqual([2, 3, 4, 5]);
+    // 1300 tokens: top-1 + best-of-b + best-of-c (guarantees) before the higher-scored [2]/[4].
+    packed = packPassages(passages, rendered, 1303);
+    expect(packed.included.map((p) => p.index)).toEqual([1, 3, 5]);
+    // Enough budget: everything, in original order.
+    packed = packPassages(passages, rendered, 10_000);
+    expect(packed.included.map((p) => p.index)).toEqual([1, 2, 3, 4, 5]);
+    expect(packed.omitted).toEqual([]);
   });
 });
 

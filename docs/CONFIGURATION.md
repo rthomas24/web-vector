@@ -100,6 +100,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 |---|---|---|---|
 | `output.markdown` | `true` | `WEBVECTOR_OUTPUT_MARKDOWN` | include `result.markdown` |
 | `output.maxPassageChars` | `1500` | — | per passage in the markdown (merged passages may use 2×) |
+| `output.maxTokens` | `0` (off) | — | token budget for the rendered markdown; passages are packed by score per token (top passage and one per source first), omitted indices are listed in a footer; `maxOutputTokens` per call can only tighten it |
 | `output.highlights` | `true` | — | compute `Passage.highlight` — the best 1–3 sentence window for the query (idf-weighted term coverage, + cosine when an embedder exists); code fences/tables are never cut |
 | `output.passageMode` | `full` | — | `full` renders whole passages in the markdown; `highlight` renders only each passage's highlight window (~65 % fewer tokens on the eval) |
 | `output.includeSnippetsOnFailure` | `true` | — | return search snippets when no page could be fetched (`degraded: 'search_only'`) |
@@ -109,4 +110,4 @@ Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch impl
 
 ## Per-call options (`research(query, opts)` / tool arguments)
 
-`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens`. Numeric limits are capped by the configured values above.
+`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens` (packs passages into the budget and appends an "N more passages omitted" footer; `stats.retrieve.tokensReturned` reports the approximate size). Numeric limits are capped by the configured values above.

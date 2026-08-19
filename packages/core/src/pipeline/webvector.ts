@@ -25,6 +25,7 @@ import {
 } from '../config/index.js';
 import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
+import { approxTokens } from '../ingest/chunker.js';
 import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
 import type {
   Failure,
@@ -217,7 +218,9 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     result.markdown = renderMarkdown(result, {
       maxPassageChars: this.config.output.maxPassageChars,
       passageMode: this.config.output.passageMode,
+      maxTokens: this.config.output.maxTokens || undefined,
     });
+    result.stats.retrieve.tokensReturned = approxTokens(result.markdown);
     return result;
   }
 
@@ -538,12 +541,19 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       sessionId: opts.sessionId,
     };
     if (opts.markdown ?? cfg.output.markdown) {
+      // Callers may tighten the operator's token budget, never loosen it.
+      const budgets = [cfg.output.maxTokens, opts.maxOutputTokens].filter(
+        (n): n is number => !!n && n > 0,
+      );
       result.markdown = renderMarkdown(result, {
         maxPassageChars: cfg.output.maxPassageChars,
-        maxTokens: opts.maxOutputTokens,
+        maxTokens: budgets.length ? Math.min(...budgets) : undefined,
         passageMode: cfg.output.passageMode,
       });
     }
+    result.stats.retrieve.tokensReturned = approxTokens(
+      result.markdown ?? passages.map((p) => p.text).join('\n\n'),
+    );
     stageDone('format', Date.now() - t0 - result.stats.totalMs);
     return result;
   }

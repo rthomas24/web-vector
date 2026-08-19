@@ -312,7 +312,14 @@ export interface ResearchStats {
     batches: number;
     ms: number;
   };
-  retrieve: { candidates: number; queries: number; reranked: boolean; ms: number };
+  retrieve: {
+    candidates: number;
+    queries: number;
+    reranked: boolean;
+    ms: number;
+    /** Approximate tokens of the returned markdown (or passage texts when markdown is off). */
+    tokensReturned?: number;
+  };
   totalMs: number;
   warnings: string[];
 }
@@ -350,7 +357,11 @@ export interface ResearchOptions {
   rerank?: boolean;
   /** Include pre-rendered markdown (default from config). */
   markdown?: boolean;
-  /** Trim passages so the rendered markdown stays under this many (approximate) tokens. */
+  /**
+   * Token budget for the rendered markdown (approximate). Passages are packed by score per token,
+   * keeping the top passage and one per source; omitted indices are listed in a footer. Can only
+   * tighten `output.maxTokens`.
+   */
   maxOutputTokens?: number;
   /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
   explain?: boolean;
