@@ -16,6 +16,10 @@ export interface MarkdownRenderOptions {
   untrustedNotice?: boolean;
   /** `highlight` renders only each passage's best sentence window (falls back to the full text). */
   passageMode?: 'full' | 'highlight';
+  /** Evidence-card header line per passage (domain · date · corroboration · matched sub-questions). */
+  evidenceCards?: boolean;
+  /** Caller-supplied related queries; evidence cards list which of them a passage matched. */
+  relatedQueries?: string[];
 }
 
 function trimText(text: string, max: number): string {
@@ -27,7 +31,11 @@ function trimText(text: string, max: number): string {
 export function renderPassage(
   p: Passage,
   maxChars: number,
-  opts: { passageMode?: 'full' | 'highlight' } = {},
+  opts: {
+    passageMode?: 'full' | 'highlight';
+    evidenceCards?: boolean;
+    relatedQueries?: string[];
+  } = {},
 ): string {
   // A passage merged from neighbouring chunks may run to ~2× the single-chunk limit.
   const limit = p.chunkCount && p.chunkCount > 1 ? maxChars * 2 : maxChars;
@@ -38,12 +46,42 @@ export function renderPassage(
     .map((l) => `> ${l}`)
     .join('\n');
   const meta: string[] = [];
+  if (opts.evidenceCards) {
+    // Evidence card: everything the model needs to weigh this passage, on one line.
+    meta.push(hostOf(p.url));
+    if (p.publishedAt) meta.push(`published ${p.publishedAt.slice(0, 10)}`);
+    if (p.corroboration && p.corroboration > 1)
+      meta.push(
+        `corroborated by ${p.corroboration - 1} other site${p.corroboration > 2 ? 's' : ''}`,
+      );
+    const aspects = (opts.relatedQueries ?? []).filter((q) => p.matchedQueries.includes(q));
+    if (aspects.length)
+      meta.push(
+        `matched: ${aspects
+          .slice(0, 3)
+          .map((q) => `"${q}"`)
+          .join(', ')}`,
+      );
+    meta.push(`score ${p.score.toFixed(2)}`);
+    if (p.fromSnippet) meta.push('search snippet');
+    if (highlightOnly && p.highlight && p.highlight.text.length < p.text.length)
+      meta.push('highlight');
+    return `**[${p.index}]** ${p.title} — <${p.url}> · ${meta.join(' · ')}\n${body}`;
+  }
   if (p.publishedAt) meta.push(`published ${p.publishedAt.slice(0, 10)}`);
   meta.push(`score ${p.score.toFixed(2)}`);
   if (p.fromSnippet) meta.push('search snippet');
   if (highlightOnly && p.highlight && p.highlight.text.length < p.text.length)
     meta.push('highlight');
   return `**[${p.index}]** ${p.title} — <${p.url}> (${meta.join(', ')})\n${body}`;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
 
 export interface PackedPassages {
@@ -114,7 +152,11 @@ export function renderMarkdown(result: ResearchResult, opts: MarkdownRenderOptio
   if (result.passages.length === 0) parts.push('_No relevant passages found._');
 
   const rendered = result.passages.map((p) =>
-    renderPassage(p, maxChars, { passageMode: opts.passageMode }),
+    renderPassage(p, maxChars, {
+      passageMode: opts.passageMode,
+      evidenceCards: opts.evidenceCards,
+      relatedQueries: opts.relatedQueries,
+    }),
   );
   let sourcesBlock = '';
   if (opts.includeSources !== false && result.sources.length) {

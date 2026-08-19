@@ -422,6 +422,47 @@ describe('WebVector pipeline (mocked)', () => {
     );
     await wv.close();
   });
+  it('renders evidence-card headers and honours mmrSimilarity', async () => {
+    mockSites();
+    const wv = make({
+      output: { evidenceCards: true },
+      retrieval: { mmr: true, mmrSimilarity: 'jaccard' },
+    });
+    const res = await wv.research('reciprocal rank fusion formula', {
+      topK: 3,
+      relatedQueries: ['rank fusion formula k'],
+    });
+    const header = res.markdown!.split('\n').find((l) => l.startsWith('**[1]**'))!;
+    expect(header).toContain(' · rrf.example · ');
+    expect(header).toMatch(/· score \d\.\d\d/);
+    expect(header).toContain('matched: "rank fusion formula k"');
+    expect(res.passages.length).toBeGreaterThan(0);
+    await wv.close();
+    // Card header shows corroboration when > 1 and the published date when known.
+    const { renderPassage } = await import('../src/pipeline/format.js');
+    const line = renderPassage(
+      {
+        index: 2,
+        text: 'body',
+        url: 'https://www.example.org/a',
+        title: 'T',
+        score: 0.5,
+        chunkIndex: 0,
+        startOffset: 0,
+        endOffset: 4,
+        fetchedAt: '',
+        publishedAt: '2024-03-01T00:00:00Z',
+        corroboration: 3,
+        matchedQueries: ['q'],
+        citation: '',
+      },
+      1500,
+      { evidenceCards: true },
+    );
+    expect(line.split('\n')[0]).toBe(
+      '**[2]** T — <https://www.example.org/a> · example.org · published 2024-03-01 · corroborated by 2 other sites · score 0.50',
+    );
+  });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
     await expect(wv.research('   ')).rejects.toMatchObject({ code: 'INVALID_CONFIG' });

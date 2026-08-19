@@ -224,6 +224,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       maxPassageChars: this.config.output.maxPassageChars,
       passageMode: this.config.output.passageMode,
       maxTokens: this.config.output.maxTokens || undefined,
+      evidenceCards: this.config.output.evidenceCards,
     });
     result.stats.retrieve.tokensReturned = approxTokens(result.markdown);
     return result;
@@ -685,6 +686,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         maxPassageChars: cfg.output.maxPassageChars,
         maxTokens: budgets.length ? Math.min(...budgets) : undefined,
         passageMode: cfg.output.passageMode,
+        evidenceCards: cfg.output.evidenceCards,
+        relatedQueries: related,
       });
     }
     result.stats.retrieve.tokensReturned = approxTokens(

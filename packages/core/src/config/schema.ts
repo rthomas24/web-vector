@@ -141,6 +141,12 @@ export const retrievalConfigSchema = z.object({
   mmr: z.boolean().default(true),
   mmrLambda: z.number().min(0).max(1).default(0.7),
   /**
+   * Redundancy measure for MMR: `auto` = cosine over chunk vectors when every candidate has one,
+   * else word-3-gram Jaccard over text; `jaccard` forces text similarity even in semantic mode;
+   * `vector` = cosine when available (falls back to Jaccard in lexical mode).
+   */
+  mmrSimilarity: z.enum(['auto', 'vector', 'jaccard']).default('auto'),
+  /**
    * Aspect coverage (xQuAD-lite): treat caller-supplied related queries as aspects and re-select
    * the top-k so every aspect is covered before any aspect gets a third passage. `auto` = on
    * whenever related queries are given (there is nothing to do without them); `off` disables.
@@ -304,6 +310,12 @@ export const outputConfigSchema = z.object({
   highlights: z.boolean().default(true),
   /** `full` renders whole passages in the markdown; `highlight` renders only the highlight window. */
   passageMode: z.enum(['full', 'highlight']).default('full'),
+  /**
+   * Evidence-card header per passage: `**[n]** Title — <url> · domain · published … ·
+   * corroborated by k sites · matched: "q1", "q2" · score` — lets the model weigh recency,
+   * corroboration and which sub-question a passage answers without extra tool calls (< 40 tokens).
+   */
+  evidenceCards: z.boolean().default(false),
   /**
    * `score` (default) or `date-asc`: passages ordered oldest → newest (undated first) so the most
    * recent evidence sits closest to the model's answer (FreshPrompt: up to +2.2 % accuracy).

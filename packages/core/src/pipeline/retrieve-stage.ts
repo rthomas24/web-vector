@@ -309,7 +309,8 @@ export async function runRetrieveStage(
   let pool = diversifyBySource(cands, rc.maxPerSource, poolK);
   if (rc.maxPerDomain > 0) pool = capPerDomain(pool, rc.maxPerDomain);
   if (rc.mmr && pool.length > 1) {
-    if (queryVector && !lexicalOnly && pool.every((p) => p.vector)) {
+    const canUseVectors = !!queryVector && !lexicalOnly && pool.every((p) => p.vector);
+    if (canUseVectors && rc.mmrSimilarity !== 'jaccard') {
       pool = mmr(queryVector, pool, poolK, rc.mmrLambda);
     } else {
       // Lexical MMR: relevance = min-max normalised fused score, redundancy = word-3-gram Jaccard.
