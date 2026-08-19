@@ -130,6 +130,34 @@ export const webResearchInputSchema = z.object({
     .describe(
       'Approximate token budget for the returned text (default 4000). Passages that do not fit are omitted with an explicit footer naming their indices.',
     ),
+  depth: z
+    .enum(['fast', 'balanced', 'thorough'])
+    .optional()
+    .describe(
+      "Preset: fast = 4 pages, 6 passages, no query expansion, 15 s; balanced (default) = server defaults; thorough = 16 pages, 16 passages, expansion + rerank if available, 60 s. Explicit top_k/max_pages/deadline_ms override the preset; the server's configured limits are never exceeded.",
+    ),
+  objective: z
+    .string()
+    .max(2000)
+    .optional()
+    .describe(
+      'Optional long-form intent (what you are really trying to find out, ≤ 2000 chars). Used only for ranking passages — never sent to the search engine. Keep query short and specific; put nuance here.',
+    ),
+  category: z
+    .enum(['news', 'research', 'github', 'pdf', 'docs'])
+    .optional()
+    .describe(
+      'Search-intent hint: news (recent coverage), research (papers/arXiv/DOI), github (repos/issues), pdf (documents), docs (official documentation). Mapped to provider features or query operators.',
+    ),
+  deadline_ms: z
+    .number()
+    .int()
+    .min(2000)
+    .max(120_000)
+    .optional()
+    .describe(
+      'Wall-clock budget for fetching pages (ms, capped by the server). Partial results are always returned (degraded: "partial" with the reason).',
+    ),
 });
 export type WebResearchInput = z.infer<typeof webResearchInputSchema>;
 
@@ -373,22 +401,41 @@ export function toSlimOutput(
   };
 }
 
+/** `depth` presets (numeric args override; the operator's configured limits still cap everything). */
+export const DEPTH_PRESETS: Record<
+  'fast' | 'balanced' | 'thorough',
+  Pick<ResearchOptions, 'maxPages' | 'topK' | 'queryExpansion' | 'rerank' | 'deadlineMs'>
+> = {
+  fast: { maxPages: 4, topK: 6, queryExpansion: false, deadlineMs: 15_000 },
+  balanced: {},
+  thorough: { maxPages: 16, topK: 16, queryExpansion: true, rerank: true, deadlineMs: 60_000 },
+};
+
 /** Convert tool input (snake_case) to ResearchOptions. */
 export function toResearchOptions(
   input: WebResearchInput,
   extra: Partial<ResearchOptions> = {},
 ): ResearchOptions {
+  const preset = DEPTH_PRESETS[input.depth ?? 'balanced'];
+  const defined = <T extends object>(o: T) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
   return {
-    relatedQueries: input.related_queries,
-    topK: input.top_k,
-    maxPages: input.max_pages,
-    freshness: input.freshness,
-    domainsAllow: input.domains_allow,
-    domainsBlock: input.domains_block,
-    sessionId: input.session_id,
-    responseFormat: input.response_format,
-    maxOutputTokens: input.max_tokens,
-    ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)),
+    ...preset,
+    ...defined({
+      relatedQueries: input.related_queries,
+      topK: input.top_k,
+      maxPages: input.max_pages,
+      freshness: input.freshness,
+      domainsAllow: input.domains_allow,
+      domainsBlock: input.domains_block,
+      sessionId: input.session_id,
+      responseFormat: input.response_format,
+      maxOutputTokens: input.max_tokens,
+      objective: input.objective,
+      category: input.category,
+      deadlineMs: input.deadline_ms,
+    }),
+    ...defined(extra),
   };
 }
 

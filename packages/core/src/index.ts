@@ -83,6 +83,13 @@ export {
   textFragmentUrl,
   transformLinks,
 } from './pipeline/format.js';
+export type { ToolGuardOptions, UserLocation } from './pipeline/guard.js';
+export {
+  DOMAIN_NOT_ALLOWED,
+  MAX_USES_EXCEEDED,
+  parseUserLocation,
+  ToolGuard,
+} from './pipeline/guard.js';
 export type { Session } from './pipeline/session.js';
 export { ephemeralSession, SessionRegistry } from './pipeline/session.js';
 export type {
@@ -96,6 +103,7 @@ export type {
 } from './pipeline/tool.js';
 export {
   canonicalToolName,
+  DEPTH_PRESETS,
   LEGACY_TOOL_NAMES,
   MAX_DESCRIPTION_BYTES,
   TOOL_NAMES,
@@ -119,7 +127,12 @@ export {
   webSearchToolDefinition,
 } from './pipeline/tool.js';
 export type { WebVectorInitOptions } from './pipeline/webvector.js';
-export { mergeSearchResults, WebVector } from './pipeline/webvector.js';
+export {
+  categoryQuery,
+  mergeSearchResults,
+  objectiveTerms,
+  WebVector,
+} from './pipeline/webvector.js';
 export {
   createReranker,
   customReranker,

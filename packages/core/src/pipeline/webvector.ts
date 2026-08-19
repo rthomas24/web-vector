@@ -41,6 +41,8 @@ import type {
   ProgressEvent,
   ResearchOptions,
   ResearchResult,
+  SearchCapabilities,
+  SearchCategory,
   SearchOptions,
   SearchResult,
   SourceSummary,
@@ -266,6 +268,24 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return result;
   }
 
+  /** Resolved provider capabilities (builds providers on first call). */
+  async capabilities(): Promise<{
+    search: { id: string } & SearchCapabilities;
+    embeddings?: { id: string; model: string; dimensions: number };
+    reranker?: string;
+    tier: 'lexical' | 'semantic';
+  }> {
+    const c = await this.ensure();
+    return {
+      search: { id: c.search.id, ...c.search.capabilities() },
+      ...(c.embedder
+        ? { embeddings: { id: c.embedder.id, model: c.embedder.model, dimensions: c.dimensions } }
+        : {}),
+      ...(c.reranker ? { reranker: c.reranker.id } : {}),
+      tier: c.embedder ? 'semantic' : 'lexical',
+    };
+  }
+
   /** Sessions (store.mode: 'session' or an explicit sessionId). */
   async listSessions(): Promise<ReturnType<SessionRegistry['list']>> {
     return (await this.ensure()).sessions.list();
@@ -311,14 +331,17 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     progress({ stage: 'search', done: 0, total: 1, message: `Searching: ${query}` });
     this.emit('search:start', { queries: [query, ...related], provider: c.search.id });
     const searched = await runSearchStage(c, {
-      query,
-      related,
+      query: categoryQuery(query, opts.category),
+      related: related.map((q) => categoryQuery(q, opts.category)),
       maxPages,
       failures,
       options: {
         ...this.defaultSearchOptions(),
         count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
-        freshness: opts.freshness ?? cfg.search.freshness,
+        freshness:
+          opts.freshness ?? cfg.search.freshness ?? (opts.category === 'news' ? 'week' : undefined),
+        ...(opts.country ? { country: opts.country } : {}),
+        ...(opts.language ? { language: opts.language } : {}),
         domainsAllow: opts.domainsAllow,
         domainsBlock: opts.domainsBlock,
         signal,
@@ -333,7 +356,10 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
 
     // Retrieval-only query expansion (agent-supplied related queries were also searched above).
     let expanded: string[] = [];
-    if (cfg.retrieval.queryExpansion && cfg.retrieval.maxExpandedQueries > 0) {
+    if (
+      (opts.queryExpansion ?? cfg.retrieval.queryExpansion) &&
+      cfg.retrieval.maxExpandedQueries > 0
+    ) {
       try {
         expanded = await c.expander.expand(query, {
           searchResults: results,
@@ -448,15 +474,21 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         if (isFatalIngestError(e)) throw e;
       } finally {
         done++;
+        const failedSoFar = done - okPages;
         progress({
           stage: 'ingest',
           done,
           total: targets.length,
-          message: `Fetched ${done}/${targets.length}`,
+          failed: failedSoFar,
+          message: `Fetched ${done}/${targets.length}${failedSoFar ? ` (${failedSoFar} failed)` : ''}`,
         });
       }
     };
 
+    const deadlineMs = Math.min(
+      opts.deadlineMs ?? cfg.ingestion.totalDeadlineMs,
+      cfg.ingestion.totalDeadlineMs,
+    );
     const settled = await settleWithDeadline(
       targets.map((r) =>
         ingestOne(r).then(
@@ -464,20 +496,22 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           (e) => e as unknown,
         ),
       ),
-      cfg.ingestion.totalDeadlineMs,
+      deadlineMs,
       () => 'deadline' as const,
       () => runAbort.abort(new Error('run deadline exceeded')), // stop orphaned work
     );
     let fatal: WebVectorError | undefined;
+    let deadlineHits = 0;
     settled.forEach((outcome, i) => {
       const url = targets[i]?.url ?? '';
       if (outcome === 'deadline') {
+        deadlineHits++;
         const s = sources.get(canonicalizeUrl(url));
         if (s && s.status === 'failed' && !s.failure) {
           const f: Failure = {
             url,
             code: 'FETCH_TIMEOUT',
-            message: `Deadline of ${cfg.ingestion.totalDeadlineMs}ms exceeded`,
+            message: `Deadline of ${deadlineMs}ms exceeded`,
             stage: 'ingest',
           };
           s.failure = f;
@@ -504,12 +538,21 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     let candidates = 0;
     let reranked = false;
     let degraded: ResearchResult['degraded'];
+    let degradedReason: string | undefined;
+    if (deadlineHits > 0) {
+      degraded = 'partial';
+      degradedReason = `deadline of ${deadlineMs}ms reached: ${deadlineHits} of ${targets.length} pages not fetched`;
+      warnings.push(degradedReason);
+    }
+    const objectiveQuery = opts.objective ? objectiveTerms(opts.objective) : '';
     const hasChunks =
       session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
     if (hasChunks) {
       const r = await runRetrieveStage(c, cfg.retrieval, {
         session,
-        queries,
+        // The objective's top terms ride along as an extra low-weight list (expansionWeight);
+        // it is not searched and not reported in result.queries.
+        queries: objectiveQuery ? [...queries, objectiveQuery] : queries,
         relatedQueries: related,
         searchResults: results,
         topK,
@@ -521,7 +564,10 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       passages = r.passages;
       candidates = r.candidates;
       reranked = r.reranked;
-      if (r.lexicalOnly && c.embedder) degraded = 'partial'; // configured lexical mode is not degraded
+      if (r.lexicalOnly && c.embedder) {
+        degraded = 'partial'; // configured lexical mode is not degraded
+        degradedReason ??= 'embeddings unavailable; lexical retrieval only';
+      }
     }
     if (
       passages.length === 0 &&
@@ -579,6 +625,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         warnings,
       },
       degraded,
+      degradedReason,
       sessionId: opts.sessionId,
     };
     if (opts.markdown ?? cfg.output.markdown) {
@@ -700,6 +747,51 @@ function snippetPassages(results: SearchResult[], query: string): Passage[] {
     citation: citationFor(i + 1, r.title, r.url),
     fromSnippet: true,
   }));
+}
+
+const CATEGORY_OPERATORS: Record<SearchCategory, string> = {
+  pdf: 'filetype:pdf',
+  github: 'site:github.com',
+  research: '(arxiv OR doi OR paper)',
+  docs: 'documentation',
+  news: 'news',
+};
+
+/** Append the search-operator form of a category hint (providers without a native feature). */
+export function categoryQuery(query: string, category?: SearchCategory): string {
+  if (!category) return query;
+  const op = CATEGORY_OPERATORS[category];
+  return op && !query.toLowerCase().includes(op.toLowerCase()) ? `${query} ${op}` : query;
+}
+
+const STOP = new Set(
+  'a an the and or but of to in on for with by from as at is are was were be been being it its this that these those i we you they he she them our your their my me us do does did doing have has had having not no so if then than about into over under between while which who whom whose what when where why how would could should can may might will shall just also very more most much many some any each other such only own same too s t don now want need find know tell'.split(
+    ' ',
+  ),
+);
+
+/**
+ * Reduce a long-form objective to its most distinctive terms (max `n`), keeping identifiers,
+ * versions and numbers, so it can join retrieval as one bounded query that cannot dominate BM25.
+ */
+export function objectiveTerms(objective: string, n = 12): string {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  for (const raw of objective
+    .slice(0, 2000)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}._\-/:]+/u)) {
+    const w = raw.replace(/^[._\-/:]+|[._\-/:]+$/g, '');
+    if (w.length < 2 || STOP.has(w)) continue;
+    if (!counts.has(w)) order.push(w);
+    counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  const score = (w: string) =>
+    (counts.get(w) ?? 0) + (/\d|[._\-/:]/.test(w) ? 1.5 : 0) + Math.min(w.length, 12) / 24;
+  return order
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, n)
+    .join(' ');
 }
 
 function dedupeStrings(arr: string[]): string[] {
