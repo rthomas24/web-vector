@@ -184,7 +184,7 @@ export class EmbeddingCache {
     return !!this.db && !this.db.readOnly;
   }
   key(model: string, hash: string, kind: EmbedKind): string {
-    return `${model} ${this.dims} ${this.dtype} ${kind} ${hash}`;
+    return `${model}\u0000${this.dims}\u0000${this.dtype}\u0000${kind}\u0000${hash}`;
   }
   get(model: string, hash: string, kind: EmbedKind): Float32Array | undefined {
     const k = this.key(model, hash, kind);
