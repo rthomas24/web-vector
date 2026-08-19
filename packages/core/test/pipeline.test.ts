@@ -145,6 +145,9 @@ describe('WebVector pipeline (mocked)', () => {
     expect(res.passages.every((p) => p.url.includes('fruit.example'))).toBe(true);
     expect(res.stats.ingest.requested).toBe(1);
     expect(res.queries).toContain('banana crops weather');
+    // Related queries are aspects: coverage counts passages matching each one.
+    expect(res.coverage).toEqual({ 'banana crops weather': expect.any(Number) });
+    expect(res.coverage!['banana crops weather']).toBeGreaterThan(0);
     await wv.close();
     const plain = make({ retrieval: { mergeAdjacent: false, mmr: false, relativeCutoff: 0 } });
     const res2 = await plain.research('banana', { topK: 2, domainsAllow: ['fruit.example'] });

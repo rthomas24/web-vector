@@ -1,6 +1,6 @@
 export { BM25Index, lightStem, tokenize } from './bm25.js';
 export { HeuristicExpander, LlmExpander } from './expansion.js';
-export type { Adjacent, MmrOptions, Ranked } from './fusion.js';
+export type { Adjacent, Aspect, MmrOptions, Ranked } from './fusion.js';
 export {
   autocut,
   dbsfNormalize,
@@ -13,6 +13,7 @@ export {
   rrf,
   scoreFusion,
   shingleJaccard,
+  xquad,
 } from './fusion.js';
 export type { Highlight, HighlightOptions, ScoredWindow, Segment } from './highlight.js';
 export { bestHighlight, rankHighlightWindows, segmentText } from './highlight.js';

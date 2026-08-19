@@ -461,6 +461,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     let passages: Passage[] = [];
     let candidates = 0;
     let reranked = false;
+    let coverage: ResearchResult['coverage'];
     let degraded: ResearchResult['degraded'];
     const hasChunks =
       session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
@@ -480,6 +481,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       passages = r.passages;
       candidates = r.candidates;
       reranked = r.reranked;
+      coverage = r.coverage;
       if (r.lexicalOnly && c.embedder) degraded = 'partial'; // configured lexical mode is not degraded
     }
     if (
@@ -539,6 +541,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       },
       degraded,
       sessionId: opts.sessionId,
+      ...(coverage ? { coverage } : {}),
     };
     if (opts.markdown ?? cfg.output.markdown) {
       // Callers may tighten the operator's token budget, never loosen it.

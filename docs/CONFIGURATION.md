@@ -66,6 +66,7 @@ Code-only: `store.instance` (a `VectorStore`).
 | `rrfK` / `lexicalWeight` / `expansionWeight` | `60` / `0.5` / `0.7` | — | fusion weights |
 | `maxPerSource` | `3` | `WEBVECTOR_MAX_PER_SOURCE` | passages per page |
 | `mmr` / `mmrLambda` | `true` / `0.7` | `WEBVECTOR_MMR` | diversity re-ranking |
+| `aspectCoverage` / `aspectLambda` | `auto` / `0.5` | — | xQuAD-lite: caller-supplied `relatedQueries` are aspects; the top-k is re-selected so every aspect is covered before any gets a third passage; `result.coverage` reports passages per aspect. `off` disables |
 | `minScore` | `null` | — | absolute cosine floor |
 | `relativeCutoff` | `0.6` | — | drop candidates below 0.6 × the best cosine (0 disables) |
 | `nearDuplicateThreshold` | `0.9` | — | shingle-Jaccard dedupe |

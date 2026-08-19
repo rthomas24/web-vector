@@ -270,6 +270,8 @@ export interface PassageExplain {
   lists: { kind: 'bm25' | 'vector'; query: string; rank: number; score: number; weight: number }[];
   /** Chunk indices merged into this passage (`retrieval.mergeAdjacent`). */
   mergedChunks?: number[];
+  /** xQuAD objective value when aspect coverage re-selected the top-k (`retrieval.aspectCoverage`). */
+  aspectScore?: number;
 }
 
 export interface SourceSummary {
@@ -334,6 +336,11 @@ export interface ResearchResult {
   markdown?: string;
   degraded?: 'search_only' | 'partial';
   sessionId?: string;
+  /**
+   * How many returned passages matched each caller-supplied related query (aspect coverage,
+   * `retrieval.aspectCoverage`). Only present when related queries were given.
+   */
+  coverage?: Record<string, number>;
 }
 
 export interface ProgressEvent {

@@ -275,3 +275,57 @@ export function joinAdjacentText(a: Adjacent, b: Adjacent): string {
   }
   return `${a.text}\n\n${b.text}`;
 }
+
+// ─── Aspect coverage (xQuAD-lite) ────────────────────────────────────────────
+
+export interface Aspect {
+  /** P(a|q): importance of the aspect (weights are normalised to sum 1). */
+  weight: number;
+  /** rel(d|a) per candidate (same order as `cands`), in [0, 1]. */
+  rel: number[];
+}
+
+/**
+ * xQuAD (Santos, Macdonald & Ounis, WWW 2010) greedy selection:
+ *   f(d) = (1−λ)·rel(d|q) + λ·Σ_a w_a·rel(d|a)·Π_{d'∈S}(1 − rel(d'|a))
+ * The product term shrinks an aspect's pull once selected documents already cover it, so every
+ * aspect gets its first passage before any aspect gets its third. `relevance` and each aspect's
+ * `rel` are expected in [0, 1]. Returns the selected items in selection order plus their objective
+ * values (non-increasing).
+ */
+export function xquad<T>(
+  cands: T[],
+  relevance: number[],
+  aspects: Aspect[],
+  k: number,
+  lambda = 0.5,
+): { items: T[]; scores: number[] } {
+  const wSum = aspects.reduce((a, b) => a + b.weight, 0) || 1;
+  const w = aspects.map((a) => a.weight / wSum);
+  const uncovered = aspects.map(() => 1); // Π_{d'∈S}(1 − rel(d'|a)) per aspect
+  const remaining = new Set<number>(cands.map((_, i) => i));
+  const items: T[] = [];
+  const scores: number[] = [];
+  while (items.length < k && remaining.size) {
+    let best = -1;
+    let bestVal = Number.NEGATIVE_INFINITY;
+    for (const i of remaining) {
+      let cov = 0;
+      aspects.forEach((a, ai) => {
+        cov += (w[ai] as number) * (a.rel[i] ?? 0) * (uncovered[ai] as number);
+      });
+      const v = (1 - lambda) * (relevance[i] ?? 0) + lambda * cov;
+      if (v > bestVal) {
+        bestVal = v;
+        best = i;
+      }
+    }
+    items.push(cands[best] as T);
+    scores.push(bestVal);
+    remaining.delete(best);
+    aspects.forEach((a, ai) => {
+      uncovered[ai] = (uncovered[ai] as number) * (1 - (a.rel[best] ?? 0));
+    });
+  }
+  return { items, scores };
+}

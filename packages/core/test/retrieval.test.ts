@@ -664,3 +664,26 @@ describe('highlights', () => {
     expect(h2?.text).toBe('```\nline one rank fusion\nline two\n```');
   });
 });
+
+describe('xQuAD aspect coverage', () => {
+  it('covers every aspect before any aspect gets a third passage', async () => {
+    const { xquad } = await import('../src/retrieval/fusion.js');
+    // 6 candidates: a1..a3 relevant to aspect A (and slightly more relevant overall), b1..b3 to B.
+    const ids = ['a1', 'a2', 'a3', 'b1', 'b2', 'b3'];
+    const relevance = [1, 0.95, 0.9, 0.85, 0.8, 0.75];
+    const A = { weight: 1, rel: [1, 0.9, 0.8, 0, 0, 0] };
+    const B = { weight: 1, rel: [0, 0, 0, 1, 0.9, 0.8] };
+    const { items, scores } = xquad(ids, relevance, [A, B], 4, 0.5);
+    expect(items[0]).toBe('a1');
+    expect(items[1]).toBe('b1'); // aspect B gets covered before A gets its 2nd
+    // Both aspects are fully covered by their top hits (rel = 1) → the rest is relevance order.
+    expect(items.slice(2)).toEqual(['a2', 'a3']);
+    // With partial coverage and λ = 1 the selection alternates between aspects.
+    const A2 = { weight: 1, rel: [0.6, 0.5, 0.4, 0, 0, 0] };
+    const B2 = { weight: 1, rel: [0, 0, 0, 0.6, 0.5, 0.4] };
+    expect(xquad(ids, relevance, [A2, B2], 4, 1).items).toEqual(['a1', 'b1', 'a2', 'b2']);
+    for (let i = 1; i < scores.length; i++) expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]!);
+    // λ = 0 → pure relevance order.
+    expect(xquad(ids, relevance, [A, B], 3, 0).items).toEqual(['a1', 'a2', 'a3']);
+  });
+});

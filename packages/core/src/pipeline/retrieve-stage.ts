@@ -22,6 +22,7 @@ import {
   type Ranked,
   rrf,
   scoreFusion,
+  xquad,
 } from '../retrieval/fusion.js';
 import { leadWindow, rankHighlightWindows, toHighlight } from '../retrieval/highlight.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
@@ -56,10 +57,14 @@ export interface RetrieveOutput {
   reranked: boolean;
   /** True when no vectors were used (configured lexical mode or embedding failure). */
   lexicalOnly: boolean;
+  /** Passages per related query (aspect) when aspect coverage ran. */
+  coverage?: Record<string, number>;
 }
 
 type Candidate = ScoredChunk & {
   fused: number;
+  /** xQuAD objective value at selection time (aspect coverage mode). */
+  aspectScore?: number;
   /** Set on a passage assembled from neighbouring chunks (see `mergeAdjacentCandidates`). */
   parts?: Candidate[];
 };
@@ -253,6 +258,38 @@ export async function runRetrieveStage(
       pool = mmr(undefined, pool, poolK, rc.mmrLambda, { relevance: rel });
     }
   }
+  // Aspect coverage (xQuAD-lite): with caller-supplied related queries, each one is an aspect;
+  // re-select the top-k from the pool so every sub-question gets a passage before any gets a third.
+  const aspects = rc.aspectCoverage === 'off' ? [] : relatedQueries.filter((q) => q !== query);
+  let coverage: Record<string, number> | undefined;
+  if (aspects.length && pool.length > 1) {
+    const relOfList = new Map<number, Map<string, number>>(); // list index → id → min-max score
+    lists.forEach((l, li) => {
+      if (!aspects.includes(listQuery[li] as string)) return;
+      relOfList.set(li, new Map(minMaxNormalize(l).map((h) => [h.id, h.score])));
+    });
+    const relFor = (id: string, aspect: string): number => {
+      let best = 0;
+      relOfList.forEach((m, li) => {
+        if (listQuery[li] !== aspect) return;
+        const r = m.get(id) ?? 0;
+        if (r > best) best = r;
+      });
+      return best;
+    };
+    const relevance = minMaxNormalize(pool.map((p) => ({ id: p.id, score: p.fused }))).map(
+      (r) => r.score,
+    );
+    const { items, scores } = xquad(
+      pool,
+      relevance,
+      aspects.map((a) => ({ weight: 1, rel: pool.map((p) => relFor(p.id, a)) })),
+      pool.length,
+      rc.aspectLambda,
+    );
+    pool = items.map((p, i) => ({ ...p, aspectScore: scores[i] as number }));
+    coverage = Object.fromEntries(aspects.map((a) => [a, 0]));
+  }
   let reranked = false;
   if ((input.rerank ?? !!c.reranker) && c.reranker && pool.length > 1) {
     try {
@@ -273,7 +310,7 @@ export async function runRetrieveStage(
   // MMR/diversification decide *which* chunks make the cut; display order is by score.
   let cut: Candidate[] = pool.slice(0, topK);
   const rankScore = (x: Candidate) =>
-    reranked && x.rerankScore !== undefined ? x.rerankScore : x.fused;
+    reranked && x.rerankScore !== undefined ? x.rerankScore : (x.aspectScore ?? x.fused);
   // Neighbouring chunks of one page (answers straddling a chunk boundary) come back as a single
   // passage; the freed slots are backfilled from the pool so the caller still gets ~topK passages.
   if (rc.mergeAdjacent) cut = mergeAdjacentCandidates(cut, pool, topK, rc.maxPerSource, rankScore);
@@ -317,6 +354,7 @@ export async function runRetrieveStage(
       poolRank: poolRank.get(id) ?? 0,
       lists: entries,
       ...(x.parts ? { mergedChunks: x.parts.map((p) => p.metadata.chunkIndex) } : {}),
+      ...(x.aspectScore !== undefined ? { aspectScore: round(x.aspectScore, 6) } : {}),
     };
   };
 
@@ -348,7 +386,11 @@ export async function runRetrieveStage(
       queryVector: lexicalOnly ? undefined : queryVector,
       signal,
     });
-  return { passages, candidates, reranked, lexicalOnly };
+  if (coverage) {
+    for (const p of passages)
+      for (const q of p.matchedQueries) if (q in coverage) coverage[q] = (coverage[q] ?? 0) + 1;
+  }
+  return { passages, candidates, reranked, lexicalOnly, coverage };
 }
 
 /**

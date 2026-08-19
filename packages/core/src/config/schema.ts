@@ -140,6 +140,14 @@ export const retrievalConfigSchema = z.object({
   serpPriorWeight: z.number().min(0).default(0),
   mmr: z.boolean().default(true),
   mmrLambda: z.number().min(0).max(1).default(0.7),
+  /**
+   * Aspect coverage (xQuAD-lite): treat caller-supplied related queries as aspects and re-select
+   * the top-k so every aspect is covered before any aspect gets a third passage. `auto` = on
+   * whenever related queries are given (there is nothing to do without them); `off` disables.
+   */
+  aspectCoverage: z.enum(['auto', 'off']).default('auto'),
+  /** xQuAD λ: 0 = pure relevance, 1 = pure aspect coverage. */
+  aspectLambda: z.number().min(0).max(1).default(0.5),
   minScore: z.number().min(-1).max(1).nullable().default(null),
   relativeCutoff: z.number().min(0).max(1).default(0.6),
   /**
