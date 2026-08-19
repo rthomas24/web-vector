@@ -112,11 +112,20 @@ export const retrievalConfigSchema = z.object({
   queryExpansion: z.boolean().default(true),
   maxExpandedQueries: z.number().int().min(0).max(10).default(4),
   hybrid: z.boolean().default(true),
-  /** `rrf` (reciprocal rank fusion, default) or `rsf` (min-max relative score fusion). */
-  fusion: z.enum(['rrf', 'rsf']).default('rrf'),
+  /**
+   * `rsf` (min-max relative score fusion, default — keeps score magnitude, +0.02–0.17 MRR over RRF
+   * on the eval in both tiers) or `rrf` (reciprocal rank fusion, rank-only).
+   */
+  fusion: z.enum(['rrf', 'rsf']).default('rsf'),
   rrfK: z.number().min(1).default(60),
   /** Weight of BM25 lists in fusion relative to the original query vector list (1.0). */
-  lexicalWeight: z.number().min(0).default(0.5),
+  lexicalWeight: z.number().min(0).default(1.5),
+  /**
+   * Scale `lexicalWeight` per query: up for exact-match queries (quotes, identifiers, versions,
+   * error strings, proper nouns), down for long natural-language questions. Off by default: on the
+   * bundled eval a fixed 1.5 already suits exact-match queries and boosting further overshoots.
+   */
+  adaptiveWeights: z.boolean().default(false),
   expansionWeight: z.number().min(0).default(0.7),
   maxPerSource: z.number().int().min(1).default(3),
   mmr: z.boolean().default(true),

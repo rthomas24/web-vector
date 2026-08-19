@@ -14,8 +14,6 @@
       "https://en.wikipedia.org/wiki/Code_point",
       "https://en.wikipedia.org/wiki/Unicode"
     ],
-    "phrases": [
-      "10ffff"
-    ]
+    "phrases": ["10ffff"]
   }
 }

@@ -8,12 +8,7 @@
     "https://nodejs.org/api/stream.html"
   ],
   "relevant": {
-    "urls": [
-      "https://nodejs.org/api/fs.html"
-    ],
-    "phrases": [
-      "fs.readfile",
-      "encoding"
-    ]
+    "urls": ["https://nodejs.org/api/fs.html"],
+    "phrases": ["fs.readfile", "encoding"]
   }
 }

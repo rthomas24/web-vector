@@ -13,9 +13,6 @@
       "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flatMap",
       "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/flat"
     ],
-    "phrases": [
-      "depth of 1",
-      "flatmap"
-    ]
+    "phrases": ["depth of 1", "flatmap"]
   }
 }

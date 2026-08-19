@@ -13,9 +13,6 @@
       "https://en.wikipedia.org/wiki/Bayes%27_theorem",
       "https://en.wikipedia.org/wiki/Bayesian_inference"
     ],
-    "phrases": [
-      "posterior",
-      "likelihood"
-    ]
+    "phrases": ["posterior", "likelihood"]
   }
 }

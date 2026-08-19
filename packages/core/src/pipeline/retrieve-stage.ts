@@ -135,6 +135,7 @@ export async function runRetrieveStage(
   }
 
   // ── lexical lists (hybrid or lexical-only) ───────────────────────────
+  const lexicalWeight = rc.lexicalWeight * (rc.adaptiveWeights ? lexicalAffinity(query) : 1);
   if (rc.hybrid || lexicalOnly) {
     queries.forEach((q, i) => {
       const hits = capPerSource(
@@ -146,7 +147,7 @@ export async function runRetrieveStage(
       if (hits.length === 0) return;
       lists.push(hits);
       const base = i === 0 ? 1 : 0.7;
-      weights.push(lexicalOnly ? base : rc.lexicalWeight * base);
+      weights.push(lexicalOnly ? base : lexicalWeight * base);
       listQuery.push(q);
       listKind.push('bm25');
       for (const h of hits) if ((bm25Best.get(h.id) ?? 0) < h.score) bm25Best.set(h.id, h.score);
@@ -311,6 +312,29 @@ export async function runRetrieveStage(
     };
   });
   return { passages, candidates, reranked, lexicalOnly };
+}
+
+/**
+ * How much a query rewards exact lexical matching: >1 for quotes, code identifiers, versions,
+ * error strings and several proper nouns (embeddings blur these); <1 for long natural-language
+ * questions (embeddings shine there).
+ */
+export function lexicalAffinity(query: string): number {
+  const q = query.trim();
+  let f = 1;
+  if (/"[^"]{2,}"/.test(q)) f *= 1.6;
+  const identifiers = q.match(
+    /[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)+|[a-z]+[A-Z][A-Za-z]+|--?[a-z][\w-]+/g,
+  );
+  if (identifiers?.length) f *= 1.4;
+  if (/\b\d+(\.\d+)+\b|\bv\d+\b|\b(19|20)\d{2}\b/.test(q)) f *= 1.2;
+  if (/\b(error|exception|failed|cannot|undefined is not|ENOENT|E[A-Z]{3,})\b/.test(q)) f *= 1.3;
+  const proper = q.split(/\s+/).filter((w, i) => i > 0 && /^[A-Z][a-z]+$/.test(w)).length;
+  if (proper >= 2) f *= 1.2;
+  const words = q.split(/\s+/).length;
+  if (words >= 8 && /^(why|how|what|when|which|explain|describe|compare)\b/i.test(q) && f === 1)
+    f = 0.75;
+  return Math.min(f, 2.5);
 }
 
 /** Blend the query vector with the top search snippets (pseudo-relevance feedback). */

@@ -13,10 +13,11 @@
  * have returned) and ground truth: relevant URLs and phrases that a good top-k must surface. The
  * eval measures fetch → parse → chunk → rank, not the search engine.
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
+import { createEmbeddingProvider } from '../packages/core/src/embeddings/index.js';
 import {
   customSearchProvider,
   type ResearchResult,
@@ -24,11 +25,56 @@ import {
 } from '../packages/core/src/index.js';
 import { approxTokens } from '../packages/core/src/ingest/chunker.js';
 import { recordingFetch } from '../packages/core/src/testing/recording-fetch.js';
+import type { EmbeddingProvider } from '../packages/core/src/types.js';
+import { sha256 } from '../packages/core/src/util/hash.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CASES_DIR = join(here, 'cases');
 const FIXTURES_DIR = join(here, 'fixtures', 'http');
 const BASELINE = join(here, 'baseline.json');
+const EMBED_CACHE_DIR = join(here, '.cache', 'embeddings');
+
+/**
+ * Eval-only disk cache around an embedding provider (one binary file per text hash), so repeated
+ * semantic runs don't re-embed the same pages. Keyed by model + text.
+ */
+function cachedEmbedder(inner: EmbeddingProvider): EmbeddingProvider {
+  mkdirSync(EMBED_CACHE_DIR, { recursive: true });
+  const pathFor = (text: string, kind: string) =>
+    join(EMBED_CACHE_DIR, `${sha256(`${inner.model}|${kind}|${text}`, 32)}.f32`);
+  return {
+    id: inner.id,
+    model: inner.model,
+    limits: () => inner.limits(),
+    dimensions: () => inner.dimensions(),
+    init: () => inner.init?.() ?? Promise.resolve(),
+    async embed(texts, opts) {
+      const kind = opts?.kind ?? 'document';
+      const out: (Float32Array | undefined)[] = texts.map((t) => {
+        const p = pathFor(t, kind);
+        if (!existsSync(p)) return undefined;
+        const buf = readFileSync(p);
+        return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+      });
+      const missing = texts.map((_t, i) => (out[i] ? -1 : i)).filter((i) => i >= 0);
+      if (missing.length) {
+        const vecs = await inner.embed(
+          missing.map((i) => texts[i] as string),
+          opts,
+        );
+        vecs.forEach((v, j) => {
+          const i = missing[j] as number;
+          out[i] = v;
+          writeFileSync(
+            pathFor(texts[i] as string, kind),
+            Buffer.from(v.buffer, v.byteOffset, v.byteLength),
+          );
+        });
+      }
+      return out as Float32Array[];
+    },
+  };
+}
 
 interface EvalCase {
   id: string;
@@ -168,6 +214,7 @@ async function main() {
         : body,
   });
   const results: Record<string, CaseMetrics> = {};
+  const embedder = semantic ? cachedEmbedder(createEmbeddingProvider('local')) : undefined;
 
   for (const c of cases) {
     const provider = customSearchProvider('eval', async () =>
@@ -176,7 +223,7 @@ async function main() {
     const wv = await WebVector.create({
       ...overrides,
       search: { provider: 'eval', instance: provider, fallbackProviders: [] },
-      embeddings: { provider: semantic ? 'local' : 'none' },
+      embeddings: semantic ? { provider: 'local', instance: embedder } : { provider: 'none' },
       retrieval: { ...(overrides.retrieval ?? {}), topK: c.topK ?? 8 },
       ingestion: {
         maxPages: Math.max(c.urls.length, 1),

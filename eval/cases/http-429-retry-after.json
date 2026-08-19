@@ -13,9 +13,6 @@
       "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429",
       "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After"
     ],
-    "phrases": [
-      "too many requests",
-      "retry-after"
-    ]
+    "phrases": ["too many requests", "retry-after"]
   }
 }

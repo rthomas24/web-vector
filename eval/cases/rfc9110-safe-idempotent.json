@@ -7,11 +7,7 @@
     "https://www.rfc-editor.org/rfc/rfc9112.html"
   ],
   "relevant": {
-    "urls": [
-      "https://www.rfc-editor.org/rfc/rfc9110.html"
-    ],
-    "phrases": [
-      "idempotent"
-    ]
+    "urls": ["https://www.rfc-editor.org/rfc/rfc9110.html"],
+    "phrases": ["idempotent"]
   }
 }

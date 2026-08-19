@@ -12,8 +12,6 @@
     "urls": [
       "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-areas"
     ],
-    "phrases": [
-      "grid-template-areas"
-    ]
+    "phrases": ["grid-template-areas"]
   }
 }

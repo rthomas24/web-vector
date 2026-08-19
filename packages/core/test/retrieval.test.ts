@@ -544,3 +544,15 @@ describe('autocut and lexical MMR', () => {
     expect(out.map((c) => c.id)).toEqual(['a', 'c']);
   });
 });
+
+describe('lexicalAffinity', () => {
+  it('boosts exact-match queries and lowers long natural-language questions', async () => {
+    const { lexicalAffinity } = await import('../src/pipeline/retrieve-stage.js');
+    expect(lexicalAffinity('AbortSignal.any example')).toBeGreaterThan(1);
+    expect(lexicalAffinity('"reciprocal rank fusion" k 60')).toBeGreaterThan(1.5);
+    expect(
+      lexicalAffinity('why do people prefer typed languages for large projects today'),
+    ).toBeLessThan(1);
+    expect(lexicalAffinity('banana bread recipe')).toBe(1);
+  });
+});

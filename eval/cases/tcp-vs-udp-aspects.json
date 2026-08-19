@@ -17,9 +17,6 @@
       "https://en.wikipedia.org/wiki/Transmission_Control_Protocol",
       "https://en.wikipedia.org/wiki/User_Datagram_Protocol"
     ],
-    "phrases": [
-      "connectionless",
-      "three-way handshake"
-    ]
+    "phrases": ["connectionless", "three-way handshake"]
   }
 }

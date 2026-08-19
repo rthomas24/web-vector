@@ -9,11 +9,7 @@
     "https://en.wikipedia.org/wiki/Indonesia"
   ],
   "relevant": {
-    "urls": [
-      "https://en.wikipedia.org/wiki/Java"
-    ],
-    "phrases": [
-      "volcan"
-    ]
+    "urls": ["https://en.wikipedia.org/wiki/Java"],
+    "phrases": ["volcan"]
   }
 }

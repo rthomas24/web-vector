@@ -34,3 +34,6 @@ scratch/
 
 # private planning docs (feature ideas, roadmap drafts) — never pushed
 private/
+
+# eval scratch (embedding cache)
+eval/.cache/
