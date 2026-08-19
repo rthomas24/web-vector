@@ -1,6 +1,6 @@
 {
   "name": "webvector-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI for WebVector: `webvector search \"query\"` runs search → full-page ingestion → embeddings → cited passages; plus fetch, doctor, init, config, mcp.",
   "license": "MIT",
   "type": "module",
@@ -35,8 +35,8 @@
   },
   "dependencies": {
     "commander": "^15.0.0",
-    "webvector": "^0.1.0",
-    "webvector-mcp": "^0.1.0",
+    "webvector": "^0.2.0",
+    "webvector-mcp": "^0.2.0",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {

@@ -121,6 +121,7 @@ export interface CreateServerOptions {
     | 'webvector_research'
     | 'webvector_fetch'
     | 'webvector_search'
+    | 'webvector_verify'
     | 'webvector_status'
     | 'web_research'
     | 'web_fetch'
@@ -213,6 +214,7 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
             research: tools.has(WEB_RESEARCH_TOOL_NAME),
             fetch: tools.has(WEB_FETCH_TOOL_NAME),
             search: tools.has(WEB_SEARCH_TOOL_NAME),
+            verify: tools.has(WEBVECTOR_VERIFY_TOOL_NAME),
           },
         }));
   const server = new McpServer(

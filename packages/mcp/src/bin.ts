@@ -35,6 +35,7 @@ Usage:
   --blocked-domains a,b         never search/fetch these domains (env WEBVECTOR_MCP_BLOCKED_DOMAINS)
   --user-location US[,en]       search country / language passthrough (env WEBVECTOR_MCP_USER_LOCATION)
   --max-deadline-ms N           cap for per-call deadline_ms
+  --tools research,fetch        expose only these tools (research|fetch|search|verify|status; env WEBVECTOR_MCP_TOOLS)
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …
@@ -94,6 +95,10 @@ const serverOptions: CreateServerOptions = {
   fetchMaxLength: numFlag('--fetch-max-length', 'WEBVECTOR_MCP_FETCH_MAX_LENGTH'),
   sessionMode: enumFlag('--session-mode', ['auto', 'off'] as const, 'WEBVECTOR_MCP_SESSION_MODE'),
   maxDeadlineMs: numFlag('--max-deadline-ms', 'WEBVECTOR_MCP_MAX_DEADLINE_MS'),
+  // --tools research,fetch → expose a subset (short names or full tool names).
+  tools: listFlag('--tools', 'WEBVECTOR_MCP_TOOLS')?.map((t) =>
+    t.startsWith('webvector_') || t.startsWith('web_') ? t : `webvector_${t}`,
+  ) as CreateServerOptions['tools'],
   guardOptions: {
     maxUses: numFlag('--max-uses', 'WEBVECTOR_MCP_MAX_USES'),
     allowedDomains: listFlag('--allowed-domains', 'WEBVECTOR_MCP_ALLOWED_DOMAINS'),

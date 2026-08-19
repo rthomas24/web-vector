@@ -1,7 +1,7 @@
 {
   "name": "webvector-monorepo",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "WebVector — provider-agnostic web research tool for AI agents: search → full-page ingestion → embeddings → semantic retrieval → cited passages.",
   "license": "MIT",
   "type": "module",

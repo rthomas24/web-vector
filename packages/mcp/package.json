@@ -1,6 +1,6 @@
 {
   "name": "webvector-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "mcpName": "io.github.rthomas24/webvector",
   "description": "MCP server for WebVector: webvector_research (search → read full pages → rank → cited passages), webvector_fetch, webvector_search. Zero-config `npx -y webvector-mcp` (~12 MB, lexical); add @huggingface/transformers or an API key for semantic search.",
   "license": "MIT",
@@ -50,7 +50,7 @@
   "dependencies": {
     "@modelcontextprotocol/node": "^2.0.0",
     "@modelcontextprotocol/server": "^2.0.0",
-    "webvector": "^0.1.0",
+    "webvector": "^0.2.0",
     "yaml": "^2.9.0",
     "zod": "^4.2.0"
   },

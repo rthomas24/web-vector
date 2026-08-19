@@ -49,13 +49,13 @@ export interface InstructionsOptions {
   /** Include the session sentence (default true). */
   sessions?: boolean;
   /** Which tools are exposed (sentences for missing tools are dropped). */
-  tools?: { research?: boolean; fetch?: boolean; search?: boolean };
+  tools?: { research?: boolean; fetch?: boolean; search?: boolean; verify?: boolean };
 }
 
 /** Build the server instructions for the active tier. Always ≤ MAX_INSTRUCTIONS_BYTES. */
 export function buildInstructions(opts: InstructionsOptions = {}): string {
   const tier = opts.tier ?? 'lexical';
-  const t = { research: true, fetch: true, search: true, ...opts.tools };
+  const t = { research: true, fetch: true, search: true, verify: true, ...opts.tools };
   const lines: string[] = [];
   lines.push(
     'WebVector: web research that reads full pages and returns cited passages, not snippets.',
@@ -71,6 +71,10 @@ export function buildInstructions(opts: InstructionsOptions = {}): string {
     );
   if (t.search)
     which.push('webvector_search only to inspect the SERP (titles + snippets, no page content).');
+  if (t.verify)
+    which.push(
+      'webvector_verify before finalising an answer that cites [n] passages (flags unsupported sentences and numbers not in the source).',
+    );
   which.push('webvector_status for config/tier debugging.');
   lines.push(`Which tool: ${which.join(' ')}`);
   lines.push(

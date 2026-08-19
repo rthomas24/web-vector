@@ -635,7 +635,7 @@
         "maxHtmlBytes": 2097152,
         "respectRobotsTxt": true,
         "contentSignals": "respect",
-        "userAgent": "WebVector/0.1.0 (+https://github.com/rthomas24/web-vector; user-directed research agent)",
+        "userAgent": "WebVector/0.2.0 (+https://github.com/rthomas24/web-vector; user-directed research agent)",
         "retries": 2,
         "allowPrivateNetworks": false,
         "parsers": [
@@ -749,7 +749,7 @@
           ]
         },
         "userAgent": {
-          "default": "WebVector/0.1.0 (+https://github.com/rthomas24/web-vector; user-directed research agent)",
+          "default": "WebVector/0.2.0 (+https://github.com/rthomas24/web-vector; user-directed research agent)",
           "type": "string"
         },
         "contactEmail": {
