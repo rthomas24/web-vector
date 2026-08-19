@@ -269,10 +269,11 @@ describe('webvector_verify', () => {
     expect(list.result.tools.map((t: any) => t.name)).toContain('webvector_verify');
     const r = await call('webvector_research', { query: 'reciprocal rank fusion formula' });
     const passages = r.result.structuredContent.passages as { index: number; text: string }[];
-    expect(passages.length).toBeGreaterThan(0);
-    const quote = passages[0]!.text.split('. ')[0]!.trim();
+    const known = 'Reciprocal rank fusion combines ranked lists';
+    const cited = passages.find((p) => p.text.includes(known));
+    expect(cited).toBeDefined();
     const v = await call('webvector_verify', {
-      answer: `${quote} [${passages[0]!.index}]. Bananas cure headaches [${passages[0]!.index}].`,
+      answer: `${known} [${cited!.index}]. Bananas cure headaches [${cited!.index}].`,
     });
     expect(v.result.isError).toBeFalsy();
     const sc = v.result.structuredContent;
@@ -282,8 +283,8 @@ describe('webvector_verify', () => {
     expect(v.result.content[0].text).toMatch(/Support rate \d+%/);
     // Explicit passages instead of a session
     const v2 = await call('webvector_verify', {
-      answer: `${quote} [7].`,
-      passages: [{ index: 7, url: 'https://rrf.example/intro', text: passages[0]!.text }],
+      answer: `${known} [7].`,
+      passages: [{ index: 7, url: 'https://rrf.example/intro', text: cited!.text }],
     });
     expect(v2.result.structuredContent.sentences[0].status).not.toBe('unsupported');
   });
