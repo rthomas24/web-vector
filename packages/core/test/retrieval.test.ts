@@ -605,3 +605,62 @@ describe('adjacent-chunk merge', () => {
     expect(joinAdjacentText(a, c)).toBe(`${a.text}\n\nUnrelated continuation text here.`);
   });
 });
+
+describe('highlights', () => {
+  it('segmentText splits sentences but keeps code fences, tables and list lines whole', async () => {
+    const { segmentText } = await import('../src/retrieval/highlight.js');
+    const text = [
+      'Intro sentence one. Second sentence, e.g. with an abbreviation. Third one!',
+      '```js',
+      'const x = 1. Not a sentence break.',
+      '```',
+      '| a | b |',
+      '|---|---|',
+      '| 1 | 2 |',
+      '- a list item. With a period.',
+    ].join('\n');
+    const segs = segmentText(text);
+    expect(segs.map((s) => s.kind)).toEqual([
+      'sentence',
+      'sentence',
+      'sentence',
+      'block',
+      'block',
+      'line',
+    ]);
+    expect(segs[1]!.text).toBe('Second sentence, e.g. with an abbreviation.');
+    expect(segs[3]!.text.startsWith('```js')).toBe(true);
+    expect(segs[3]!.text.endsWith('```')).toBe(true);
+    // Offsets are exact slices of the input.
+    for (const s of segs) expect(text.slice(s.start, s.end)).toBe(s.text);
+  });
+  it('bestHighlight picks the sentence window covering the query terms with page offsets', async () => {
+    const { bestHighlight, rankHighlightWindows } = await import('../src/retrieval/highlight.js');
+    const text =
+      '# Fusion\nBananas are yellow. Reciprocal rank fusion combines ranked lists using a constant k. It needs no tuning. Weather is nice today.';
+    const terms = new Map([
+      ['reciprocal', 2],
+      ['rank', 1],
+      ['fusion', 1],
+      ['constant', 1.5],
+    ]);
+    const hl = bestHighlight(text, 1000, { terms });
+    expect(hl?.text).toBe('Reciprocal rank fusion combines ranked lists using a constant k.');
+    expect(text.slice(hl!.startOffset - 1000, hl!.endOffset - 1000)).toBe(hl!.text);
+    // Heading-only windows are penalised even when they match every term.
+    const wins = rankHighlightWindows(
+      '# Reciprocal rank fusion constant\nSome prose about reciprocal rank fusion and its constant.',
+      { terms, top: 1 },
+    );
+    expect(wins[0]!.text).toMatch(/^Some prose/);
+    // No matching term: lead window instead of the shortest fragment.
+    const lead = bestHighlight('Alpha beta gamma delta. Second sentence here.', 0, {
+      terms: new Map([['zzz', 1]]),
+    });
+    expect(lead?.text).toBe('Alpha beta gamma delta. Second sentence here.');
+    // A code fence never gets cut in the middle.
+    const code = 'Text before.\n```\nline one rank fusion\nline two\n```\nAfter.';
+    const h2 = bestHighlight(code, 0, { terms });
+    expect(h2?.text).toBe('```\nline one rank fusion\nline two\n```');
+  });
+});

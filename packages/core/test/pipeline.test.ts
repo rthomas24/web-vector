@@ -240,6 +240,26 @@ describe('WebVector pipeline (mocked)', () => {
     await expect(wv.fetch('https://down.example/x')).rejects.toBeInstanceOf(WebVectorError);
     await wv.close();
   });
+  it('attaches query-focused highlights and can render highlight-only markdown', async () => {
+    mockSites();
+    const wv = make({ output: { passageMode: 'highlight' } });
+    const res = await wv.research('reciprocal rank fusion formula', { topK: 3 });
+    const top = res.passages[0]!;
+    expect(top.highlight).toBeDefined();
+    expect(top.highlight!.text.length).toBeLessThanOrEqual(top.text.length);
+    expect(top.text).toContain(top.highlight!.text);
+    // Highlight offsets are page offsets: passage-relative slice reproduces the highlight.
+    const local = top.highlight!.startOffset - top.startOffset;
+    expect(top.text.slice(local, local + top.highlight!.text.length)).toBe(top.highlight!.text);
+    expect(top.highlight!.text).toMatch(/fusion|rank/i);
+    // highlight mode renders the window, not the whole passage
+    expect(res.markdown).toContain(top.highlight!.text.split('\n')[0]);
+    await wv.close();
+    const off = make({ output: { highlights: false } });
+    const r2 = await off.research('reciprocal rank fusion formula', { topK: 2 });
+    expect(r2.passages[0]!.highlight).toBeUndefined();
+    await off.close();
+  });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
     await expect(wv.research('   ')).rejects.toMatchObject({ code: 'INVALID_CONFIG' });

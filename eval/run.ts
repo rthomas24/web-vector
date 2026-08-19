@@ -232,7 +232,7 @@ async function main() {
         maxCrawlDelayMs: 0,
         perHostMinIntervalMs: 0,
       },
-      output: { markdown: true },
+      output: { markdown: true, ...(overrides.output ?? {}) },
       logging: { level: 'silent' },
       fetch: fetchImpl,
     });

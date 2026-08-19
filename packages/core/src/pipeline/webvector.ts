@@ -187,6 +187,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       signal: opts.signal,
       warnings,
       explain: opts.explain,
+      highlights: this.config.output.highlights,
     });
     const result: ResearchResult = {
       query,
@@ -215,6 +216,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     };
     result.markdown = renderMarkdown(result, {
       maxPassageChars: this.config.output.maxPassageChars,
+      passageMode: this.config.output.passageMode,
     });
     return result;
   }
@@ -470,6 +472,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         signal,
         warnings,
         explain: opts.explain,
+        highlights: cfg.output.highlights,
       });
       passages = r.passages;
       candidates = r.candidates;
@@ -538,6 +541,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       result.markdown = renderMarkdown(result, {
         maxPassageChars: cfg.output.maxPassageChars,
         maxTokens: opts.maxOutputTokens,
+        passageMode: cfg.output.passageMode,
       });
     }
     stageDone('format', Date.now() - t0 - result.stats.totalMs);

@@ -10,6 +10,7 @@
  */
 import type { WebVectorFileConfig } from '../config/index.js';
 import { WebVectorError } from '../errors.js';
+import { tokenize } from '../retrieval/bm25.js';
 import {
   autocut,
   dedupeChunks,
@@ -22,9 +23,10 @@ import {
   rrf,
   scoreFusion,
 } from '../retrieval/fusion.js';
+import { leadWindow, rankHighlightWindows, toHighlight } from '../retrieval/highlight.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
 import type { Passage, PassageExplain, ScoredChunk, SearchResult } from '../types.js';
-import { combine } from '../util/vector.js';
+import { combine, dot } from '../util/vector.js';
 import type { Components } from './components.js';
 import { citationFor } from './format.js';
 import type { Session } from './session.js';
@@ -44,6 +46,8 @@ export interface RetrieveInput {
   warnings: string[];
   /** Attach `Passage.explain` breakdowns. */
   explain?: boolean;
+  /** Compute `Passage.highlight` (best sentence window per passage). Default true. */
+  highlights?: boolean;
 }
 
 export interface RetrieveOutput {
@@ -339,7 +343,64 @@ export async function runRetrieveStage(
       ...(input.explain ? { explain: explainFor(x.id, x) } : {}),
     };
   });
+  if (input.highlights !== false)
+    await attachHighlights(c, session, passages, query, relatedQueries, {
+      queryVector: lexicalOnly ? undefined : queryVector,
+      signal,
+    });
   return { passages, candidates, reranked, lexicalOnly };
+}
+
+/**
+ * Query-focused highlights: idf-weighted term coverage picks the best 1–3 sentence window of each
+ * passage (related-query terms at half weight). With an embedder, the top-3 lexical windows of
+ * every passage are embedded in one batch and cosine to the query vector breaks near-ties.
+ */
+async function attachHighlights(
+  c: Components,
+  session: Session,
+  passages: Passage[],
+  query: string,
+  relatedQueries: string[],
+  opts: { queryVector?: Float32Array; signal?: AbortSignal },
+): Promise<void> {
+  const terms = new Map<string, number>();
+  const weigh = (q: string, w: number) => {
+    for (const t of new Set(tokenize(q))) {
+      const v = w * Math.max(0.5, session.bm25.idf(t) || 1);
+      if ((terms.get(t) ?? 0) < v) terms.set(t, v);
+    }
+  };
+  weigh(query, 1);
+  for (const q of relatedQueries) weigh(q, 0.5);
+  if (terms.size === 0) return;
+  const useCosine = !!(c.embedder && opts.queryVector);
+  const perPassage = passages.map((p) =>
+    p.fromSnippet ? [] : rankHighlightWindows(p.text, { terms, top: useCosine ? 3 : 1 }),
+  );
+  if (useCosine) {
+    // One batch for all windows; failures just leave the lexical choice in place.
+    const flat = perPassage.flat();
+    try {
+      const vecs = await (c.embedder as NonNullable<Components['embedder']>).embed(
+        flat.map((w) => w.text),
+        { kind: 'document', signal: opts.signal },
+      );
+      flat.forEach((w, i) => {
+        const v = vecs[i];
+        if (v) w.score += 0.3 * dot(opts.queryVector as Float32Array, v);
+      });
+      for (const wins of perPassage) wins.sort((a, b) => b.score - a.score);
+    } catch {
+      /* lexical highlight stands */
+    }
+  }
+  passages.forEach((p, i) => {
+    let w = perPassage[i]?.[0];
+    if (!w) return;
+    if (w.coverage <= 0) w = leadWindow(p.text, { terms }) ?? w;
+    p.highlight = toHighlight(w, p.startOffset);
+  });
 }
 
 /**

@@ -14,3 +14,5 @@ export {
   scoreFusion,
   shingleJaccard,
 } from './fusion.js';
+export type { Highlight, HighlightOptions, ScoredWindow, Segment } from './highlight.js';
+export { bestHighlight, rankHighlightWindows, segmentText } from './highlight.js';

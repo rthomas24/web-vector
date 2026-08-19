@@ -248,6 +248,10 @@ export const ingestionConfigSchema = z.object({
 export const outputConfigSchema = z.object({
   markdown: z.boolean().default(true),
   maxPassageChars: z.number().int().min(100).default(1500),
+  /** Compute `Passage.highlight` (best 1–3 sentence window for the query). Cheap; no model needed. */
+  highlights: z.boolean().default(true),
+  /** `full` renders whole passages in the markdown; `highlight` renders only the highlight window. */
+  passageMode: z.enum(['full', 'highlight']).default('full'),
   includeSnippetsOnFailure: z.boolean().default(true),
 });
 

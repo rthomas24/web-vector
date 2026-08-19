@@ -9,6 +9,8 @@ export interface MarkdownRenderOptions {
   maxTokens?: number;
   /** Prepend a one-line reminder that passages are quoted web content (useful for LLM consumers). */
   untrustedNotice?: boolean;
+  /** `highlight` renders only each passage's best sentence window (falls back to the full text). */
+  passageMode?: 'full' | 'highlight';
 }
 
 function trimText(text: string, max: number): string {
@@ -17,10 +19,16 @@ function trimText(text: string, max: number): string {
   return `${text.slice(0, cut > max * 0.6 ? cut : max).trimEnd()}…`;
 }
 
-export function renderPassage(p: Passage, maxChars: number): string {
+export function renderPassage(
+  p: Passage,
+  maxChars: number,
+  opts: { passageMode?: 'full' | 'highlight' } = {},
+): string {
   // A passage merged from neighbouring chunks may run to ~2× the single-chunk limit.
   const limit = p.chunkCount && p.chunkCount > 1 ? maxChars * 2 : maxChars;
-  const body = trimText(p.text.replace(/\s+\n/g, '\n').trim(), limit)
+  const highlightOnly = opts.passageMode === 'highlight' && !!p.highlight;
+  const raw = highlightOnly ? (p.highlight as { text: string }).text : p.text;
+  const body = trimText(raw.replace(/\s+\n/g, '\n').trim(), limit)
     .split('\n')
     .map((l) => `> ${l}`)
     .join('\n');
@@ -28,6 +36,8 @@ export function renderPassage(p: Passage, maxChars: number): string {
   if (p.publishedAt) meta.push(`published ${p.publishedAt.slice(0, 10)}`);
   meta.push(`score ${p.score.toFixed(2)}`);
   if (p.fromSnippet) meta.push('search snippet');
+  if (highlightOnly && p.highlight && p.highlight.text.length < p.text.length)
+    meta.push('highlight');
   return `**[${p.index}]** ${p.title} — <${p.url}> (${meta.join(', ')})\n${body}`;
 }
 
@@ -50,7 +60,7 @@ export function renderMarkdown(result: ResearchResult, opts: MarkdownRenderOptio
   let used = parts.join('\n\n').length;
   const rendered: string[] = [];
   for (const p of result.passages) {
-    const s = renderPassage(p, maxChars);
+    const s = renderPassage(p, maxChars, { passageMode: opts.passageMode });
     if (used + s.length + 2 > budgetChars && rendered.length > 0) break;
     rendered.push(s);
     used += s.length + 2;

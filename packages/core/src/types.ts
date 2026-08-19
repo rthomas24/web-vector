@@ -250,6 +250,8 @@ export interface Passage {
   citation: string;
   /** True when this passage is a raw search snippet (degraded mode). */
   fromSnippet?: boolean;
+  /** Best 1–3 sentence window for the query (`output.highlights`); offsets are into the page markdown. */
+  highlight?: { text: string; startOffset: number; endOffset: number };
   /** Ranking breakdown; present only when `explain: true` was requested. */
   explain?: PassageExplain;
 }
