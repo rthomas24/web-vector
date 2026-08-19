@@ -128,6 +128,16 @@ export const retrievalConfigSchema = z.object({
   adaptiveWeights: z.boolean().default(false),
   expansionWeight: z.number().min(0).default(0.7),
   maxPerSource: z.number().int().min(1).default(3),
+  /**
+   * Prefer at most this many passages per registrable domain (eTLD+1) after the per-URL cap;
+   * extra ones are demoted behind other domains, not dropped. 0 = off.
+   */
+  maxPerDomain: z.number().int().min(0).default(5),
+  /**
+   * Weight of the search engine's own ordering as an extra fused list (each chunk inherits its
+   * page's SERP rank); lifts official/primary pages over mirrors with similar term stats. 0 = off.
+   */
+  serpPriorWeight: z.number().min(0).default(0),
   mmr: z.boolean().default(true),
   mmrLambda: z.number().min(0).max(1).default(0.7),
   minScore: z.number().min(-1).max(1).nullable().default(null),

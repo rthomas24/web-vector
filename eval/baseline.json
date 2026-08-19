@@ -5,10 +5,10 @@
       "phraseHit": 1,
       "phraseMrr": 0.9333333333333333,
       "urlRecall": 1,
-      "precision": 0.5954241071428571,
+      "precision": 0.5876116071428571,
       "distinctDomains": 1.15625,
-      "tokens": 2820.4375,
-      "latencyMs": 1628.875
+      "tokens": 2817.53125,
+      "latencyMs": 1555.3125
     },
     "results": {
       "asyncio-run-in-executor": {
@@ -19,7 +19,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3058,
-        "latencyMs": 1226,
+        "latencyMs": 929,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -31,7 +31,7 @@
         "distinctDomains": 2,
         "passages": 8,
         "tokens": 3182,
-        "latencyMs": 1292,
+        "latencyMs": 1028,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -43,7 +43,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3167,
-        "latencyMs": 1639,
+        "latencyMs": 1318,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -55,7 +55,7 @@
         "distinctDomains": 1,
         "passages": 3,
         "tokens": 1025,
-        "latencyMs": 848,
+        "latencyMs": 684,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -67,7 +67,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3095,
-        "latencyMs": 1171,
+        "latencyMs": 1015,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -79,7 +79,7 @@
         "distinctDomains": 1,
         "passages": 6,
         "tokens": 1887,
-        "latencyMs": 690,
+        "latencyMs": 549,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -91,7 +91,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2170,
-        "latencyMs": 271,
+        "latencyMs": 208,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -103,7 +103,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 1730,
-        "latencyMs": 176,
+        "latencyMs": 131,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -115,7 +115,7 @@
         "distinctDomains": 1,
         "passages": 6,
         "tokens": 2257,
-        "latencyMs": 4014,
+        "latencyMs": 3282,
         "invalidPhrases": [],
         "failures": 1
       },
@@ -127,7 +127,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3148,
-        "latencyMs": 1209,
+        "latencyMs": 1106,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -139,7 +139,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3134,
-        "latencyMs": 2806,
+        "latencyMs": 2699,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -151,7 +151,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3152,
-        "latencyMs": 399,
+        "latencyMs": 394,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -163,7 +163,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2964,
-        "latencyMs": 391,
+        "latencyMs": 346,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -175,7 +175,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3187,
-        "latencyMs": 940,
+        "latencyMs": 945,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -187,7 +187,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2714,
-        "latencyMs": 949,
+        "latencyMs": 925,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -199,7 +199,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3147,
-        "latencyMs": 2775,
+        "latencyMs": 2707,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -211,7 +211,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3142,
-        "latencyMs": 1479,
+        "latencyMs": 1436,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -223,7 +223,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2310,
-        "latencyMs": 547,
+        "latencyMs": 384,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -235,7 +235,7 @@
         "distinctDomains": 1,
         "passages": 6,
         "tokens": 2494,
-        "latencyMs": 936,
+        "latencyMs": 1127,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -247,7 +247,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2797,
-        "latencyMs": 1469,
+        "latencyMs": 1456,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -259,7 +259,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3218,
-        "latencyMs": 1105,
+        "latencyMs": 1080,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -271,7 +271,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2732,
-        "latencyMs": 8526,
+        "latencyMs": 8505,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -283,7 +283,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3047,
-        "latencyMs": 8589,
+        "latencyMs": 8575,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -291,11 +291,11 @@
         "phraseHit": 1,
         "phraseMrr": 1,
         "urlRecall": 1,
-        "precision": 0.625,
+        "precision": 0.5,
         "distinctDomains": 2,
         "passages": 8,
-        "tokens": 3133,
-        "latencyMs": 674,
+        "tokens": 3039,
+        "latencyMs": 698,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -307,7 +307,7 @@
         "distinctDomains": 2,
         "passages": 8,
         "tokens": 2757,
-        "latencyMs": 398,
+        "latencyMs": 408,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -319,7 +319,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2946,
-        "latencyMs": 82,
+        "latencyMs": 131,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -327,11 +327,11 @@
         "phraseHit": 1,
         "phraseMrr": 1,
         "urlRecall": 1,
-        "precision": 0.875,
+        "precision": 0.75,
         "distinctDomains": 2,
         "passages": 8,
-        "tokens": 3241,
-        "latencyMs": 363,
+        "tokens": 3242,
+        "latencyMs": 508,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -343,7 +343,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3150,
-        "latencyMs": 837,
+        "latencyMs": 661,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -355,7 +355,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3240,
-        "latencyMs": 1937,
+        "latencyMs": 1988,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -367,7 +367,7 @@
         "distinctDomains": 2,
         "passages": 8,
         "tokens": 3219,
-        "latencyMs": 1146,
+        "latencyMs": 1210,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -379,7 +379,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3001,
-        "latencyMs": 1555,
+        "latencyMs": 1620,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -391,7 +391,7 @@
         "distinctDomains": 1,
         "passages": 7,
         "tokens": 2810,
-        "latencyMs": 1685,
+        "latencyMs": 1717,
         "invalidPhrases": [],
         "failures": 0
       }

@@ -556,3 +556,13 @@ describe('lexicalAffinity', () => {
     expect(lexicalAffinity('banana bread recipe')).toBe(1);
   });
 });
+
+describe('registrableDomain', () => {
+  it('collapses subdomains and handles ccSLDs', async () => {
+    const { registrableDomain } = await import('../src/pipeline/retrieve-stage.js');
+    expect(registrableDomain('https://docs.python.org/3/')).toBe('python.org');
+    expect(registrableDomain('https://en.m.wikipedia.org/wiki/X')).toBe('wikipedia.org');
+    expect(registrableDomain('https://www.bbc.co.uk/news')).toBe('bbc.co.uk');
+    expect(registrableDomain('https://example.com')).toBe('example.com');
+  });
+});

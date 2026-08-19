@@ -155,6 +155,25 @@ export async function runRetrieveStage(
   }
   if (lists.length === 0) return { passages: [], candidates: 0, reranked: false, lexicalOnly };
 
+  // SERP prior: the engine's ordering as one more list over the current candidates.
+  if (rc.serpPriorWeight > 0) {
+    const ids = new Set<string>();
+    for (const l of lists) for (const h of l) ids.add(h.id);
+    const prior: Ranked[] = [];
+    for (const id of ids) {
+      const rank =
+        hitById.get(id)?.metadata.searchRank ?? session.chunks.get(id)?.metadata.searchRank;
+      if (rank) prior.push({ id, score: 1 / rank });
+    }
+    if (prior.length) {
+      prior.sort((a, b) => b.score - a.score);
+      lists.push(prior);
+      weights.push(rc.serpPriorWeight);
+      listQuery.push(query);
+      listKind.push('bm25'); // treated as a lexical-side signal for explain purposes
+    }
+  }
+
   // Best BM25 score per chunk relative to the top of its list (scale-free, like the cosine
   // `relativeCutoff`; raw BM25 magnitudes vary per query).
   const lexRel = new Map<string, number>();
@@ -212,6 +231,7 @@ export async function runRetrieveStage(
   // ── diversify → rerank → cut ─────────────────────────────────────────
   const poolK = Math.max(topK * 2, rc.rerankTopN);
   let pool = diversifyBySource(cands, rc.maxPerSource, poolK);
+  if (rc.maxPerDomain > 0) pool = capPerDomain(pool, rc.maxPerDomain);
   if (rc.mmr && pool.length > 1) {
     if (queryVector && !lexicalOnly && pool.every((p) => p.vector)) {
       pool = mmr(queryVector, pool, poolK, rc.mmrLambda);
@@ -312,6 +332,40 @@ export async function runRetrieveStage(
     };
   });
   return { passages, candidates, reranked, lexicalOnly };
+}
+
+/** Registrable-ish domain (last two labels, three for common ccSLDs like co.uk). */
+export function registrableDomain(url: string): string {
+  try {
+    const parts = new URL(url).hostname.toLowerCase().split('.');
+    if (parts.length <= 2) return parts.join('.');
+    const sld = parts[parts.length - 2] as string;
+    const ccSld = new Set(['co', 'com', 'org', 'net', 'ac', 'gov', 'edu', 'or', 'ne']);
+    const n = ccSld.has(sld) && (parts[parts.length - 1] as string).length === 2 ? 3 : 2;
+    return parts.slice(-n).join('.');
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Prefer at most `max` items per registrable domain: items beyond the cap are moved behind every
+ * other domain's items (not dropped), so single-domain result sets are unaffected.
+ */
+function capPerDomain<T extends { metadata: { url: string } }>(items: T[], max: number): T[] {
+  const seen = new Map<string, number>();
+  const kept: T[] = [];
+  const overflow: T[] = [];
+  for (const it of items) {
+    const d = registrableDomain(it.metadata.url);
+    const n = seen.get(d) ?? 0;
+    if (n >= max) overflow.push(it);
+    else {
+      seen.set(d, n + 1);
+      kept.push(it);
+    }
+  }
+  return kept.concat(overflow);
 }
 
 /**
