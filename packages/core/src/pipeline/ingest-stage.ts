@@ -99,8 +99,9 @@ export async function ingestDocument(
     if (toEmbed.length) await session.store.upsert(toEmbed);
   }
 
+  const lead = leadTextOf(doc.markdown);
   for (const ch of chunks) {
-    if (!session.bm25.has(ch.id)) session.bm25.add(ch.id, bm25FieldsFor(ch));
+    if (!session.bm25.has(ch.id)) session.bm25.add(ch.id, bm25FieldsFor(ch, lead));
     if (!session.chunks.has(ch.id)) {
       // Keep the vector handy for MMR (memory store returns it; external stores don't).
       const vector = ch.vector ?? (session.store as MemoryVectorStore).get?.(ch.id)?.vector;
@@ -160,11 +161,29 @@ export function failureFrom(err: unknown, url: string): Failure {
   };
 }
 
-/** BM25F fields for a chunk: page title, heading breadcrumb (without the title), body text. */
-export function bm25FieldsFor(ch: Chunk): Record<string, string> {
+/**
+ * BM25F fields for a chunk: page title, heading breadcrumb (without the title), the page's lead
+ * text (contextual-retrieval "lite": what the page is about, for chunks deep inside it), body.
+ */
+export function bm25FieldsFor(ch: Chunk, lead?: string): Record<string, string> {
   const title = ch.metadata.title ?? '';
   let crumbs = ch.metadata.breadcrumb ?? '';
   if (title && crumbs.startsWith(title))
     crumbs = crumbs.slice(title.length).replace(/^\s*›\s*/, '');
-  return { title, breadcrumb: crumbs, body: ch.text };
+  const fields: Record<string, string> = { title, breadcrumb: crumbs, body: ch.text };
+  if (lead && ch.metadata.chunkIndex > 0) fields.lead = lead;
+  return fields;
+}
+
+/** First ~N chars of prose from a page (skipping headings, images, tables and link-only lines). */
+export function leadTextOf(markdown: string, maxChars = 240): string {
+  let out = '';
+  for (const raw of markdown.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('![') || line.startsWith('|')) continue;
+    if (line.startsWith('[') || line.length < 40) continue;
+    out += `${line} `;
+    if (out.length >= maxChars) break;
+  }
+  return out.slice(0, maxChars).trim();
 }

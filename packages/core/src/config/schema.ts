@@ -159,8 +159,10 @@ export const retrievalConfigSchema = z.object({
           title: z.number().min(0).default(1),
           breadcrumb: z.number().min(0).default(1.5),
           body: z.number().min(0).default(1),
+          /** Page lead paragraph, indexed with chunks past the first (contextual retrieval "lite"). */
+          lead: z.number().min(0).default(0),
         })
-        .default({ title: 1, breadcrumb: 1.5, body: 1 }),
+        .default({ title: 1, breadcrumb: 1.5, body: 1, lead: 0 }),
     })
     .default({
       variant: 'okapi',
@@ -169,7 +171,7 @@ export const retrievalConfigSchema = z.object({
       delta: 0.5,
       coverageWeight: 0,
       proximityWeight: 0.3,
-      fields: { title: 1, breadcrumb: 1.5, body: 1 },
+      fields: { title: 1, breadcrumb: 1.5, body: 1, lead: 0 },
     }),
 });
 

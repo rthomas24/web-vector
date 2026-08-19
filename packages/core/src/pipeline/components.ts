@@ -52,7 +52,12 @@ export function bm25OptionsFrom(b: WebVectorFileConfig['retrieval']['bm25']): BM
     delta: b.delta,
     coverageWeight: b.coverageWeight,
     proximityWeight: b.proximityWeight,
-    fieldWeights: { title: b.fields.title, breadcrumb: b.fields.breadcrumb, body: b.fields.body },
+    fieldWeights: {
+      title: b.fields.title,
+      breadcrumb: b.fields.breadcrumb,
+      body: b.fields.body,
+      lead: b.fields.lead,
+    },
   };
 }
 
