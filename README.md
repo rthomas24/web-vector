@@ -1,5 +1,11 @@
 # WebVector
 
+[![npm: webvector](https://img.shields.io/npm/v/webvector?label=webvector)](https://www.npmjs.com/package/webvector)
+[![npm: webvector-mcp](https://img.shields.io/npm/v/webvector-mcp?label=webvector-mcp)](https://www.npmjs.com/package/webvector-mcp)
+[![npm: webvector-cli](https://img.shields.io/npm/v/webvector-cli?label=webvector-cli)](https://www.npmjs.com/package/webvector-cli)
+[![CI](https://github.com/rthomas24/web-vector/actions/workflows/ci.yml/badge.svg)](https://github.com/rthomas24/web-vector/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Give your AI agent real web research in one tool call: search → read the full pages → rank → cited passages.**
 
 Search tools hand a model titles and 150-character snippets, so it guesses the rest. Fetch tools hand it 40 KB of navigation and boilerplate, so it drowns. WebVector does the whole job in the middle: run the search, download and clean every result (HTML, PDF, Markdown), split it into passages, rank those passages against the question — semantically when an embedding model is available, lexically (BM25) when not — and return **only the passages that answer the query, each with its URL, title, offsets and score.**
