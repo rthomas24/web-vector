@@ -44,6 +44,15 @@ export const WEB_SEARCH_DESCRIPTION = [
   'Example: {"query": "MCP specification 2026-07-28 changelog", "count": 5, "freshness": "year"}.',
 ].join(' ');
 
+export const WEBVECTOR_VERIFY_TOOL_NAME = 'webvector_verify';
+export const WEBVECTOR_VERIFY_DESCRIPTION = [
+  "Check an answer's [n] citations against the passages they cite — no LLM, deterministic.",
+  'Best for: before finalising an answer built from webvector_research passages; catching quotes or numbers that are not in the cited source.',
+  'Not for: general fact-checking of claims with no [n] markers (use webvector_research).',
+  'Returns: per sentence verbatim | paraphrase | unsupported | uncited, numbers/dates missing from the source, and a support rate.',
+  'Common mistakes: forgetting session_id when the server did not mint one — pass `passages` from the research result instead.',
+  'Example: {"answer": "RRF uses k=60 [1]. It sums 1/(k+rank) [1].", "session_id": "s_8f2a"}',
+].join(' ');
 export const WEBVECTOR_STATUS_TOOL_NAME = 'webvector_status';
 export const WEBVECTOR_STATUS_DESCRIPTION =
   'Show the resolved WebVector configuration (secrets redacted), the active search/embedding providers and tier (lexical or semantic), and session counts. Best for debugging "why did research return nothing" or checking which providers/keys are active. Not for research. Takes no arguments.';
@@ -158,8 +167,52 @@ export const webResearchInputSchema = z.object({
     .describe(
       'Wall-clock budget for fetching pages (ms, capped by the server). Partial results are always returned (degraded: "partial" with the reason).',
     ),
+  auto_retry: z
+    .number()
+    .int()
+    .min(0)
+    .max(1)
+    .optional()
+    .describe(
+      'When the evidence gate rates the result weak/none, run one more search round with the suggested queries inside this call (default 0 = off).',
+    ),
+  max_age_ms: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      'Accept cached pages at most this old (ms); older copies are revalidated or refetched. Omit for the server default (15 min).',
+    ),
+  cache_mode: z
+    .enum(['default', 'bypass', 'readOnly'])
+    .optional()
+    .describe('bypass = always refetch pages; readOnly = never touch the network (cache only).'),
 });
 export type WebResearchInput = z.infer<typeof webResearchInputSchema>;
+
+export const webVerifyInputSchema = z.object({
+  answer: z.string().min(1).max(20_000).describe('The answer text with [n] citation markers.'),
+  session_id: z
+    .string()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe('Session of the prior webvector_research call whose passages the [n] markers cite.'),
+  passages: z
+    .array(
+      z.object({
+        index: z.number().int(),
+        url: z.string(),
+        title: z.string().optional(),
+        text: z.string(),
+      }),
+    )
+    .max(200)
+    .optional()
+    .describe('Alternative to session_id: the passages array from the research result.'),
+});
+export type WebVerifyInput = z.infer<typeof webVerifyInputSchema>;
 
 export const webFetchInputSchema = z.object({
   url: z.string().url().describe('Absolute http(s) URL to fetch.'),
@@ -359,6 +412,16 @@ export const webResearchSlimOutputSchema = z.object({
   degraded: z.enum(['search_only', 'partial']).optional(),
   session_id: z.string().optional(),
   suggested_queries: z.array(z.string()).optional(),
+  /** LLM-free evidence verdict: is this enough, and what to search next. */
+  evidence: z
+    .object({
+      level: z.enum(['strong', 'weak', 'none']),
+      distinctDomains: z.number().int(),
+      coverage: z.number(),
+    })
+    .optional(),
+  /** With related_queries: how many passages cover each sub-question. */
+  coverage: z.record(z.string(), z.number().int()).optional(),
   /** Passage indices dropped to fit max_tokens. */
   omitted: z.array(z.number().int()).optional(),
   /** What to try next when the result is empty or degraded. */
@@ -396,6 +459,16 @@ export function toSlimOutput(
     ...(r.degraded ? { degraded: r.degraded } : {}),
     ...(extra.session_id ? { session_id: extra.session_id } : {}),
     ...(extra.suggested_queries?.length ? { suggested_queries: extra.suggested_queries } : {}),
+    ...(r.evidence
+      ? {
+          evidence: {
+            level: r.evidence.level,
+            distinctDomains: r.evidence.distinctDomains,
+            coverage: r.evidence.coverage,
+          },
+        }
+      : {}),
+    ...(r.coverage ? { coverage: r.coverage } : {}),
     ...(extra.omitted?.length ? { omitted: extra.omitted } : {}),
     ...(extra.hint ? { hint: extra.hint } : {}),
     ...(extra.retryable !== undefined ? { retryable: extra.retryable } : {}),
@@ -435,6 +508,9 @@ export function toResearchOptions(
       objective: input.objective,
       category: input.category,
       deadlineMs: input.deadline_ms,
+      autoRetry: input.auto_retry,
+      maxAgeMs: input.max_age_ms,
+      cacheMode: input.cache_mode,
     }),
     ...defined(extra),
   };

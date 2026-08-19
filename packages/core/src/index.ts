@@ -109,6 +109,7 @@ export type {
   WebResearchSlimOutput,
   WebSearchInput,
   WebVectorToolName,
+  WebVerifyInput,
 } from './pipeline/tool.js';
 export {
   canonicalToolName,
@@ -126,6 +127,8 @@ export {
   WEB_SEARCH_TOOL_NAME,
   WEBVECTOR_STATUS_DESCRIPTION,
   WEBVECTOR_STATUS_TOOL_NAME,
+  WEBVECTOR_VERIFY_DESCRIPTION,
+  WEBVECTOR_VERIFY_TOOL_NAME,
   webFetchInputSchema,
   webFetchToolDefinition,
   webResearchInputSchema,
@@ -134,6 +137,7 @@ export {
   webResearchToolDefinition,
   webSearchInputSchema,
   webSearchToolDefinition,
+  webVerifyInputSchema,
 } from './pipeline/tool.js';
 export type { WebVectorInitOptions } from './pipeline/webvector.js';
 export {

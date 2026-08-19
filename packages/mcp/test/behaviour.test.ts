@@ -259,3 +259,48 @@ describe('prompts', () => {
     expect(none.result?.prompts ?? []).toEqual([]);
   });
 });
+
+describe('webvector_verify', () => {
+  it('checks [n] citations against the session passages (stdio default session) and explicit passages', async () => {
+    client = await connect(
+      createWebVectorMcpServer({ webvector: makeWebVector(), structured: 'full' }),
+    );
+    const list = await client!.call('tools/list', {});
+    expect(list.result.tools.map((t: any) => t.name)).toContain('webvector_verify');
+    const r = await call('webvector_research', { query: 'reciprocal rank fusion formula' });
+    const passages = r.result.structuredContent.passages as { index: number; text: string }[];
+    expect(passages.length).toBeGreaterThan(0);
+    const quote = passages[0]!.text.split('. ')[0]!.trim();
+    const v = await call('webvector_verify', {
+      answer: `${quote} [${passages[0]!.index}]. Bananas cure headaches [${passages[0]!.index}].`,
+    });
+    expect(v.result.isError).toBeFalsy();
+    const sc = v.result.structuredContent;
+    expect(sc.summary.total).toBe(2);
+    expect(['verbatim', 'paraphrase']).toContain(sc.sentences[0].status);
+    expect(sc.sentences[1].status).toBe('unsupported');
+    expect(v.result.content[0].text).toMatch(/Support rate \d+%/);
+    // Explicit passages instead of a session
+    const v2 = await call('webvector_verify', {
+      answer: `${quote} [7].`,
+      passages: [{ index: 7, url: 'https://rrf.example/intro', text: passages[0]!.text }],
+    });
+    expect(v2.result.structuredContent.sentences[0].status).not.toBe('unsupported');
+  });
+  it('research accepts auto_retry / cache args and returns evidence + coverage in structured output', async () => {
+    client = await connect(
+      createWebVectorMcpServer({ webvector: makeWebVector(), structured: 'slim' }),
+    );
+    const r = await call('webvector_research', {
+      query: 'rank fusion formula',
+      related_queries: ['rank fusion parameter k'],
+      auto_retry: 0,
+      max_age_ms: 60_000,
+      cache_mode: 'default',
+    });
+    expect(r.result.isError).toBeFalsy();
+    const sc = r.result.structuredContent;
+    expect(sc.evidence?.level).toBeDefined();
+    expect(sc.coverage).toBeDefined();
+  });
+});

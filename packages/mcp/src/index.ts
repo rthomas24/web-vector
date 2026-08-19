@@ -41,6 +41,8 @@ import {
   WEB_SEARCH_TOOL_NAME,
   WEBVECTOR_STATUS_DESCRIPTION,
   WEBVECTOR_STATUS_TOOL_NAME,
+  WEBVECTOR_VERIFY_DESCRIPTION,
+  WEBVECTOR_VERIFY_TOOL_NAME,
   WebVector,
   type WebVectorConfig,
   webFetchInputSchema,
@@ -48,6 +50,7 @@ import {
   webResearchOutputSchema,
   webResearchSlimOutputSchema,
   webSearchInputSchema,
+  webVerifyInputSchema,
 } from 'webvector';
 import { z } from 'zod';
 import { buildInstructions, resolveTier, type Tier } from './instructions.js';
@@ -195,6 +198,7 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
         WEB_RESEARCH_TOOL_NAME,
         WEB_FETCH_TOOL_NAME,
         WEB_SEARCH_TOOL_NAME,
+        WEBVECTOR_VERIFY_TOOL_NAME,
         WEBVECTOR_STATUS_TOOL_NAME,
       ]
     ).map((t) => LEGACY_TOOL_NAMES[t] ?? t),
@@ -523,6 +527,77 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
                       : {}),
                   },
                 }),
+          };
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    );
+  }
+
+  if (tools.has(WEBVECTOR_VERIFY_TOOL_NAME)) {
+    server.registerTool(
+      WEBVECTOR_VERIFY_TOOL_NAME,
+      {
+        title: 'Verify citations (quote grounding, no LLM)',
+        description: WEBVECTOR_VERIFY_DESCRIPTION,
+        inputSchema: webVerifyInputSchema,
+        annotations: {
+          readOnlyHint: true,
+          openWorldHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        },
+      },
+      async (args) => {
+        try {
+          const wv = await wvp();
+          const session = sessionFor(wv, args.session_id);
+          const passages = args.passages?.map((p) => ({
+            index: p.index,
+            url: p.url,
+            title: p.title ?? p.url,
+            text: p.text,
+            score: 1,
+            chunkIndex: 0,
+            startOffset: 0,
+            endOffset: p.text.length,
+            fetchedAt: '',
+            matchedQueries: [],
+            citation: `[${p.index}] ${p.title ?? p.url} — ${p.url}`,
+          }));
+          const v = await wv.verifyCitations(args.answer, {
+            sessionId: session.id,
+            passages,
+          });
+          const mark: Record<string, string> = {
+            verbatim: '✔',
+            paraphrase: '≈',
+            unsupported: '✖',
+            uncited: '?',
+          };
+          const lines = v.sentences.map((x) => {
+            const cite = x.citations.length ? `[${x.citations.join(',')}]` : '';
+            const nums = x.unsupportedNumbers.length
+              ? ` — numbers not in source: ${x.unsupportedNumbers.join(', ')}`
+              : '';
+            const alt =
+              (x.status === 'uncited' || x.status === 'unsupported') && x.bestIndex
+                ? ` (closest: [${x.bestIndex}])`
+                : '';
+            return `${mark[x.status] ?? '·'} ${x.status} ${cite} ${x.sentence.slice(0, 160)}${x.sentence.length > 160 ? '…' : ''}${nums}${alt}`;
+          });
+          const sum = v.summary;
+          const text = [
+            `Support rate ${(sum.supportRate * 100).toFixed(0)}% — ${sum.verbatim} verbatim, ${sum.paraphrase} paraphrase, ${sum.unsupported} unsupported, ${sum.uncited} uncited (of ${sum.total}).`,
+            ...(v.unknownCitations.length
+              ? [`Unknown citation markers: [${v.unknownCitations.join('], [')}]`]
+              : []),
+            ...lines,
+          ].join('\n');
+          return {
+            content: [{ type: 'text', text }],
+            ...(structured === 'off' ? {} : { structuredContent: JSON.parse(JSON.stringify(v)) }),
           };
         } catch (err) {
           return errorResult(err);

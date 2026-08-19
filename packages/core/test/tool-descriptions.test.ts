@@ -15,6 +15,7 @@ import {
   WEB_SEARCH_DESCRIPTION,
   WEB_SEARCH_TOOL_NAME,
   WEBVECTOR_STATUS_DESCRIPTION,
+  WEBVECTOR_VERIFY_DESCRIPTION,
 } from '../src/pipeline/tool.js';
 
 const DESCRIPTIONS: Record<string, string> = {
@@ -22,6 +23,7 @@ const DESCRIPTIONS: Record<string, string> = {
   [WEB_FETCH_TOOL_NAME]: WEB_FETCH_DESCRIPTION,
   [WEB_SEARCH_TOOL_NAME]: WEB_SEARCH_DESCRIPTION,
   webvector_status: WEBVECTOR_STATUS_DESCRIPTION,
+  webvector_verify: WEBVECTOR_VERIFY_DESCRIPTION,
 };
 
 /** prompt → expected tool → the cue (regex) that description must contain for this prompt. */
