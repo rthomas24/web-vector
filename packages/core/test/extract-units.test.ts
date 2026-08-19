@@ -101,6 +101,45 @@ describe('language helpers', () => {
   });
 });
 
+describe('language resolution order', () => {
+  it('uses <html lang>, then Content-Language, then the script heuristic', async () => {
+    const body = `<article><p>${'Plain paragraph text with enough words to parse as content. '.repeat(20)}</p></article>`;
+    const p = new HtmlParser();
+    const tagged = await p.parseHtml(
+      `<html lang="fr"><body>${body}</body></html>`,
+      'https://x/',
+      'text/html',
+      { contentLanguage: 'de' },
+    );
+    expect(tagged?.lang).toBe('fr');
+    const header = await p.parseHtml(
+      `<html><body>${body}</body></html>`,
+      'https://x/',
+      'text/html',
+      { contentLanguage: 'de-AT, en;q=0.5' },
+    );
+    expect(header?.lang).toBe('de-AT');
+    const cjk = await p.parseHtml(
+      `<html><body><article><p>${'速率限制保护服务免受短时间内过多请求的影响，是一种常见的技术手段。'.repeat(10)}</p></article></body></html>`,
+      'https://x/',
+    );
+    expect(cjk?.lang).toBe('zh');
+    const parsed = await parseResource(
+      {
+        url: 'https://x.example/l',
+        finalUrl: 'https://x.example/l',
+        status: 200,
+        contentType: 'text/html',
+        bytes: new TextEncoder().encode(`<html><body>${body}</body></html>`),
+        headers: new Headers({ 'content-language': 'pt-BR' }),
+        redirects: 0,
+      } as any,
+      {},
+    );
+    expect(parsed.page?.doc.lang).toBe('pt-BR');
+  });
+});
+
 describe('PARSE_NEEDS_JS wiring', () => {
   it('HtmlParser throws PARSE_NEEDS_JS for a shell and returns null for a plain empty page', async () => {
     const p = new HtmlParser();

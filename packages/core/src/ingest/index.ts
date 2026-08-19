@@ -250,6 +250,7 @@ export async function parseResource(
       url: res.finalUrl,
       contentType: res.contentType,
       charset: res.charset,
+      contentLanguage: res.headers?.get?.('content-language') ?? undefined,
     });
     if (!doc) {
       return {

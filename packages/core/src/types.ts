@@ -210,6 +210,8 @@ export interface ParseContext {
   url: string;
   contentType: string;
   charset?: string;
+  /** `Content-Language` response header, when the server sent one (language fallback). */
+  contentLanguage?: string;
 }
 
 export interface ContentParser {

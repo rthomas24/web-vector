@@ -4,7 +4,12 @@ import { parseHTML } from 'linkedom';
 import { htmlToMarkdown } from 'mdream';
 import { WebVectorError } from '../errors.js';
 import type { ContentParser, ParseContext, ParsedDocument } from '../types.js';
-import { detectJsShell, guessLangFromScript, type JsShellSignals } from './extract-detect.js';
+import {
+  detectJsShell,
+  guessLangFromScript,
+  type JsShellSignals,
+  normalizeLangTag,
+} from './extract-detect.js';
 import {
   articleCandidate,
   type Candidate,
@@ -150,13 +155,16 @@ export class HtmlParser implements ContentParser {
 
   async parse(bytes: Uint8Array, ctx: ParseContext): Promise<ParsedDocument | null> {
     const html = decodeBytes(bytes, ctx.charset);
-    return this.parseHtml(html, ctx.url, ctx.contentType || 'text/html');
+    return this.parseHtml(html, ctx.url, ctx.contentType || 'text/html', {
+      contentLanguage: ctx.contentLanguage,
+    });
   }
 
   async parseHtml(
     html: string,
     url: string,
     contentType = 'text/html',
+    extra: { contentLanguage?: string } = {},
   ): Promise<ParsedDocument | null> {
     const minArticle = this.opts.minArticleChars ?? 300;
     const minPage = this.opts.minPageChars ?? 80;
@@ -326,7 +334,12 @@ export class HtmlParser implements ContentParser {
       firstHeading(document, markdown) ||
       hostTitle(url);
     const text = markdownToText(markdown);
-    const lang = meta.lang ?? cleanField(article?.lang, 16) ?? guessLangFromScript(text);
+    // <html lang> / meta / JSON-LD → Content-Language header → Readability → Unicode-script guess.
+    const lang =
+      meta.lang ??
+      normalizeLangTag(extra.contentLanguage) ??
+      cleanField(article?.lang, 16) ??
+      guessLangFromScript(text);
     return {
       url,
       title: cleanField(title) ?? hostTitle(url),

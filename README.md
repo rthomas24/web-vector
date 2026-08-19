@@ -335,7 +335,9 @@ new WebVector({ search: { instance: myIndex } });
 ```
 research(query)
   1. search      provider chain (DuckDuckGo → fallbacks) → dedupe by canonical URL → domain filters → top N
-  2. ingest      concurrent, polite fetch → HTML (Readability→Markdown) | PDF | text → page cache
+  2. ingest      concurrent, polite fetch → HTML (page-type routing: Readability + full-page recall guard,
+                 whole-main for docs/forums, code/table pre-pass, JSON-LD / __NEXT_DATA__ recovery, JS-shell
+                 detection → optional renderer) | PDF (page-aware) | text → page cache
   3. chunk+embed markdown-aware recursive chunks with heading breadcrumbs → content-hash dedupe → embed (batched, cached)
   4. retrieve    query + expansions → vector top-k lists + BM25 top-k lists → weighted RRF → cosine cutoffs
                  → near-duplicate removal → per-source cap → MMR → optional rerank → top-k
@@ -346,7 +348,7 @@ Typical run on a laptop: search ~1 s, 8 pages fetched + parsed ~1–2.5 s, retri
 
 ## 14. Roadmap
 
-LanceDB and Pinecone stores · a headless-browser fetch adapter for JS-rendered pages · contextual-retrieval (LLM-summarised chunk context) as an opt-in · a standalone binary with no Node requirement · Python package sharing the conformance fixtures.
+LanceDB and Pinecone stores · a bundled headless-browser renderer (today: `ingestion.render` with Cloudflare Browser Rendering / Browserless / your own function) · contextual-retrieval (LLM-summarised chunk context) as an opt-in · a standalone binary with no Node requirement · Python package sharing the conformance fixtures.
 
 ## License
 
