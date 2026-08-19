@@ -4,7 +4,8 @@ import { WebVectorError } from '../errors.js';
 import type { ContentParser, Failure, Logger, ParsedDocument } from '../types.js';
 import { sha256 } from '../util/hash.js';
 import { LRU } from '../util/lru.js';
-import { canonicalizeUrl } from '../util/url.js';
+import { canonicalizeUrl, cleanUrl } from '../util/url.js';
+import { selectFastPath } from './fast-paths.js';
 import { type FetchedResource, Fetcher, type FetcherOptions } from './fetcher.js';
 import { isServedMarkdown, parseServedMarkdown } from './markdown-clean.js';
 import {
@@ -17,7 +18,15 @@ import {
 
 export type { ChunkerOptions, TextChunk, TokenCounter } from './chunker.js';
 export { approxTokens, chunkMarkdown, loadTokenCounter } from './chunker.js';
-export type { FetchedResource, FetcherOptions } from './fetcher.js';
+export type { FastPath, FastPathContext } from './fast-paths.js';
+export {
+  builtinFastPaths,
+  cooldownFastPath,
+  listFastPaths,
+  registerFastPath,
+  selectFastPath,
+} from './fast-paths.js';
+export type { FetchedResource, FetcherOptions, FetchInit } from './fetcher.js';
 export { acceptHeaderFor, Fetcher, parseContentType } from './fetcher.js';
 export type { CleanedMarkdown, ServedMarkdownContext } from './markdown-clean.js';
 export {
@@ -123,6 +132,10 @@ export interface IngestOptions {
   cache?: PageCache;
   logger?: Logger;
   signal?: AbortSignal;
+  /** URL-rewrite / API fast paths (`ingestion.fastPaths`): true (default), false, or a list of ids. */
+  fastPaths?: boolean | string[];
+  /** Environment for optional fast-path API keys (default `process.env`). */
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface IngestOutcome {
@@ -139,9 +152,29 @@ export async function ingestUrl(url: string, opts: IngestOptions): Promise<Inges
   const t0 = Date.now();
   const cached = opts.cache?.get(url);
   if (cached) return { url, ok: true, page: cached, cached: true, ms: 0 };
-  let res: FetchedResource;
+  let res: FetchedResource | undefined;
+  // Fast path (arXiv HTML, GitHub raw, HN/SO/GitHub-issue APIs…): try once, fall back on any failure.
+  const fp = selectFastPath(cleanUrl(url).url, opts.fastPaths ?? true);
+  if (fp) {
+    try {
+      const r = await fp.resolve({
+        url: new URL(cleanUrl(url).url),
+        fetch: (u, init) => opts.fetcher.fetch(u, opts.signal, init),
+        signal: opts.signal,
+        env: opts.env ?? process.env,
+        logger: opts.logger,
+      });
+      if (r) res = r;
+      else opts.logger?.debug(`fast path ${fp.id}: no result for ${url}; fetching normally`);
+    } catch (err) {
+      if (WebVectorError.is(err, 'ABORTED')) throw err;
+      opts.logger?.debug(
+        `fast path ${fp.id} failed for ${url} (${err instanceof Error ? err.message : err}); fetching normally`,
+      );
+    }
+  }
   try {
-    res = await opts.fetcher.fetch(url, opts.signal);
+    res ??= await opts.fetcher.fetch(url, opts.signal);
   } catch (err) {
     const e = WebVectorError.from(err, { code: 'FETCH_FAILED', stage: 'ingest' });
     return {
@@ -205,6 +238,10 @@ export async function parseResource(
     }
     if (res.contentSignal && !doc.contentSignal) doc.contentSignal = res.contentSignal;
     if (res.textFragment && !doc.textFragment) doc.textFragment = res.textFragment;
+    if (res.fastPath) {
+      doc.metadata = { ...doc.metadata, fastPath: res.fastPath.id };
+      if (res.fastPath.api) doc.fetchedFrom = 'api';
+    }
     const page: CachedPage = {
       doc: { ...doc, url: res.url },
       pageHash: sha256(doc.markdown),

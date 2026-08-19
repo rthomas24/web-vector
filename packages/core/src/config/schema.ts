@@ -242,6 +242,14 @@ export const ingestionConfigSchema = z.object({
    * and goes through the served-markdown cleaner (`parser: 'server-markdown'`).
    */
   acceptMarkdown: z.enum(['prefer', 'accept', 'off']).default('prefer'),
+  /**
+   * URL-rewrite / API fast paths for hosts whose HTML is the worst way to get the content
+   * (arxiv → HTML paper, github repo → raw README, github blob → raw, google docs → markdown
+   * export, npm/pypi → registry readme, HN → Algolia API, Stack Exchange → API with answers,
+   * GitHub issues/PRs → REST). true (all), false, or a list of ids. Rewritten hosts still go
+   * through robots.txt/SSRF/politeness; any failure falls back to the original URL.
+   */
+  fastPaths: z.union([z.boolean(), z.array(z.string())]).default(true),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),

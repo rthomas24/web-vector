@@ -49,6 +49,14 @@ export interface FetcherOptions {
   contentSignals?: 'ignore' | 'record' | 'respect';
 }
 
+/** Per-request overrides (used by fast paths / archive lookups). */
+export interface FetchInit {
+  /** Extra request headers (sent to the original origin only, like `FetcherOptions.headers`). */
+  headers?: Record<string, string>;
+  /** Override the retry count for this request (fast paths use 0: try once, then fall back). */
+  retries?: number;
+}
+
 export interface FetchedResource {
   url: string;
   finalUrl: string;
@@ -63,6 +71,8 @@ export interface FetchedResource {
   contentSignal?: ContentSignal;
   /** Decoded `#:~:text=` fragment from the requested URL (a retrieval hint), if any. */
   textFragment?: string;
+  /** Set when a fast path produced this resource (`api`: rendered from a JSON API, else a URL rewrite). */
+  fastPath?: { id: string; api: boolean };
 }
 
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -127,7 +137,7 @@ export class Fetcher {
    * URL hygiene runs first (redirect wrappers unwrapped, AMP/mobile variants folded, `#:~:text=`
    * preserved as `textFragment`); `FetchedResource.url` is the cleaned URL.
    */
-  async fetch(url: string, signal?: AbortSignal): Promise<FetchedResource> {
+  async fetch(url: string, signal?: AbortSignal, init: FetchInit = {}): Promise<FetchedResource> {
     const cleaned = cleanUrl(url);
     if (cleaned.rewritten) this.opts.logger?.debug(`fetch: url hygiene ${url} → ${cleaned.url}`);
     url = cleaned.url;
@@ -159,8 +169,8 @@ export class Fetcher {
     const host = parsed.hostname.toLowerCase();
     const res = await this.limiter(() =>
       this.hostQueue.run(host, () =>
-        retry((attempt) => this.doFetch(url, signal, attempt), {
-          retries: this.opts.retries,
+        retry((attempt) => this.doFetch(url, signal, attempt, init.headers), {
+          retries: init.retries ?? this.opts.retries,
           signal,
           minDelayMs: 500,
           shouldRetry: (err) => WebVectorError.is(err) && err.retryable,
@@ -208,6 +218,7 @@ export class Fetcher {
     startUrl: string,
     signal: AbortSignal | undefined,
     attempt: number,
+    extraHeaders?: Record<string, string>,
   ): Promise<FetchedResource> {
     const t0 = Date.now();
     let current = startUrl;
@@ -228,6 +239,7 @@ export class Fetcher {
             'accept-language': 'en-US,en;q=0.9,*;q=0.5',
             'accept-encoding': 'gzip, deflate, br',
             ...(sameOrigin ? this.opts.headers : stripCredentialHeaders(this.opts.headers)),
+            ...(sameOrigin ? extraHeaders : stripCredentialHeaders(extraHeaders)),
           },
           signal: timeoutSignal,
         });

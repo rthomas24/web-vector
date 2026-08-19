@@ -2,11 +2,18 @@
  * Fetch-robustness stream: markdown-first negotiation, bot-block classification, early aborts,
  * Content-Signal etiquette, URL hygiene, fast paths, provider-content gate, archive fallback.
  */
+import { readFileSync } from 'node:fs';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import {
+  cooldownFastPath,
+  registerFastPath,
+  selectFastPath,
+  stackExchangeSite,
+} from '../src/ingest/fast-paths.js';
 import { acceptHeaderFor, Fetcher, parseContentSignal } from '../src/ingest/fetcher.js';
-import { parseResource } from '../src/ingest/index.js';
+import { ingestUrl, parseResource } from '../src/ingest/index.js';
 import {
   cleanServedMarkdown,
   isServedMarkdown,
@@ -561,5 +568,320 @@ describe('url hygiene', () => {
     expect(r.textFragment).toBe('page body');
     const out = await parseResource(r, {});
     expect(out.page?.doc.textFragment).toBe('page body');
+  });
+});
+
+// ─── C5 / C14 fast paths ─────────────────────────────────────────────────────
+
+const FIX = new URL('./fixtures/fast-paths/', import.meta.url);
+const fixture = (name: string) => readFileSync(new URL(name, FIX), 'utf8');
+const json = (name: string, init?: ResponseInit) =>
+  new HttpResponse(fixture(name), {
+    ...init,
+    headers: { 'content-type': 'application/json; charset=utf-8', ...(init?.headers ?? {}) },
+  });
+
+describe('fast paths', () => {
+  it('selects by URL and honours the enable list', () => {
+    expect(selectFastPath('https://arxiv.org/abs/1706.03762')?.id).toBe('arxiv');
+    expect(selectFastPath('https://arxiv.org/abs/hep-th/9901001v2')?.id).toBe('arxiv');
+    expect(selectFastPath('https://arxiv.org/list/cs.AI/recent')).toBeUndefined();
+    expect(selectFastPath('https://github.com/octo/repo')?.id).toBe('github-readme');
+    expect(selectFastPath('https://github.com/octo/repo/blob/main/docs/x.md')?.id).toBe(
+      'github-blob',
+    );
+    expect(selectFastPath('https://github.com/octo/repo/issues/42')?.id).toBe('github-issue');
+    expect(selectFastPath('https://github.com/octo/repo/pull/7')?.id).toBe('github-issue');
+    expect(selectFastPath('https://github.com/topics/rag')).toBeUndefined();
+    expect(selectFastPath('https://docs.google.com/document/d/abc_DEF-123/edit')?.id).toBe(
+      'google-docs',
+    );
+    expect(selectFastPath('https://www.npmjs.com/package/@scope/name')?.id).toBe('npm');
+    expect(selectFastPath('https://pypi.org/project/requests/')?.id).toBe('pypi');
+    expect(selectFastPath('https://news.ycombinator.com/item?id=1')?.id).toBe('hackernews');
+    expect(selectFastPath('https://stackoverflow.com/questions/11227809/why')?.id).toBe(
+      'stackexchange',
+    );
+    expect(selectFastPath('https://unix.stackexchange.com/questions/1/x')?.id).toBe(
+      'stackexchange',
+    );
+    expect(selectFastPath('https://example.com/')).toBeUndefined();
+    expect(selectFastPath('https://arxiv.org/abs/1706.03762', false)).toBeUndefined();
+    expect(selectFastPath('https://arxiv.org/abs/1706.03762', ['npm'])).toBeUndefined();
+    expect(selectFastPath('https://arxiv.org/abs/1706.03762', ['arxiv'])?.id).toBe('arxiv');
+    expect(stackExchangeSite('meta.stackoverflow.com')).toBe('meta.stackoverflow');
+    expect(stackExchangeSite('meta.unix.stackexchange.com')).toBe('meta.unix');
+    expect(stackExchangeSite('es.stackoverflow.com')).toBe('es.stackoverflow');
+    expect(stackExchangeSite('example.com')).toBeUndefined();
+  });
+
+  it('arxiv: abs → html, falls back to pdf on 404, then to the original page', async () => {
+    const calls: string[] = [];
+    server.use(
+      http.get('https://arxiv.org/html/1706.03762', ({ request }) => {
+        calls.push(request.url);
+        return HttpResponse.html(
+          `<html><body><article><h1>Attention Is All You Need</h1><p>${'The dominant sequence transduction models are based on complex recurrent networks. '.repeat(10)}</p></article></body></html>`,
+        );
+      }),
+      http.get('https://arxiv.org/html/1409.0473', ({ request }) => {
+        calls.push(request.url);
+        return new HttpResponse('nf', { status: 404 });
+      }),
+      http.get('https://arxiv.org/pdf/1409.0473', ({ request }) => {
+        calls.push(request.url);
+        return new HttpResponse('nf', { status: 404 });
+      }),
+      http.get('https://arxiv.org/abs/1409.0473', ({ request }) => {
+        calls.push(request.url);
+        return HttpResponse.html(
+          `<html><body><h1>Neural Machine Translation</h1><p>${'Abstract text about alignment and translation. '.repeat(10)}</p></body></html>`,
+        );
+      }),
+    );
+    const f = fetcher();
+    const a = await ingestUrl('https://arxiv.org/abs/1706.03762', { fetcher: f });
+    expect(a.ok).toBe(true);
+    expect(a.page?.doc.url).toBe('https://arxiv.org/abs/1706.03762'); // citation keeps the original
+    expect(a.page?.finalUrl).toBe('https://arxiv.org/html/1706.03762');
+    expect(a.page?.doc.metadata?.fastPath).toBe('arxiv');
+    expect(a.page?.doc.markdown).toContain('sequence transduction');
+    const b = await ingestUrl('https://arxiv.org/abs/1409.0473', { fetcher: f });
+    expect(b.ok).toBe(true);
+    expect(b.page?.finalUrl).toBe('https://arxiv.org/abs/1409.0473');
+    expect(b.page?.doc.metadata?.fastPath).toBeUndefined();
+    expect(calls).toEqual([
+      'https://arxiv.org/html/1706.03762',
+      'https://arxiv.org/html/1409.0473',
+      'https://arxiv.org/pdf/1409.0473',
+      'https://arxiv.org/abs/1409.0473',
+    ]);
+    // disabled → straight to the original
+    calls.length = 0;
+    await ingestUrl('https://arxiv.org/abs/1409.0473', { fetcher: f, fastPaths: false });
+    expect(calls).toEqual(['https://arxiv.org/abs/1409.0473']);
+  });
+
+  it('github: repo → raw README (served-markdown cleaner), blob → raw; robots of the raw host is checked', async () => {
+    let robotsHits = 0;
+    server.use(
+      http.get('https://raw.githubusercontent.com/robots.txt', () => {
+        robotsHits++;
+        return new HttpResponse('nf', { status: 404 });
+      }),
+      http.get('https://github.com/robots.txt', () => new HttpResponse('nf', { status: 404 })),
+      http.get('https://raw.githubusercontent.com/octo/repo/HEAD/README.md', () =>
+        HttpResponse.text('# repo\n\nA README that is long enough to be a real document here.', {
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        }),
+      ),
+      http.get('https://raw.githubusercontent.com/octo/repo/main/docs/guide.md', () =>
+        HttpResponse.text('# Guide\n\nDocs page content that is long enough to be a document.', {
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        }),
+      ),
+    );
+    const f = fetcher({ respectRobotsTxt: true });
+    const r = await ingestUrl('https://github.com/octo/repo', { fetcher: f });
+    expect(r.ok).toBe(true);
+    expect(r.page?.doc.parser).toBe('server-markdown');
+    expect(r.page?.doc.title).toBe('repo');
+    expect(r.page?.doc.url).toBe('https://github.com/octo/repo');
+    expect(r.page?.doc.metadata?.fastPath).toBe('github-readme');
+    expect(robotsHits).toBe(1);
+    const b = await ingestUrl('https://github.com/octo/repo/blob/main/docs/guide.md', {
+      fetcher: f,
+    });
+    expect(b.page?.doc.title).toBe('Guide');
+    expect(b.page?.doc.metadata?.fastPath).toBe('github-blob');
+  });
+
+  it('npm: registry readme → markdown document', async () => {
+    server.use(http.get('https://registry.npmjs.org/tiny-pkg', () => json('npm-tiny-pkg.json')));
+    const r = await ingestUrl('https://www.npmjs.com/package/tiny-pkg', { fetcher: fetcher() });
+    expect(r.ok).toBe(true);
+    expect(r.page?.doc.title).toBe('tiny-pkg');
+    expect(r.page?.doc.fetchedFrom).toBe('api');
+    expect(r.page?.doc.markdown).toContain('latest 1.2.3');
+    expect(r.page?.doc.markdown).toContain('npm i tiny-pkg');
+    expect(r.page?.doc.markdown).toContain('```js');
+    expect(r.page?.doc.publishedAt).toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it('hacker news: Algolia item tree → threaded markdown; Firebase fallback', async () => {
+    server.use(
+      http.get('https://hn.algolia.com/api/v1/items/1', () => json('hn-item-1.json')),
+      http.get(
+        'https://hn.algolia.com/api/v1/items/2',
+        () => new HttpResponse('', { status: 500 }),
+      ),
+      http.get('https://hacker-news.firebaseio.com/v0/item/2.json', () =>
+        HttpResponse.json({
+          id: 2,
+          by: 'phpnode',
+          title: "A Student's Guide",
+          url: 'http://x.example',
+          score: 16,
+          time: 1160418628,
+          type: 'story',
+          kids: [3],
+        }),
+      ),
+      http.get('https://hacker-news.firebaseio.com/v0/item/3.json', () =>
+        HttpResponse.json({
+          id: 3,
+          by: 'someone',
+          text: 'A comment via firebase.',
+          time: 1160419000,
+          type: 'comment',
+        }),
+      ),
+    );
+    const r = await ingestUrl('https://news.ycombinator.com/item?id=1', { fetcher: fetcher() });
+    expect(r.ok).toBe(true);
+    const md = r.page?.doc.markdown ?? '';
+    expect(r.page?.doc.title).toBe('Y Combinator');
+    expect(md).toContain('57 points by pg');
+    expect(md).toContain('## Comments (3)');
+    expect(md).toContain('**sama**');
+    expect(md).toContain('> **pg**'); // nested reply as blockquote
+    expect(md).toContain('"the rising star of venture capital"');
+    expect(md).toContain('[a link](https://example.com/x)');
+    expect(r.page?.doc.url).toBe('https://news.ycombinator.com/item?id=1');
+    expect(r.page?.doc.fetchedFrom).toBe('api');
+    const fb = await ingestUrl('https://news.ycombinator.com/item?id=2', { fetcher: fetcher() });
+    expect(fb.ok).toBe(true);
+    expect(fb.page?.doc.markdown).toContain('A comment via firebase.');
+    expect(fb.page?.doc.markdown).toContain('16 points by phpnode');
+  });
+
+  it('stack exchange: question + answers with accepted first and CC BY-SA attribution; key from env; backoff → cooldown', async () => {
+    const seen: string[] = [];
+    server.use(
+      http.get('https://api.stackexchange.com/2.3/questions/11227809', ({ request }) => {
+        seen.push(request.url);
+        return json('se-question-11227809.json');
+      }),
+      http.get('https://api.stackexchange.com/2.3/questions/11227809/answers', ({ request }) => {
+        seen.push(request.url);
+        return json('se-answers-11227809.json');
+      }),
+      http.get('https://api.stackexchange.com/2.3/questions/5', () =>
+        HttpResponse.json({
+          items: [
+            {
+              question_id: 5,
+              title: 'Throttled',
+              body: '<p>Body of the throttled question, long enough.</p>',
+              answer_count: 0,
+            },
+          ],
+          backoff: 12,
+        }),
+      ),
+    );
+    const r = await ingestUrl(
+      'https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster',
+      {
+        fetcher: fetcher(),
+        env: { STACKEXCHANGE_KEY: 'k123' },
+      },
+    );
+    expect(r.ok).toBe(true);
+    const md = r.page?.doc.markdown ?? '';
+    expect(r.page?.doc.title).toBe(
+      'Why is processing a sorted array faster than an unsorted array?',
+    );
+    expect(md).toContain('## Question (score 27545) — asked by GManNickG');
+    expect(md).toContain('```');
+    expect(md).toContain('std::sort(data, data + arraySize);');
+    expect(md.indexOf('### Answer (score 35295, accepted) — by Mysticial')).toBeGreaterThan(0);
+    expect(md.indexOf('### Answer (score 35295, accepted)')).toBeLessThan(
+      md.indexOf('### Answer (score 4600)'),
+    );
+    expect(md).toContain('licensed under CC BY-SA 4.0');
+    expect(seen[0]).toContain('site=stackoverflow');
+    expect(seen[0]).toContain('filter=withbody');
+    expect(seen[0]).toContain('key=k123');
+    expect(seen[1]).toContain('/answers?site=stackoverflow');
+    // backoff → the fast path cools down; the next SO URL goes to the normal fetch (robots-blocked here → failure)
+    server.use(
+      http.get('https://stackoverflow.com/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nDisallow: /\n', {
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ),
+    );
+    const t = await ingestUrl('https://stackoverflow.com/questions/5/throttled', {
+      fetcher: fetcher({ respectRobotsTxt: true }),
+    });
+    expect(t.ok).toBe(true);
+    expect(t.page?.doc.markdown).toContain('Throttled');
+    expect(selectFastPath('https://stackoverflow.com/questions/6/x')).toBeUndefined(); // cooling down
+    const blocked = await ingestUrl('https://stackoverflow.com/questions/6/x', {
+      fetcher: fetcher({ respectRobotsTxt: true }),
+    });
+    expect(blocked.failure?.code).toBe('FETCH_BLOCKED_ROBOTS');
+    cooldownFastPath('stackexchange', 0);
+    expect(selectFastPath('https://stackoverflow.com/questions/6/x')?.id).toBe('stackexchange');
+  });
+
+  it('github issue: REST issue + comments, token from env, rate-limit → cooldown', async () => {
+    const auth: (string | null)[] = [];
+    server.use(
+      http.get('https://api.github.com/repos/octo/repo/issues/42', ({ request }) => {
+        auth.push(request.headers.get('authorization'));
+        return json('gh-issue-42.json', { headers: { 'x-ratelimit-remaining': '58' } });
+      }),
+      http.get('https://api.github.com/repos/octo/repo/issues/42/comments', () =>
+        json('gh-issue-42-comments.json'),
+      ),
+      http.get('https://api.github.com/repos/octo/repo/issues/43', () =>
+        json('gh-issue-42.json', {
+          headers: {
+            'x-ratelimit-remaining': '0',
+            'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 3600),
+          },
+        }),
+      ),
+    );
+    const r = await ingestUrl('https://github.com/octo/repo/issues/42', {
+      fetcher: fetcher(),
+      env: { GITHUB_TOKEN: 'ghp_test' },
+    });
+    expect(r.ok).toBe(true);
+    const md = r.page?.doc.markdown ?? '';
+    expect(r.page?.doc.title).toContain('Fetcher retries challenge pages forever');
+    expect(md).toContain('Issue octo/repo#42 · open · opened by alice');
+    expect(md).toContain('labels: bug, ingest');
+    expect(md).toContain('## Comments (2)');
+    expect(md).toContain('### bob · 2026-08-01');
+    expect(md).toContain('cf-mitigated: challenge');
+    expect(auth[0]).toBe('Bearer ghp_test');
+    await ingestUrl('https://github.com/octo/repo/issues/43', { fetcher: fetcher(), env: {} });
+    expect(selectFastPath('https://github.com/octo/repo/issues/44')).toBeUndefined();
+    cooldownFastPath('github-issue', 0);
+  });
+
+  it('registerFastPath adds a custom path', async () => {
+    registerFastPath({
+      id: 'custom-test',
+      description: 'test',
+      match: (u) => u.hostname === 'custom.example',
+      resolve: async (ctx) => ({
+        url: ctx.url.toString(),
+        finalUrl: 'https://custom.example/api',
+        status: 200,
+        contentType: 'text/markdown',
+        bytes: new TextEncoder().encode('# Custom\n\nRendered by a custom fast path, long enough.'),
+        ms: 1,
+        redirects: 0,
+        headers: new Headers(),
+        fastPath: { id: 'custom-test', api: true },
+      }),
+    });
+    const r = await ingestUrl('https://custom.example/thing', { fetcher: fetcher() });
+    expect(r.page?.doc.title).toBe('Custom');
+    expect(r.page?.doc.metadata?.fastPath).toBe('custom-test');
   });
 });

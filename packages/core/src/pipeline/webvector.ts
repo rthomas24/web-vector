@@ -147,6 +147,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       cache: opts.useCache === false ? undefined : c.pageCache,
       logger: this.logger,
       signal: opts.signal,
+      fastPaths: this.config.ingestion.fastPaths,
     });
     if (!outcome.ok || !outcome.page) {
       const f = outcome.failure as Failure;
@@ -571,6 +572,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       cache: c.pageCache,
       logger: this.logger,
       signal,
+      fastPaths: this.config.ingestion.fastPaths,
     });
     if (!outcome.ok || !outcome.page)
       return { failure: outcome.failure as Failure, ms: outcome.ms };
