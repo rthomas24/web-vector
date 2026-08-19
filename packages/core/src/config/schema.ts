@@ -172,6 +172,21 @@ export const retrievalConfigSchema = z.object({
    * suggested queries inside the same call (same run deadline). 0 = off (default), max 1.
    */
   autoRetry: z.number().int().min(0).max(1).default(0),
+  /**
+   * Source-authority priors: glob → score multiplier, merged over the built-in defaults (user
+   * wins; set a pattern to 1 to neutralise a built-in). Hostname globs (`*.gov`) or host/path globs
+   * (`github.com/*\/*\/blob/*\/README*`). Combined multipliers are clamped to [0.7, 1.3] and shown
+   * in `explain.multipliers.sourcePrior`.
+   */
+  sourcePriors: z.record(z.string(), z.number().positive()).default({}),
+  /** Apply the small built-in prior list (*.gov/*.edu/arxiv/wikipedia/GitHub READMEs up; a few aggregators down). */
+  builtinSourcePriors: z.boolean().default(true),
+  /**
+   * Boost passages whose registrable domain names something in the query (nodejs.org ↔ "node",
+   * docs.python.org ↔ "python") — usually the primary source. Shown in `explain.multipliers.preferPrimary`.
+   */
+  preferPrimary: z.boolean().default(true),
+  preferPrimaryBoost: z.number().min(1).max(1.3).default(1.15),
   minScore: z.number().min(-1).max(1).nullable().default(null),
   relativeCutoff: z.number().min(0).max(1).default(0.6),
   /**

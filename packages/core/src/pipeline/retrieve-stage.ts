@@ -26,6 +26,12 @@ import {
   xquad,
 } from '../retrieval/fusion.js';
 import { leadWindow, rankHighlightWindows, toHighlight } from '../retrieval/highlight.js';
+import {
+  BUILTIN_SOURCE_PRIORS,
+  compileSourcePriors,
+  isPrimaryFor,
+  sourcePriorFor,
+} from '../retrieval/priors.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
 import type { Freshness, Passage, PassageExplain, ScoredChunk, SearchResult } from '../types.js';
 import { combine, dot } from '../util/vector.js';
@@ -274,6 +280,20 @@ export async function runRetrieveStage(
     for (const x of cands)
       boost(x, 'recency', recencyBoost(x.metadata.publishedAt, halfLife, rc.recency.weight));
   }
+  // Source-authority priors (glob → multiplier, tiny built-ins + user overrides) and preferPrimary
+  // (the page's domain names something in the query → likely the primary source).
+  const priors = compileSourcePriors(
+    rc.sourcePriors,
+    rc.builtinSourcePriors ? BUILTIN_SOURCE_PRIORS : {},
+  );
+  if (priors.length || rc.preferPrimary) {
+    for (const x of cands) {
+      const sp = sourcePriorFor(x.metadata.url, priors);
+      if (sp.multiplier !== 1) boost(x, 'sourcePrior', sp.multiplier);
+      if (rc.preferPrimary && isPrimaryFor(x.metadata.url, query, registrableDomain))
+        boost(x, 'preferPrimary', rc.preferPrimaryBoost);
+    }
+  }
   const corroborationOf = corroborationCounter(allCands, rc.corroborationJaccard);
   if (rc.corroborationBoost) {
     // Pairwise text similarity is O(n²): only the top slice of candidates competes for a boost.
@@ -281,8 +301,8 @@ export async function runRetrieveStage(
       x.corroboration = corroborationOf(x);
       boost(x, 'corroboration', 1 + 0.1 * Math.min(x.corroboration - 1, 3));
     }
-    cands.sort((a, b) => b.fused - a.fused);
   }
+  cands.sort((a, b) => b.fused - a.fused);
 
   // ── diversify → rerank → cut ─────────────────────────────────────────
   const poolK = Math.max(topK * 2, rc.rerankTopN);

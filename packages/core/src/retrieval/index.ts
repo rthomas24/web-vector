@@ -19,3 +19,10 @@ export {
 } from './fusion.js';
 export type { Highlight, HighlightOptions, ScoredWindow, Segment } from './highlight.js';
 export { bestHighlight, rankHighlightWindows, segmentText } from './highlight.js';
+export type { CompiledPrior } from './priors.js';
+export {
+  BUILTIN_SOURCE_PRIORS,
+  compileSourcePriors,
+  isPrimaryFor,
+  sourcePriorFor,
+} from './priors.js';

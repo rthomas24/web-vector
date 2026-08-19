@@ -782,3 +782,57 @@ describe('evidence gate', () => {
     expect(ev.suggestedQueries.length).toBeLessThanOrEqual(4);
   });
 });
+
+describe('source priors + preferPrimary', () => {
+  it('matches hostname and host/path globs, merges user overrides, clamps', async () => {
+    const { compileSourcePriors, sourcePriorFor, isPrimaryFor, BUILTIN_SOURCE_PRIORS } =
+      await import('../src/retrieval/priors.js');
+    const { registrableDomain } = await import('../src/pipeline/retrieve-stage.js');
+    const priors = compileSourcePriors();
+    expect(sourcePriorFor('https://www.nist.gov/x', priors).multiplier).toBeCloseTo(1.1);
+    expect(sourcePriorFor('https://arxiv.org/abs/1', priors).multiplier).toBeCloseTo(1.1);
+    expect(sourcePriorFor('https://en.wikipedia.org/wiki/X', priors).matched).toEqual([
+      '*.wikipedia.org',
+    ]);
+    expect(
+      sourcePriorFor('https://github.com/o/r/blob/main/README.md', priors).multiplier,
+    ).toBeCloseTo(1.1);
+    expect(sourcePriorFor('https://github.com/o/r/issues/1', priors).multiplier).toBe(1);
+    expect(sourcePriorFor('https://www.pinterest.com/pin/1', priors).multiplier).toBeCloseTo(0.85);
+    expect(sourcePriorFor('https://example.com/', priors).multiplier).toBe(1);
+    // User overrides win and can neutralise a built-in; extreme values are clamped.
+    const custom = compileSourcePriors({
+      '*.pinterest.com': 1,
+      'blog.example': 5,
+      '*.spam.test': 0.1,
+    });
+    expect(sourcePriorFor('https://www.pinterest.com/pin/1', custom).multiplier).toBe(1);
+    expect(sourcePriorFor('https://blog.example/post', custom).multiplier).toBe(1.3);
+    expect(sourcePriorFor('https://a.spam.test/x', custom).multiplier).toBe(0.7);
+    expect(Object.values(BUILTIN_SOURCE_PRIORS).every((m) => m <= 1.3 && m >= 0.7)).toBe(true);
+    // preferPrimary: the domain names something in the query.
+    expect(
+      isPrimaryFor(
+        'https://nodejs.org/api/globals.html',
+        'node AbortSignal.any',
+        registrableDomain,
+      ),
+    ).toBe(true);
+    expect(
+      isPrimaryFor(
+        'https://docs.python.org/3/library/',
+        'python dataclasses frozen',
+        registrableDomain,
+      ),
+    ).toBe(true);
+    expect(
+      isPrimaryFor('https://www.sqlite.org/wal.html', 'SQLite WAL mode', registrableDomain),
+    ).toBe(true);
+    expect(
+      isPrimaryFor('https://en.wikipedia.org/wiki/SQLite', 'SQLite WAL mode', registrableDomain),
+    ).toBe(false);
+    expect(isPrimaryFor('https://theverge.com/x', 'the best laptops', registrableDomain)).toBe(
+      false,
+    );
+  });
+});

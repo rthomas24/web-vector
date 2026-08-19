@@ -384,6 +384,25 @@ describe('WebVector pipeline (mocked)', () => {
     expect(retried.sources.some((s) => s.url.includes('zebra.example'))).toBe(true);
     await wv3.close();
   });
+  it('applies configured source priors as explained multipliers', async () => {
+    mockSites();
+    const wv = make({
+      retrieval: {
+        sourcePriors: { '*.rrf.example': 0.8 },
+        preferPrimary: true,
+        mmr: false,
+        relativeCutoff: 0,
+      },
+    });
+    const res = await wv.research('rrf rank fusion formula', { topK: 4, explain: true });
+    const rrf = res.passages.find((p) => p.url.includes('rrf.example'))!;
+    expect(rrf.explain?.multipliers?.sourcePrior).toBeCloseTo(0.8, 6);
+    // "rrf" in the query names the rrf.example domain → preferPrimary applies too.
+    expect(rrf.explain?.multipliers?.preferPrimary).toBeCloseTo(1.15, 6);
+    const py = res.passages.find((p) => p.url.includes('py.example'));
+    expect(py?.explain?.multipliers?.sourcePrior).toBeUndefined();
+    await wv.close();
+  });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
     await expect(wv.research('   ')).rejects.toMatchObject({ code: 'INVALID_CONFIG' });
