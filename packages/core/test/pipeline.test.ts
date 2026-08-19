@@ -258,15 +258,15 @@ describe('WebVector pipeline (mocked)', () => {
 describe('tool schemas + bindings', () => {
   it('json schema definitions are valid and strict mode works', () => {
     const d = webResearchToolDefinition();
-    expect(d.name).toBe('web_research');
+    expect(d.name).toBe('webvector_research');
     expect((d.inputSchema as any).properties.query.type).toBe('string');
     expect((d.inputSchema as any).required).toEqual(['query']);
     const strict = webResearchToolDefinition({ strict: true }).inputSchema as any;
     expect(strict.additionalProperties).toBe(false);
     expect(strict.required.sort()).toEqual(Object.keys(strict.properties).sort());
     expect(strict.properties.top_k.type).toEqual(['integer', 'null']);
-    expect(webFetchToolDefinition().name).toBe('web_fetch');
-    expect(webSearchToolDefinition().name).toBe('web_search');
+    expect(webFetchToolDefinition().name).toBe('webvector_fetch');
+    expect(webSearchToolDefinition().name).toBe('webvector_search');
     expect(webResearchInputSchema.safeParse({ query: 'x' }).success).toBe(false); // min 2
     expect(webResearchInputSchema.safeParse({ query: 'ok', top_k: 500 }).success).toBe(false);
   });
@@ -274,15 +274,19 @@ describe('tool schemas + bindings', () => {
     mockSites();
     const wv = make();
     expect(anthropicTools().map((t) => t.name)).toEqual([
-      'web_research',
-      'web_fetch',
-      'web_search',
+      'webvector_research',
+      'webvector_fetch',
+      'webvector_search',
     ]);
     expect(
-      anthropicTools({ include: ['web_research'], cacheControl: true })[0]!.cache_control,
+      anthropicTools({ include: ['webvector_research'], cacheControl: true })[0]!.cache_control,
     ).toEqual({ type: 'ephemeral' });
+    // legacy names still select and run the same tools
+    expect(anthropicTools({ include: ['web_fetch'] }).map((t) => t.name)).toEqual([
+      'webvector_fetch',
+    ]);
     const oa = openaiTools();
-    expect(oa[0]).toMatchObject({ type: 'function', name: 'web_research', strict: true });
+    expect(oa[0]).toMatchObject({ type: 'function', name: 'webvector_research', strict: true });
     const r = await runOpenAITool(
       wv,
       'web_research',
@@ -299,14 +303,65 @@ describe('tool schemas + bindings', () => {
     );
     expect(r.isError).toBeUndefined();
     expect(r.content).toContain('[1]');
-    const s = await runAnthropicTool(wv, 'web_search', { query: 'x', count: 2 });
+    const s = await runAnthropicTool(wv, 'webvector_search', { query: 'x', count: 2 });
     expect(s.content).toContain('1. RRF intro');
-    const bad = await runAnthropicTool(wv, 'web_fetch', { url: 'https://down.example/x' });
+    const bad = await runAnthropicTool(wv, 'webvector_fetch', { url: 'https://down.example/x' });
     expect(bad.isError).toBe(true);
     expect(bad.content).toMatch(/FETCH_HTTP_ERROR/);
     const unknown = await runAnthropicTool(wv, 'nope', {});
     expect(unknown.isError).toBe(true);
     await wv.close();
+  });
+  it('anthropic search_result blocks + adapter guardrails', async () => {
+    mockSites();
+    const wv = make();
+    const sr = await runAnthropicTool(
+      wv,
+      'webvector_research',
+      { query: 'rank fusion', top_k: 2 },
+      { format: 'search_result' },
+    );
+    expect(sr.isError).toBeUndefined();
+    const blocks = sr.content as any[];
+    expect(blocks[0]).toMatchObject({
+      type: 'search_result',
+      source: 'https://rrf.example/intro',
+      title: 'RRF intro',
+      citations: { enabled: true },
+    });
+    expect(blocks[0].content[0]).toMatchObject({ type: 'text' });
+    expect(blocks[0].content[0].text).toMatch(/fusion|rank/i);
+    expect(blocks.at(-1)).toMatchObject({ type: 'text' });
+    expect(blocks.at(-1).text).toMatch(/^Sources: \[1\] /);
+    // definitions document the policy; the runner enforces it (per-instance counter)
+    const defs = anthropicTools({
+      include: ['webvector_research'],
+      allowedDomains: ['rrf.example'],
+      maxUses: 1,
+    });
+    expect(defs[0]!.description).toContain(
+      'Policy: Only these domains: rrf.example. At most 1 web tool calls',
+    );
+    const wv2 = make();
+    const g = { allowedDomains: ['rrf.example'], maxUses: 1 };
+    const first = await runAnthropicTool(wv2, 'webvector_search', { query: 'x' }, g);
+    expect(first.content).toContain('rrf.example');
+    expect(first.content).not.toContain('fruit.example');
+    const second = await runAnthropicTool(wv2, 'webvector_search', { query: 'x' }, g);
+    expect(second.isError).toBe(true);
+    expect(second.content).toContain('MAX_USES_EXCEEDED');
+    const blocked = await runAnthropicTool(
+      make(),
+      'webvector_fetch',
+      { url: 'https://fruit.example/banana' },
+      {
+        blockedDomains: ['fruit.example'],
+      },
+    );
+    expect(blocked.isError).toBe(true);
+    expect(blocked.content).toContain('DOMAIN_NOT_ALLOWED');
+    await wv.close();
+    await wv2.close();
   });
   it('renderMarkdown respects token budget', () => {
     const res: any = {
@@ -397,6 +452,91 @@ describe('pipeline hardening', () => {
     expect(res.failures.some((f) => f.code === 'FETCH_TIMEOUT')).toBe(true);
     await new Promise((r) => setTimeout(r, 100));
     expect(aborted).toBe(true);
+    await wv.close();
+  });
+});
+
+describe('research options: depth, deadline, objective, category, progress', () => {
+  it('depth presets map to ResearchOptions and numeric args override', async () => {
+    const { toResearchOptions, DEPTH_PRESETS } = await import('../src/pipeline/tool.js');
+    expect(toResearchOptions({ query: 'q', depth: 'fast' })).toMatchObject({
+      maxPages: 4,
+      topK: 6,
+      queryExpansion: false,
+      deadlineMs: 15_000,
+    });
+    expect(toResearchOptions({ query: 'q', depth: 'thorough', top_k: 3 })).toMatchObject({
+      maxPages: 16,
+      topK: 3,
+      rerank: true,
+      deadlineMs: 60_000,
+    });
+    expect(toResearchOptions({ query: 'q' }).maxPages).toBeUndefined();
+    expect(DEPTH_PRESETS.balanced).toEqual({});
+    expect(
+      toResearchOptions({ query: 'q', objective: 'o', category: 'pdf', deadline_ms: 3000 }),
+    ).toMatchObject({ objective: 'o', category: 'pdf', deadlineMs: 3000 });
+  });
+  it('per-call deadline returns partial results with a reason; progress carries failed counts', async () => {
+    mockSites();
+    const wv = make({
+      ingestion: {
+        totalDeadlineMs: 10_000,
+        timeoutMs: 10_000,
+        respectRobotsTxt: false,
+        perHostMinIntervalMs: 0,
+        retries: 0,
+        allowPrivateNetworks: true,
+        minChunkChars: 20,
+      },
+    });
+    const slowSearch = customSearchProvider('slow', async () => [
+      { url: 'https://rrf.example/intro', title: 'RRF intro', rank: 1 },
+      { url: 'https://slow.example/x', title: 'Slow', rank: 2 },
+      { url: 'https://down.example/x', title: 'Down', rank: 3 },
+    ]);
+    const wv2 = make({
+      search: { instance: slowSearch, fallbackProviders: [] },
+      ingestion: {
+        totalDeadlineMs: 10_000,
+        timeoutMs: 10_000,
+        respectRobotsTxt: false,
+        perHostMinIntervalMs: 0,
+        retries: 0,
+        allowPrivateNetworks: true,
+        minChunkChars: 20,
+      },
+    });
+    const events: any[] = [];
+    const res = await wv2.research('rank fusion', {
+      deadlineMs: 800,
+      onProgress: (e) => events.push(e),
+    });
+    expect(res.degraded).toBe('partial');
+    expect(res.degradedReason).toMatch(/deadline of 800ms reached: 1 of 3 pages not fetched/);
+    expect(res.passages.length).toBeGreaterThan(0); // partial results still returned
+    const ingest = events.filter((e) => e.stage === 'ingest' && e.failed !== undefined);
+    expect(ingest.some((e) => /\(1 failed\)/.test(e.message))).toBe(true);
+    await wv.close();
+    await wv2.close();
+  });
+  it('objective terms join retrieval only (not the search) and category adds operators to the search query', async () => {
+    mockSites();
+    const seen: string[] = [];
+    const spy = customSearchProvider('spy', async (q) => {
+      seen.push(q);
+      return [{ url: 'https://rrf.example/intro', title: 'RRF intro', rank: 1 }];
+    });
+    const wv = make({ search: { instance: spy, fallbackProviders: [] } });
+    const res = await wv.research('rank fusion', {
+      objective: 'I need the exact formula 1/(k+rank) and the usual k value used in fusion',
+      category: 'pdf',
+      relatedQueries: ['rank fusion k'],
+    });
+    expect(seen).toEqual(['rank fusion filetype:pdf', 'rank fusion k filetype:pdf']);
+    expect(res.query).toBe('rank fusion');
+    expect(res.queries).not.toContain(expect.stringMatching(/exact formula/));
+    expect(res.passages.length).toBeGreaterThan(0);
     await wv.close();
   });
 });

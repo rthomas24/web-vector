@@ -11,7 +11,7 @@
  * const wv = new WebVector();
  * const { text } = await generateText({
  *   model: anthropic('claude-sonnet-5'),
- *   tools: { web_research: await webResearchTool(wv) },
+ *   tools: { webvector_research: await webResearchTool(wv) },
  *   stopWhen: isStepCount(5),
  *   prompt: 'What changed in the MCP spec in 2026?',
  * });
@@ -19,12 +19,16 @@
  */
 import type { EmbeddingModel, LanguageModel, RerankingModel, Tool } from 'ai';
 import { importOptional } from '../errors.js';
-import { renderMarkdown } from '../pipeline/format.js';
+import { runFetchTool } from '../pipeline/fetch-tool.js';
+import { type ResponseFormat, renderMarkdown, suggestedQueriesFor } from '../pipeline/format.js';
 import {
   toResearchOptions,
   WEB_FETCH_DESCRIPTION,
+  WEB_FETCH_TOOL_NAME,
   WEB_RESEARCH_DESCRIPTION,
+  WEB_RESEARCH_TOOL_NAME,
   WEB_SEARCH_DESCRIPTION,
+  WEB_SEARCH_TOOL_NAME,
   type WebFetchInput,
   type WebResearchInput,
   type WebSearchInput,
@@ -53,13 +57,15 @@ async function ai(): Promise<AiModule> {
 export interface AiSdkToolOptions {
   /** What the model sees. Default: rendered markdown (compact). Set 'json' to send the structured result. */
   modelOutput?: 'markdown' | 'json';
+  /** Markdown shape sent to the model (default `concise`); the app still gets the full ResearchResult. */
+  responseFormat?: ResponseFormat;
   /** Approx token budget for the markdown sent to the model (default 3000). */
   maxOutputTokens?: number;
   /** Extra research options applied on every call (e.g. a fixed sessionId). */
   defaults?: Partial<Parameters<WebVector['research']>[1]>;
 }
 
-/** `web_research` as an AI SDK tool. */
+/** `webvector_research` as an AI SDK tool. */
 export async function webResearchTool(
   wv: WebVector,
   opts: AiSdkToolOptions = {},
@@ -74,7 +80,7 @@ export async function webResearchTool(
         input.query,
         toResearchOptions(input, {
           signal: abortSignal,
-          maxOutputTokens: opts.maxOutputTokens ?? 3000,
+          maxOutputTokens: opts.maxOutputTokens ?? input.max_tokens ?? 3000,
           ...opts.defaults,
         }),
       ),
@@ -83,14 +89,16 @@ export async function webResearchTool(
         ? { type: 'json' as const, value: stripForModel(output) as any }
         : {
             type: 'text' as const,
-            value:
-              output.markdown ??
-              renderMarkdown(output, { maxTokens: opts.maxOutputTokens ?? 3000 }),
+            value: renderMarkdown(output, {
+              maxTokens: opts.maxOutputTokens ?? 3000,
+              format: opts.responseFormat ?? 'concise',
+              suggestedQueries: suggestedQueriesFor(output),
+            }),
           },
   } as any) as Tool<WebResearchInput, ResearchResult>;
 }
 
-/** `web_fetch` as an AI SDK tool. */
+/** `webvector_fetch` as an AI SDK tool. */
 export async function webFetchTool(wv: WebVector): Promise<Tool<WebFetchInput, unknown>> {
   const { tool } = await ai();
   return tool({
@@ -102,19 +110,8 @@ export async function webFetchTool(wv: WebVector): Promise<Tool<WebFetchInput, u
           topK: input.top_k,
           signal: abortSignal,
         });
-      const doc = await wv.fetch(input.url, { signal: abortSignal });
-      const max = input.max_chars ?? 40_000;
-      return {
-        url: doc.url,
-        title: doc.title,
-        markdown:
-          doc.markdown.length > max
-            ? `${doc.markdown.slice(0, max)}\n\n…(truncated)`
-            : doc.markdown,
-        contentType: doc.contentType,
-        publishedAt: doc.publishedAt,
-        siteName: doc.siteName,
-      };
+      const out = await runFetchTool(wv, input, { signal: abortSignal });
+      return { ...out.structured, markdown: out.text };
     },
     toModelOutput: ({ output }: { output: any }) => ({
       type: 'text' as const,
@@ -123,7 +120,7 @@ export async function webFetchTool(wv: WebVector): Promise<Tool<WebFetchInput, u
   } as any) as Tool<WebFetchInput, unknown>;
 }
 
-/** `web_search` as an AI SDK tool. */
+/** `webvector_search` as an AI SDK tool. */
 export async function webSearchTool(wv: WebVector): Promise<Tool<WebSearchInput, unknown>> {
   const { tool } = await ai();
   return tool({
@@ -150,7 +147,11 @@ export async function webVectorTools(
     webFetchTool(wv),
     webSearchTool(wv),
   ]);
-  return { web_research: research, web_fetch: fetch, web_search: search };
+  return {
+    [WEB_RESEARCH_TOOL_NAME]: research,
+    [WEB_FETCH_TOOL_NAME]: fetch,
+    [WEB_SEARCH_TOOL_NAME]: search,
+  };
 }
 
 function stripForModel(r: ResearchResult) {

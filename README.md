@@ -73,7 +73,7 @@ npx -y webvector-cli doctor
 
 ## 2. Use it as an MCP server
 
-The MCP server exposes four tools — `web_research` (the main one), `web_fetch`, `web_search`, `webvector_status` — to any MCP client.
+The MCP server exposes four tools — `webvector_research` (the main one), `webvector_fetch`, `webvector_search`, `webvector_status` — to any MCP client. (The pre-0.2 names `web_research`/`web_fetch`/`web_search` collided with Anthropic's built-in server tools and Claude Code's WebSearch/WebFetch; pass `--legacy-tool-names` to keep them as aliases for one release.)
 
 **Claude Code**
 
@@ -105,7 +105,7 @@ That's the lexical tier. For on-device semantic search, install the model runtim
 
 **Over HTTP** (for agent frameworks): `npx -y webvector-mcp --http --port 3333` → `http://127.0.0.1:3333/mcp` (Streamable HTTP, localhost only). Add `--token <secret>` (or `WEBVECTOR_MCP_TOKEN`) to require `Authorization: Bearer <secret>`; binding to any other address needs `--host 0.0.0.0 --allow-remote --token …` and belongs behind TLS/your own auth. `GET /health` for liveness.
 
-Every `web_research` result comes back both as compact Markdown (for the model) and as `structuredContent` (for your app), with progress notifications during the run.
+Every `webvector_research` result comes back both as compact Markdown (for the model — `response_format: concise|detailed`, trimmed to `max_tokens` with an explicit "N omitted" footer) and as slim `structuredContent` (for your app; `--structured full|off`), with progress notifications during the run. See [`packages/mcp/README.md`](packages/mcp/README.md) for every flag and argument.
 
 ## 3. Use it as a library
 
@@ -136,14 +136,18 @@ const wv = new WebVector({
 
 const res = await wv.research('How does Node 24 handle AbortSignal.any?', {
   relatedQueries: ['AbortSignal.any example'],  // extra angles (also searched)
+  objective: 'whether composed signals leak',    // long-form intent: ranking only, never searched
+  category: 'docs',                             // news | research | github | pdf | docs
   freshness: 'year',                            // day | week | month | year
   domainsAllow: ['nodejs.org', 'developer.mozilla.org'],
   sessionId: 'conversation-42',                 // pages already read this session are reused
+  deadlineMs: 20_000,                           // partial results after 20 s (degraded: 'partial')
+  responseFormat: 'concise',                    // markdown shape; see output.* config
   onProgress: (p) => console.error(p.stage, p.message),
 });
 ```
 
-Other calls: `wv.search(query)` (results only), `wv.fetch(url)` (one page → Markdown), `wv.fetchAndRetrieve(url, query)` (one page → relevant passages), `wv.listSessions()`, `wv.clearSession(id)`.
+Other calls: `wv.search(query)` (results only), `wv.fetch(url, { selector?, excludeSelectors?, includeLinks? })` (one page → Markdown, optionally a CSS-selected subtree, plus `links[]`), `wv.fetchAndRetrieve(url, query)` (one page → relevant passages), `wv.listSessions()`, `wv.clearSession(id)`.
 
 **Give it to a model as a tool** — bindings for the popular SDKs are one import away:
 
@@ -155,6 +159,8 @@ await generateText({ model, tools: await webVectorTools(wv), stopWhen: isStepCou
 
 // Anthropic Messages API           // OpenAI Responses API            // LangChain.js
 import { anthropicTools, runAnthropicTool } from 'webvector/anthropic';
+//   runAnthropicTool(wv, name, input, { format: 'search_result' }) → search_result blocks (native citations)
+//   anthropicTools({ maxUses: 5, allowedDomains: ['docs.python.org'] }) + the same opts on the runner = guardrails
 import { openaiTools, runOpenAITool } from 'webvector/openai';
 import { langchainTools } from 'webvector/langchain';
 
@@ -256,12 +262,14 @@ interface ResearchResult {
   passages: Passage[];                     // ranked; each: text, url, title, score (0–1), cosine?, bm25?,
                                            //   rerankScore?, chunkIndex, startOffset, endOffset, publishedAt?,
                                            //   fetchedAt, matchedQueries, citation "[n] Title — url"
-  sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, failure?
+  sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, approxTokens, failure?
   failures: Failure[];                     // per-URL / per-stage problems with machine codes (never thrown)
   stats: { search, ingest, embed, retrieve, totalMs, warnings };   // timings + counts per stage
   markdown?: string;                       // the pre-rendered version above
   degraded?: 'search_only' | 'partial';    // e.g. every fetch failed → search snippets returned instead
+  degradedReason?: string;                 // why (deadline reached, embeddings unavailable, …)
 }
+// stats.output = { chars, approxTokens } of the rendered markdown
 ```
 
 ## 9. Errors and failures

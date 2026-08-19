@@ -26,10 +26,13 @@ import {
 import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
 import {
+  approxTokens,
   assessProviderContent,
   type CachedPage,
+  decodeBytes,
   documentFromProviderContent,
   ingestUrl,
+  parseResource,
 } from '../ingest/index.js';
 import type {
   Failure,
@@ -39,6 +42,8 @@ import type {
   ProgressEvent,
   ResearchOptions,
   ResearchResult,
+  SearchCapabilities,
+  SearchCategory,
   SearchOptions,
   SearchResult,
   SourceSummary,
@@ -50,7 +55,14 @@ import { sha256 } from '../util/hash.js';
 import { createLogger } from '../util/logger.js';
 import { canonicalizeUrl } from '../util/url.js';
 import { buildComponents, type Components } from './components.js';
-import { citationFor, renderMarkdown } from './format.js';
+import {
+  excludeFromHtml,
+  extractLinks,
+  type FetchedDocument,
+  type FetchOptions,
+  selectFromHtml,
+} from './fetch-options.js';
+import { citationFor, type MarkdownRenderOptions, renderMarkdown } from './format.js';
 import {
   type EmbedStats,
   failureFrom,
@@ -140,29 +152,64 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return c.search.search(query, { ...this.defaultSearchOptions(), ...opts });
   }
 
-  /** Fetch + parse one URL with the same guards as the pipeline. */
-  async fetch(
-    url: string,
-    opts: { signal?: AbortSignal; useCache?: boolean } = {},
-  ): Promise<ParsedDocument> {
+  /**
+   * Fetch + parse one URL with the same guards as the pipeline. With `selector` /
+   * `excludeSelectors` / `includeLinks` the raw HTML is fetched (page cache bypassed) and the DOM
+   * is filtered before conversion; `links` is filled when requested.
+   */
+  async fetch(url: string, opts: FetchOptions = {}): Promise<FetchedDocument> {
     const c = await this.ensure();
-    const outcome = await ingestUrl(url, {
-      fetcher: c.fetcher,
-      parsers: c.parsers,
-      cache: opts.useCache === false ? undefined : c.pageCache,
-      logger: this.logger,
-      signal: opts.signal,
-      fastPaths: this.config.ingestion.fastPaths,
-      archiveFallback: this.config.ingestion.archiveFallback,
-    });
-    if (!outcome.ok || !outcome.page) {
-      const f = outcome.failure as Failure;
-      throw new WebVectorError(f.message, {
-        code: f.code as WebVectorError['code'],
-        stage: 'ingest',
+    const wantsRaw = !!(opts.selector || opts.excludeSelectors?.length || opts.includeLinks);
+    if (!wantsRaw) {
+      const outcome = await ingestUrl(url, {
+        fetcher: c.fetcher,
+        parsers: c.parsers,
+        cache: opts.useCache === false ? undefined : c.pageCache,
+        logger: this.logger,
+        signal: opts.signal,
+        fastPaths: this.config.ingestion.fastPaths,
+        archiveFallback: this.config.ingestion.archiveFallback,
       });
+      if (!outcome.ok || !outcome.page) throw failureError(outcome.failure as Failure);
+      return outcome.page.doc;
     }
-    return outcome.page.doc;
+    // Raw path: fetch, then filter/convert the HTML ourselves.
+    const res = await c.fetcher.fetch(url, opts.signal);
+    const isHtml =
+      /^(text\/html|application\/xhtml\+xml)/.test(res.contentType) || res.contentType === '';
+    let html: string | undefined;
+    if (isHtml) html = decodeBytes(res.bytes, res.charset);
+    let doc: ParsedDocument | undefined;
+    if (html && opts.selector) {
+      doc =
+        selectFromHtml(html, res.finalUrl, opts.selector, {
+          excludeSelectors: opts.excludeSelectors,
+          contentType: res.contentType || 'text/html',
+        }) ?? undefined;
+      if (!doc)
+        this.logger.debug(`selector "${opts.selector}" matched nothing on ${url}; falling back`);
+    }
+    if (!doc) {
+      const filtered =
+        html && opts.excludeSelectors?.length
+          ? {
+              ...res,
+              bytes: new TextEncoder().encode(excludeFromHtml(html, opts.excludeSelectors)),
+              charset: 'utf-8',
+            }
+          : res;
+      const outcome = await parseResource(filtered, {
+        parsers: c.parsers,
+        cache: opts.excludeSelectors?.length ? undefined : c.pageCache,
+        logger: this.logger,
+      });
+      if (!outcome.ok || !outcome.page) throw failureError(outcome.failure as Failure);
+      doc = outcome.page.doc;
+    }
+    const out: FetchedDocument = { ...doc, url: res.url };
+    if (opts.includeLinks && html) out.links = extractLinks(html, res.finalUrl, opts.maxLinks);
+    else if (opts.includeLinks) out.links = [];
+    return out;
   }
 
   /** Fetch one URL and return only the passages relevant to `query`. */
@@ -220,10 +267,26 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         warnings,
       },
     };
-    result.markdown = renderMarkdown(result, {
-      maxPassageChars: this.config.output.maxPassageChars,
-    });
+    result.markdown = renderMarkdown(result, this.renderOptions());
     return result;
+  }
+
+  /** Resolved provider capabilities (builds providers on first call). */
+  async capabilities(): Promise<{
+    search: { id: string } & SearchCapabilities;
+    embeddings?: { id: string; model: string; dimensions: number };
+    reranker?: string;
+    tier: 'lexical' | 'semantic';
+  }> {
+    const c = await this.ensure();
+    return {
+      search: { id: c.search.id, ...c.search.capabilities() },
+      ...(c.embedder
+        ? { embeddings: { id: c.embedder.id, model: c.embedder.model, dimensions: c.dimensions } }
+        : {}),
+      ...(c.reranker ? { reranker: c.reranker.id } : {}),
+      tier: c.embedder ? 'semantic' : 'lexical',
+    };
   }
 
   /** Sessions (store.mode: 'session' or an explicit sessionId). */
@@ -271,14 +334,17 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     progress({ stage: 'search', done: 0, total: 1, message: `Searching: ${query}` });
     this.emit('search:start', { queries: [query, ...related], provider: c.search.id });
     const searched = await runSearchStage(c, {
-      query,
-      related,
+      query: categoryQuery(query, opts.category),
+      related: related.map((q) => categoryQuery(q, opts.category)),
       maxPages,
       failures,
       options: {
         ...this.defaultSearchOptions(),
         count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
-        freshness: opts.freshness ?? cfg.search.freshness,
+        freshness:
+          opts.freshness ?? cfg.search.freshness ?? (opts.category === 'news' ? 'week' : undefined),
+        ...(opts.country ? { country: opts.country } : {}),
+        ...(opts.language ? { language: opts.language } : {}),
         domainsAllow: opts.domainsAllow,
         domainsBlock: opts.domainsBlock,
         signal,
@@ -293,7 +359,10 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
 
     // Retrieval-only query expansion (agent-supplied related queries were also searched above).
     let expanded: string[] = [];
-    if (cfg.retrieval.queryExpansion && cfg.retrieval.maxExpandedQueries > 0) {
+    if (
+      (opts.queryExpansion ?? cfg.retrieval.queryExpansion) &&
+      cfg.retrieval.maxExpandedQueries > 0
+    ) {
       try {
         expanded = await c.expander.expand(query, {
           searchResults: results,
@@ -359,6 +428,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           contentType: page.doc.contentType,
           fetchedAt: page.fetchedAt,
           bytes: page.bytes,
+          approxTokens: approxTokens(page.doc.markdown),
           title: page.doc.title || r.title,
           ms,
         });
@@ -408,15 +478,21 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         if (isFatalIngestError(e)) throw e;
       } finally {
         done++;
+        const failedSoFar = done - okPages;
         progress({
           stage: 'ingest',
           done,
           total: targets.length,
-          message: `Fetched ${done}/${targets.length}`,
+          failed: failedSoFar,
+          message: `Fetched ${done}/${targets.length}${failedSoFar ? ` (${failedSoFar} failed)` : ''}`,
         });
       }
     };
 
+    const deadlineMs = Math.min(
+      opts.deadlineMs ?? cfg.ingestion.totalDeadlineMs,
+      cfg.ingestion.totalDeadlineMs,
+    );
     const settled = await settleWithDeadline(
       targets.map((r) =>
         ingestOne(r).then(
@@ -424,20 +500,22 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           (e) => e as unknown,
         ),
       ),
-      cfg.ingestion.totalDeadlineMs,
+      deadlineMs,
       () => 'deadline' as const,
       () => runAbort.abort(new Error('run deadline exceeded')), // stop orphaned work
     );
     let fatal: WebVectorError | undefined;
+    let deadlineHits = 0;
     settled.forEach((outcome, i) => {
       const url = targets[i]?.url ?? '';
       if (outcome === 'deadline') {
+        deadlineHits++;
         const s = sources.get(canonicalizeUrl(url));
         if (s && s.status === 'failed' && !s.failure) {
           const f: Failure = {
             url,
             code: 'FETCH_TIMEOUT',
-            message: `Deadline of ${cfg.ingestion.totalDeadlineMs}ms exceeded`,
+            message: `Deadline of ${deadlineMs}ms exceeded`,
             stage: 'ingest',
           };
           s.failure = f;
@@ -464,12 +542,21 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     let candidates = 0;
     let reranked = false;
     let degraded: ResearchResult['degraded'];
+    let degradedReason: string | undefined;
+    if (deadlineHits > 0) {
+      degraded = 'partial';
+      degradedReason = `deadline of ${deadlineMs}ms reached: ${deadlineHits} of ${targets.length} pages not fetched`;
+      warnings.push(degradedReason);
+    }
+    const objectiveQuery = opts.objective ? objectiveTerms(opts.objective) : '';
     const hasChunks =
       session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
     if (hasChunks) {
       const r = await runRetrieveStage(c, cfg.retrieval, {
         session,
-        queries,
+        // The objective's top terms ride along as an extra low-weight list (expansionWeight);
+        // it is not searched and not reported in result.queries.
+        queries: objectiveQuery ? [...queries, objectiveQuery] : queries,
         relatedQueries: related,
         searchResults: results,
         topK,
@@ -481,7 +568,10 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       passages = r.passages;
       candidates = r.candidates;
       reranked = r.reranked;
-      if (r.lexicalOnly && c.embedder) degraded = 'partial'; // configured lexical mode is not degraded
+      if (r.lexicalOnly && c.embedder) {
+        degraded = 'partial'; // configured lexical mode is not degraded
+        degradedReason ??= 'embeddings unavailable; lexical retrieval only';
+      }
     }
     if (
       passages.length === 0 &&
@@ -539,13 +629,19 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         warnings,
       },
       degraded,
+      degradedReason,
       sessionId: opts.sessionId,
     };
     if (opts.markdown ?? cfg.output.markdown) {
       result.markdown = renderMarkdown(result, {
-        maxPassageChars: cfg.output.maxPassageChars,
+        ...this.renderOptions(),
         maxTokens: opts.maxOutputTokens,
+        format: opts.responseFormat ?? cfg.output.format,
       });
+      result.stats.output = {
+        chars: result.markdown.length,
+        approxTokens: approxTokens(result.markdown),
+      };
     }
     stageDone('format', Date.now() - t0 - result.stats.totalMs);
     return result;
@@ -626,6 +722,17 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     };
   }
 
+  /** Render options derived from `output.*` config (format, link policy, deep links). */
+  renderOptions(): MarkdownRenderOptions {
+    const o = this.config.output;
+    return {
+      maxPassageChars: o.maxPassageChars,
+      format: o.format,
+      links: o.links,
+      deepLinks: o.deepLinks,
+    };
+  }
+
   private chunkingOptions() {
     const i = this.config.ingestion;
     return {
@@ -646,6 +753,10 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   }
 }
 
+function failureError(f: Failure): WebVectorError {
+  return new WebVectorError(f.message, { code: f.code as WebVectorError['code'], stage: 'ingest' });
+}
+
 /** Degraded output when nothing could be fetched: the search snippets themselves. */
 function snippetPassages(results: SearchResult[], query: string): Passage[] {
   return results.map((r, i) => ({
@@ -663,6 +774,51 @@ function snippetPassages(results: SearchResult[], query: string): Passage[] {
     citation: citationFor(i + 1, r.title, r.url),
     fromSnippet: true,
   }));
+}
+
+const CATEGORY_OPERATORS: Record<SearchCategory, string> = {
+  pdf: 'filetype:pdf',
+  github: 'site:github.com',
+  research: '(arxiv OR doi OR paper)',
+  docs: 'documentation',
+  news: 'news',
+};
+
+/** Append the search-operator form of a category hint (providers without a native feature). */
+export function categoryQuery(query: string, category?: SearchCategory): string {
+  if (!category) return query;
+  const op = CATEGORY_OPERATORS[category];
+  return op && !query.toLowerCase().includes(op.toLowerCase()) ? `${query} ${op}` : query;
+}
+
+const STOP = new Set(
+  'a an the and or but of to in on for with by from as at is are was were be been being it its this that these those i we you they he she them our your their my me us do does did doing have has had having not no so if then than about into over under between while which who whom whose what when where why how would could should can may might will shall just also very more most much many some any each other such only own same too s t don now want need find know tell'.split(
+    ' ',
+  ),
+);
+
+/**
+ * Reduce a long-form objective to its most distinctive terms (max `n`), keeping identifiers,
+ * versions and numbers, so it can join retrieval as one bounded query that cannot dominate BM25.
+ */
+export function objectiveTerms(objective: string, n = 12): string {
+  const counts = new Map<string, number>();
+  const order: string[] = [];
+  for (const raw of objective
+    .slice(0, 2000)
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}._\-/:]+/u)) {
+    const w = raw.replace(/^[._\-/:]+|[._\-/:]+$/g, '');
+    if (w.length < 2 || STOP.has(w)) continue;
+    if (!counts.has(w)) order.push(w);
+    counts.set(w, (counts.get(w) ?? 0) + 1);
+  }
+  const score = (w: string) =>
+    (counts.get(w) ?? 0) + (/\d|[._\-/:]/.test(w) ? 1.5 : 0) + Math.min(w.length, 12) / 24;
+  return order
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, n)
+    .join(' ');
 }
 
 function dedupeStrings(arr: string[]): string[] {

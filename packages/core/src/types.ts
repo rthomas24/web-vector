@@ -301,6 +301,8 @@ export interface SourceSummary {
   searchRank: number;
   bytes?: number;
   ms?: number;
+  /** Approximate tokens of the page's Markdown (chars/4, CJK-aware) — what a full fetch would cost. */
+  approxTokens?: number;
   failure?: Failure;
 }
 
@@ -332,6 +334,8 @@ export interface ResearchStats {
   retrieve: { candidates: number; queries: number; reranked: boolean; ms: number };
   totalMs: number;
   warnings: string[];
+  /** Size of `result.markdown` when rendered (chars and approximate tokens). */
+  output?: { chars: number; approxTokens: number };
 }
 
 export interface ResearchResult {
@@ -343,6 +347,8 @@ export interface ResearchResult {
   stats: ResearchStats;
   markdown?: string;
   degraded?: 'search_only' | 'partial';
+  /** Why the result is degraded (e.g. the deadline was reached before every page was fetched). */
+  degradedReason?: string;
   sessionId?: string;
 }
 
@@ -351,7 +357,12 @@ export interface ProgressEvent {
   done: number;
   total: number;
   message: string;
+  /** Ingest stage: pages that failed so far. */
+  failed?: number;
 }
+
+/** Search-intent hint mapped to provider features where they exist, else to query operators. */
+export type SearchCategory = 'news' | 'research' | 'github' | 'pdf' | 'docs';
 
 export interface ResearchOptions {
   relatedQueries?: string[];
@@ -371,6 +382,25 @@ export interface ResearchOptions {
   maxOutputTokens?: number;
   /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
   explain?: boolean;
+  /** Markdown shape for `result.markdown` (default `output.format`): `concise` or `detailed`. */
+  responseFormat?: 'concise' | 'detailed';
+  /** Override `retrieval.queryExpansion` for this call. */
+  queryExpansion?: boolean;
+  /**
+   * Wall-clock budget for the fetch stage (ms, capped by `ingestion.totalDeadlineMs`). Partial
+   * results are always returned (`degraded: 'partial'` + `degradedReason`).
+   */
+  deadlineMs?: number;
+  /**
+   * Long-form intent (≤ 2000 chars) used for ranking only — never sent to the search engine. It is
+   * reduced to its most distinctive terms and fused as an extra low-weight query list.
+   */
+  objective?: string;
+  /** Search-intent hint: provider feature where available, else query operators (`filetype:pdf`, `site:github.com`, …). */
+  category?: SearchCategory;
+  /** Search locale passthrough (ISO country / BCP-47 language) — overrides `search.country/language`. */
+  country?: string;
+  language?: string;
 }
 
 // ─── Logging ────────────────────────────────────────────────────────────────

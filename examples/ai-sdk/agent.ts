@@ -16,7 +16,7 @@ const wv = new WebVector({
 const { text, steps } = await generateText({
   model,
   instructions:
-    'You are a research assistant. Use web_research for anything factual and cite sources as [n].',
+    'You are a research assistant. Use webvector_research for anything factual and cite sources as [n].',
   tools: await webVectorTools(wv),
   stopWhen: isStepCount(6),
   prompt: 'What changed in the MCP specification revision 2026-07-28 regarding sessions?',

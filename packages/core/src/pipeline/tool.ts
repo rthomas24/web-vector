@@ -1,18 +1,72 @@
 import { z } from 'zod';
 import type { ResearchOptions } from '../types.js';
 
-export const WEB_RESEARCH_TOOL_NAME = 'web_research';
+/**
+ * Canonical (namespaced) tool names. `webvector_*` avoids colliding with Anthropic's built-in
+ * `web_search`/`web_fetch` server tools and Claude Code's WebSearch/WebFetch, and lets permission
+ * rules, hooks and tool-search target them unambiguously.
+ */
+export const WEB_RESEARCH_TOOL_NAME = 'webvector_research';
 
-export const WEB_RESEARCH_DESCRIPTION =
-  'Research a question on the live web. Runs a web search, reads the FULL content of the top pages (HTML/PDF), embeds them, and returns only the passages most relevant to the query, each with its source URL, title and relevance score. Prefer this over plain web search when you need facts, quotes, numbers, code, or up-to-date details from actual page content. Returns cited passages (not whole pages). Pass related_queries to widen coverage and session_id to reuse pages already read in this conversation.';
+/**
+ * Tool descriptions follow the "Best for / Not for / Returns / Common mistakes / Example" pattern
+ * with the key sentence first, and each stays under 2 KB (Claude Code truncates there). They are
+ * static: no tier/version text (that lives in the server instructions and webvector_status), so
+ * tools/list is deterministic and prompt-cache friendly. The untrusted-content notice is in the
+ * results themselves, not here.
+ */
+export const WEB_RESEARCH_DESCRIPTION = [
+  'Research a question on the live web: one call runs a search, reads the FULL content of the top pages (HTML/PDF), and returns only the passages that answer the query, each cited as [n] Title — url.',
+  'Best for: facts, quotes, numbers, code, API/CLI details, comparisons, "what changed in", anything where a snippet is not enough or knowledge may be stale.',
+  'Not for: reading one known URL (use webvector_fetch); just listing result links (use webvector_search); questions answerable without the web.',
+  'Returns: ranked passages ([n] Title — url + verbatim text), a Sources list, suggested follow-up queries; trimmed to max_tokens with an explicit "N omitted" footer. Zero passages is not an error — the result says what to try next.',
+  'Common mistakes: long conversational queries (use 3–8 specific keywords incl. names/versions/years); calling repeatedly with tiny variations instead of one call with 2–3 related_queries; passing a URL as the query; hand-tuning top_k/max_pages when depth: "thorough" does it in one word.',
+  'Example: {"query": "Node 24 AbortSignal.any behaviour", "related_queries": ["AbortSignal.any example", "AbortSignal.any memory leak fix"], "depth": "balanced"}.',
+].join(' ');
 
-export const WEB_FETCH_TOOL_NAME = 'web_fetch';
-export const WEB_FETCH_DESCRIPTION =
-  'Fetch a single URL and return its main content as Markdown (HTML, PDF and text supported). Use when you already know the exact page you need — typically a URL the user gave you or one returned by web_search/web_research. Optionally pass a query to return only the most relevant passages instead of the whole page.';
+export const WEB_FETCH_TOOL_NAME = 'webvector_fetch';
+export const WEB_FETCH_DESCRIPTION = [
+  'Fetch one URL and return its main content as clean Markdown (HTML, PDF, plain text), or — with query — only the passages of that page relevant to the query.',
+  'Best for: a URL the user gave you, a Source from webvector_research/webvector_search you want in full, docs/changelogs/README pages, PDFs.',
+  'Not for: discovering pages (use webvector_search) or answering open questions (use webvector_research); pages that need login or JavaScript rendering.',
+  'Returns: "# Title", the URL, then Markdown; long pages are cut at max_length (default 20000 chars) on a paragraph boundary with "Content truncated at char A of B — call again with start_index=A"; include_links appends a deduped link list; selector/exclude_selectors keep or drop parts of the DOM (CSS).',
+  'Common mistakes: fetching every search result instead of asking webvector_research once; forgetting start_index for the rest of a long page; passing max_length far above what you will read.',
+  'Example: {"url": "https://nodejs.org/api/globals.html", "query": "AbortSignal.any"} or {"url": "https://example.com/spec", "start_index": 20000}.',
+].join(' ');
 
-export const WEB_SEARCH_TOOL_NAME = 'web_search';
-export const WEB_SEARCH_DESCRIPTION =
-  'Run a web search and return result URLs, titles and snippets (no page fetching). Cheaper than web_research; use it to discover pages or when snippets are enough.';
+export const WEB_SEARCH_TOOL_NAME = 'webvector_search';
+export const WEB_SEARCH_DESCRIPTION = [
+  'Run a web search and return result URLs, titles and snippets only — no page content is fetched.',
+  'Best for: checking what exists (which sites/pages cover a topic), finding an official URL to pass to webvector_fetch, quick freshness checks, or inspecting the SERP when webvector_research returned no passages.',
+  'Not for: answering questions from content — snippets are ~150 characters and often wrong; use webvector_research for that.',
+  'Returns: numbered results "rank. Title / url / snippet" plus a one-line hint to read a result with webvector_fetch.',
+  'Common mistakes: quoting snippets as facts; searching and then fetching each result by hand instead of one webvector_research call; domain filters with schemes or paths (use bare domains like "docs.python.org").',
+  'Example: {"query": "MCP specification 2026-07-28 changelog", "count": 5, "freshness": "year"}.',
+].join(' ');
+
+export const WEBVECTOR_STATUS_TOOL_NAME = 'webvector_status';
+export const WEBVECTOR_STATUS_DESCRIPTION =
+  'Show the resolved WebVector configuration (secrets redacted), the active search/embedding providers and tier (lexical or semantic), and session counts. Best for debugging "why did research return nothing" or checking which providers/keys are active. Not for research. Takes no arguments.';
+
+/** Claude Code truncates tool descriptions at 2 KB; keep every description under this. */
+export const MAX_DESCRIPTION_BYTES = 2048;
+
+export type WebVectorToolName = 'webvector_research' | 'webvector_fetch' | 'webvector_search';
+/** Pre-0.2 names, still accepted by the runners and exposable as MCP aliases (`--legacy-tool-names`). */
+export const LEGACY_TOOL_NAMES: Record<string, WebVectorToolName> = {
+  web_research: WEB_RESEARCH_TOOL_NAME,
+  web_fetch: WEB_FETCH_TOOL_NAME,
+  web_search: WEB_SEARCH_TOOL_NAME,
+};
+export const TOOL_NAMES: readonly WebVectorToolName[] = [
+  WEB_RESEARCH_TOOL_NAME,
+  WEB_FETCH_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+];
+/** Map a legacy or canonical tool name to its canonical form (unknown names pass through). */
+export function canonicalToolName(name: string): string {
+  return LEGACY_TOOL_NAMES[name] ?? name;
+}
 
 export const webResearchInputSchema = z.object({
   query: z
@@ -58,7 +112,52 @@ export const webResearchInputSchema = z.object({
     .min(1)
     .max(100)
     .optional()
-    .describe('Reuse pages already ingested in this conversation; pass the same id across calls.'),
+    .describe(
+      'Pages already read are reused automatically; pass a session_id only to isolate parallel investigations (same id across their calls).',
+    ),
+  response_format: z
+    .enum(['concise', 'detailed'])
+    .optional()
+    .describe(
+      'concise (default): passages + sources only. detailed: adds per-passage score/date, failed fetches and timings.',
+    ),
+  max_tokens: z
+    .number()
+    .int()
+    .min(500)
+    .max(20_000)
+    .optional()
+    .describe(
+      'Approximate token budget for the returned text (default 4000). Passages that do not fit are omitted with an explicit footer naming their indices.',
+    ),
+  depth: z
+    .enum(['fast', 'balanced', 'thorough'])
+    .optional()
+    .describe(
+      "Preset: fast = 4 pages, 6 passages, no query expansion, 15 s; balanced (default) = server defaults; thorough = 16 pages, 16 passages, expansion + rerank if available, 60 s. Explicit top_k/max_pages/deadline_ms override the preset; the server's configured limits are never exceeded.",
+    ),
+  objective: z
+    .string()
+    .max(2000)
+    .optional()
+    .describe(
+      'Optional long-form intent (what you are really trying to find out, ≤ 2000 chars). Used only for ranking passages — never sent to the search engine. Keep query short and specific; put nuance here.',
+    ),
+  category: z
+    .enum(['news', 'research', 'github', 'pdf', 'docs'])
+    .optional()
+    .describe(
+      'Search-intent hint: news (recent coverage), research (papers/arXiv/DOI), github (repos/issues), pdf (documents), docs (official documentation). Mapped to provider features or query operators.',
+    ),
+  deadline_ms: z
+    .number()
+    .int()
+    .min(2000)
+    .max(120_000)
+    .optional()
+    .describe(
+      'Wall-clock budget for fetching pages (ms, capped by the server). Partial results are always returned (degraded: "partial" with the reason).',
+    ),
 });
 export type WebResearchInput = z.infer<typeof webResearchInputSchema>;
 
@@ -76,13 +175,53 @@ export const webFetchInputSchema = z.object({
     .max(50)
     .optional()
     .describe('Passages to return when query is given (default 8).'),
+  max_length: z
+    .number()
+    .int()
+    .min(500)
+    .max(200_000)
+    .optional()
+    .describe(
+      'Max characters of Markdown to return (default 20000). Longer pages are cut on a paragraph boundary; the result tells you the start_index to continue from.',
+    ),
+  start_index: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      'Character offset to start from (default 0). Use the value from a truncated result to continue reading.',
+    ),
+  /** @deprecated alias of max_length (pre-0.2). */
   max_chars: z
     .number()
     .int()
     .min(500)
     .max(200_000)
     .optional()
-    .describe('Truncate the returned Markdown to this many characters (default 40000).'),
+    .describe('Deprecated alias of max_length.'),
+  include_links: z
+    .boolean()
+    .optional()
+    .describe(
+      "Append the page's links (deduped, same-host first, max 150) — a navigation map for the next call.",
+    ),
+  selector: z
+    .string()
+    .max(300)
+    .optional()
+    .describe(
+      'CSS selector: convert only the matching element(s) instead of the auto-detected main content (e.g. "main article", "#changelog").',
+    ),
+  exclude_selectors: z
+    .array(z.string().max(300))
+    .max(20)
+    .optional()
+    .describe('CSS selectors to remove before extraction (cookie banners, nav, comments).'),
+  response_format: z
+    .enum(['concise', 'detailed'])
+    .optional()
+    .describe('Shape of the passages output when query is given (default concise).'),
 });
 export type WebFetchInput = z.infer<typeof webFetchInputSchema>;
 
@@ -140,6 +279,7 @@ export const webResearchOutputSchema = z.object({
       searchRank: z.number().int(),
       bytes: z.number().optional(),
       ms: z.number().optional(),
+      approxTokens: z.number().optional(),
       failure: failureSchema.optional(),
     }),
   ),
@@ -184,26 +324,119 @@ export const webResearchOutputSchema = z.object({
     }),
     totalMs: z.number(),
     warnings: z.array(z.string()),
+    output: z.object({ chars: z.number(), approxTokens: z.number() }).optional(),
   }),
   markdown: z.string().optional(),
   degraded: z.enum(['search_only', 'partial']).optional(),
   sessionId: z.string().optional(),
 });
 
+/**
+ * Slim structured output (the MCP server's default `--structured slim`): what a model or app needs
+ * to cite and follow up, without stats/offsets. Some clients serialise structuredContent into the
+ * prompt next to the text content, so it must stay small.
+ */
+export const webResearchSlimOutputSchema = z.object({
+  query: z.string(),
+  passages: z.array(
+    z.object({
+      index: z.number().int(),
+      url: z.string(),
+      title: z.string(),
+      text: z.string(),
+      score: z.number(),
+      publishedAt: z.string().optional(),
+    }),
+  ),
+  sources: z.array(
+    z.object({
+      url: z.string(),
+      title: z.string(),
+      status: z.enum(['ok', 'failed', 'skipped', 'cached']),
+      chunks: z.number().int(),
+    }),
+  ),
+  degraded: z.enum(['search_only', 'partial']).optional(),
+  session_id: z.string().optional(),
+  suggested_queries: z.array(z.string()).optional(),
+  /** Passage indices dropped to fit max_tokens. */
+  omitted: z.array(z.number().int()).optional(),
+  /** What to try next when the result is empty or degraded. */
+  hint: z.string().optional(),
+  retryable: z.boolean().optional(),
+});
+export type WebResearchSlimOutput = z.infer<typeof webResearchSlimOutputSchema>;
+
+/** Project a ResearchResult onto the slim structured shape. */
+export function toSlimOutput(
+  r: import('../types.js').ResearchResult,
+  extra: Partial<
+    Pick<
+      WebResearchSlimOutput,
+      'session_id' | 'suggested_queries' | 'omitted' | 'hint' | 'retryable'
+    >
+  > = {},
+): WebResearchSlimOutput {
+  return {
+    query: r.query,
+    passages: r.passages.map((p) => ({
+      index: p.index,
+      url: p.url,
+      title: p.title,
+      text: p.text,
+      score: p.score,
+      ...(p.publishedAt ? { publishedAt: p.publishedAt } : {}),
+    })),
+    sources: r.sources.map((s) => ({
+      url: s.url,
+      title: s.title,
+      status: s.status,
+      chunks: s.chunks,
+    })),
+    ...(r.degraded ? { degraded: r.degraded } : {}),
+    ...(extra.session_id ? { session_id: extra.session_id } : {}),
+    ...(extra.suggested_queries?.length ? { suggested_queries: extra.suggested_queries } : {}),
+    ...(extra.omitted?.length ? { omitted: extra.omitted } : {}),
+    ...(extra.hint ? { hint: extra.hint } : {}),
+    ...(extra.retryable !== undefined ? { retryable: extra.retryable } : {}),
+  };
+}
+
+/** `depth` presets (numeric args override; the operator's configured limits still cap everything). */
+export const DEPTH_PRESETS: Record<
+  'fast' | 'balanced' | 'thorough',
+  Pick<ResearchOptions, 'maxPages' | 'topK' | 'queryExpansion' | 'rerank' | 'deadlineMs'>
+> = {
+  fast: { maxPages: 4, topK: 6, queryExpansion: false, deadlineMs: 15_000 },
+  balanced: {},
+  thorough: { maxPages: 16, topK: 16, queryExpansion: true, rerank: true, deadlineMs: 60_000 },
+};
+
 /** Convert tool input (snake_case) to ResearchOptions. */
 export function toResearchOptions(
   input: WebResearchInput,
   extra: Partial<ResearchOptions> = {},
 ): ResearchOptions {
+  const preset = DEPTH_PRESETS[input.depth ?? 'balanced'];
+  const defined = <T extends object>(o: T) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as Partial<T>;
   return {
-    relatedQueries: input.related_queries,
-    topK: input.top_k,
-    maxPages: input.max_pages,
-    freshness: input.freshness,
-    domainsAllow: input.domains_allow,
-    domainsBlock: input.domains_block,
-    sessionId: input.session_id,
-    ...extra,
+    ...preset,
+    ...defined({
+      relatedQueries: input.related_queries,
+      topK: input.top_k,
+      maxPages: input.max_pages,
+      freshness: input.freshness,
+      domainsAllow: input.domains_allow,
+      domainsBlock: input.domains_block,
+      sessionId: input.session_id,
+      responseFormat: input.response_format,
+      maxOutputTokens: input.max_tokens,
+      objective: input.objective,
+      category: input.category,
+      deadlineMs: input.deadline_ms,
+    }),
+    ...defined(extra),
   };
 }
 

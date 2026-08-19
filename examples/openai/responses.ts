@@ -5,7 +5,7 @@ import { openaiTools, runOpenAITool } from 'webvector/openai';
 
 const client = new OpenAI();
 const wv = new WebVector({ embeddings: { provider: 'openai' } });
-const tools = openaiTools({ include: ['web_research'] }) as any;
+const tools = openaiTools({ include: ['webvector_research'] }) as any;
 let input: any[] = [
   { role: 'user', content: 'What is Brave Search API pricing in 2026? Cite sources.' },
 ];

@@ -50,8 +50,46 @@ export {
   requireApiKey,
   WebVectorError,
 } from './errors.js';
-export type { MarkdownRenderOptions } from './pipeline/format.js';
-export { citationFor, renderMarkdown, renderPassage } from './pipeline/format.js';
+export type {
+  FetchedDocument,
+  FetchOptions,
+  PageLink,
+  SliceResult,
+} from './pipeline/fetch-options.js';
+export {
+  excludeFromHtml,
+  extractLinks,
+  selectFromHtml,
+  slicePage,
+} from './pipeline/fetch-options.js';
+export type { FetchToolOutput, FetchToolStructured } from './pipeline/fetch-tool.js';
+export {
+  continuationSentence,
+  DEFAULT_FETCH_MAX_LENGTH,
+  runFetchTool,
+} from './pipeline/fetch-tool.js';
+export type {
+  LinkMode,
+  MarkdownRenderOptions,
+  RenderedMarkdown,
+  ResponseFormat,
+} from './pipeline/format.js';
+export {
+  citationFor,
+  renderMarkdown,
+  renderPassage,
+  renderResearch,
+  suggestedQueriesFor,
+  textFragmentUrl,
+  transformLinks,
+} from './pipeline/format.js';
+export type { ToolGuardOptions, UserLocation } from './pipeline/guard.js';
+export {
+  DOMAIN_NOT_ALLOWED,
+  MAX_USES_EXCEEDED,
+  parseUserLocation,
+  ToolGuard,
+} from './pipeline/guard.js';
 export type { Session } from './pipeline/session.js';
 export { ephemeralSession, SessionRegistry } from './pipeline/session.js';
 export type {
@@ -59,26 +97,42 @@ export type {
   ToolDefinition,
   WebFetchInput,
   WebResearchInput,
+  WebResearchSlimOutput,
   WebSearchInput,
+  WebVectorToolName,
 } from './pipeline/tool.js';
 export {
+  canonicalToolName,
+  DEPTH_PRESETS,
+  LEGACY_TOOL_NAMES,
+  MAX_DESCRIPTION_BYTES,
+  TOOL_NAMES,
   toResearchOptions,
+  toSlimOutput,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_TOOL_NAME,
   WEB_RESEARCH_DESCRIPTION,
   WEB_RESEARCH_TOOL_NAME,
   WEB_SEARCH_DESCRIPTION,
   WEB_SEARCH_TOOL_NAME,
+  WEBVECTOR_STATUS_DESCRIPTION,
+  WEBVECTOR_STATUS_TOOL_NAME,
   webFetchInputSchema,
   webFetchToolDefinition,
   webResearchInputSchema,
   webResearchOutputSchema,
+  webResearchSlimOutputSchema,
   webResearchToolDefinition,
   webSearchInputSchema,
   webSearchToolDefinition,
 } from './pipeline/tool.js';
 export type { WebVectorInitOptions } from './pipeline/webvector.js';
-export { mergeSearchResults, WebVector } from './pipeline/webvector.js';
+export {
+  categoryQuery,
+  mergeSearchResults,
+  objectiveTerms,
+  WebVector,
+} from './pipeline/webvector.js';
 export {
   createReranker,
   customReranker,

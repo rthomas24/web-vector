@@ -20,13 +20,15 @@
  * ```
  */
 import {
+  canonicalToolName,
   type JsonSchema,
+  TOOL_NAMES,
   webFetchToolDefinition,
   webResearchToolDefinition,
   webSearchToolDefinition,
 } from '../pipeline/tool.js';
 import type { WebVector } from '../pipeline/webvector.js';
-import { runTool, type ToolRunResult } from './anthropic.js';
+import { type RunToolOptions, runTool, type ToolInclude, type ToolRunResult } from './anthropic.js';
 
 export interface OpenAIResponsesTool {
   type: 'function';
@@ -42,16 +44,16 @@ export interface OpenAIChatTool {
 
 /** Responses API tool definitions (`strict: true` schemas by default). */
 export function openaiTools(
-  opts: { include?: ('web_research' | 'web_fetch' | 'web_search')[]; strict?: boolean } = {},
+  opts: { include?: ToolInclude[]; strict?: boolean } = {},
 ): OpenAIResponsesTool[] {
-  const include = opts.include ?? ['web_research', 'web_fetch', 'web_search'];
+  const include = (opts.include ?? TOOL_NAMES).map(canonicalToolName);
   const strict = opts.strict ?? true;
   return [
     webResearchToolDefinition({ strict }),
     webFetchToolDefinition({ strict }),
     webSearchToolDefinition({ strict }),
   ]
-    .filter((d) => include.includes(d.name as any))
+    .filter((d) => include.includes(d.name))
     .map((d) => ({
       type: 'function' as const,
       name: d.name,
@@ -63,7 +65,7 @@ export function openaiTools(
 
 /** Chat Completions tool definitions. */
 export function openaiChatTools(
-  opts: { include?: ('web_research' | 'web_fetch' | 'web_search')[]; strict?: boolean } = {},
+  opts: { include?: ToolInclude[]; strict?: boolean } = {},
 ): OpenAIChatTool[] {
   return openaiTools(opts).map((t) => ({
     type: 'function' as const,
@@ -81,7 +83,7 @@ export async function runOpenAITool(
   wv: WebVector,
   name: string,
   args: string | Record<string, unknown>,
-  opts: { signal?: AbortSignal; maxOutputTokens?: number } = {},
+  opts: RunToolOptions = {},
 ): Promise<ToolRunResult> {
   let input: Record<string, unknown>;
   try {
