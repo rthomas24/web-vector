@@ -3,9 +3,12 @@
 # (npmjs.com → Access Tokens → Generate → "Automation"). Until then this workflow does nothing harmful:
 # it opens/updates a "Version Packages" PR and only publishes on that PR's merge.
 name: Release
+# Manual for now. To automate on every push to main:
+#   1. npmjs.com → Access Tokens → Generate → "Automation"; add it as repo secret NPM_TOKEN
+#   2. GitHub repo → Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"
+#   3. change `on:` below to `push: { branches: [main] }`
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: write
   pull-requests: write
