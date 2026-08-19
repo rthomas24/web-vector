@@ -1,5 +1,5 @@
 import { WebVectorError } from '../errors.js';
-import type { Logger } from '../types.js';
+import type { ContentSignal, Logger } from '../types.js';
 import {
   createLimiter,
   KeyedQueue,
@@ -40,6 +40,12 @@ export interface FetcherOptions {
    * (which still applies to PDFs). Default 2 MiB — a real article never needs more; SSR bundles do.
    */
   maxHtmlBytes?: number;
+  /**
+   * Content Signals (contentsignals.org): `respect` (default) refuses pages whose robots.txt group
+   * or `content-signal` header says `ai-input=no` (FETCH_BLOCKED_CONTENT_SIGNAL) and records the
+   * signal otherwise; `record` only records it on the resource; `ignore` does neither.
+   */
+  contentSignals?: 'ignore' | 'record' | 'respect';
 }
 
 export interface FetchedResource {
@@ -52,6 +58,8 @@ export interface FetchedResource {
   ms: number;
   redirects: number;
   headers: Headers;
+  /** Content-usage signal (header wins over robots.txt); absent when none was declared or `contentSignals: 'ignore'`. */
+  contentSignal?: ContentSignal;
 }
 
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
@@ -118,8 +126,9 @@ export class Fetcher {
       allowPrivateNetworks: this.opts.allowPrivateNetworks,
       resolve: this.opts.resolve,
     });
+    let robotsSignal: ContentSignal | undefined;
     if (this.robots) {
-      const { allowed, crawlDelayMs } = await this.robots.check(url, signal);
+      const { allowed, crawlDelayMs, contentSignal } = await this.robots.check(url, signal);
       const cap = this.opts.maxCrawlDelayMs ?? 10_000;
       const delay = crawlDelayMs === undefined ? 0 : Math.min(crawlDelayMs, cap);
       if (delay > 0) this.hostQueue.setMinInterval(parsed.hostname.toLowerCase(), delay);
@@ -131,10 +140,14 @@ export class Fetcher {
             'The site forbids crawlers for this path. Set `ingestion.respectRobotsTxt: false` only if you have permission.',
         });
       }
+      if (contentSignal && this.signalMode() !== 'ignore') {
+        robotsSignal = parseContentSignal(contentSignal, 'robots');
+        this.assertSignalAllows(robotsSignal, url);
+      }
     }
     // Politeness is per hostname (a Crawl-delay on evil.github.io must not slow all of github.io).
     const host = parsed.hostname.toLowerCase();
-    return this.limiter(() =>
+    const res = await this.limiter(() =>
       this.hostQueue.run(host, () =>
         retry((attempt) => this.doFetch(url, signal, attempt), {
           retries: this.opts.retries,
@@ -148,6 +161,35 @@ export class Fetcher {
             ),
         }),
       ),
+    );
+    if (this.signalMode() !== 'ignore') {
+      const header = res.headers.get('content-signal');
+      const sig = header ? parseContentSignal(header, 'header') : robotsSignal;
+      if (sig) {
+        this.assertSignalAllows(sig, url);
+        res.contentSignal = sig;
+      }
+    }
+    return res;
+  }
+
+  private signalMode(): NonNullable<FetcherOptions['contentSignals']> {
+    return this.opts.contentSignals ?? 'respect';
+  }
+
+  /** `respect` mode: refuse content whose signal says ai-input=no. */
+  private assertSignalAllows(sig: ContentSignal, url: string): void {
+    if (this.signalMode() !== 'respect' || sig.aiInput !== false) return;
+    throw new WebVectorError(
+      `Content-Signal ai-input=no (${sig.source}) — the site asks not to be used as AI input: ${url}`,
+      {
+        code: 'FETCH_BLOCKED_CONTENT_SIGNAL',
+        stage: 'ingest',
+        retryable: false,
+        remediation:
+          'The publisher declared `ai-input=no` via Content Signals (contentsignals.org). Set `ingestion.contentSignals: "record"` to fetch anyway (only where you have permission).',
+        details: { signal: sig.raw, source: sig.source },
+      },
     );
   }
 
@@ -303,6 +345,25 @@ export class Fetcher {
       };
     }
   }
+}
+
+// ─── Content Signals ─────────────────────────────────────────────────────────
+
+/**
+ * Parse a Content-Signal value (`search=yes, ai-input=no, ai-train=no`) from a robots.txt group
+ * or the `content-signal` response header. Unknown keys are ignored; absent keys stay undefined.
+ */
+export function parseContentSignal(raw: string, source: ContentSignal['source']): ContentSignal {
+  const out: ContentSignal = { raw: raw.trim().slice(0, 200), source };
+  for (const part of raw.split(',')) {
+    const [k, v] = part.split('=').map((x) => x?.trim().toLowerCase());
+    if (!k || (v !== 'yes' && v !== 'no')) continue;
+    const val = v === 'yes';
+    if (k === 'search') out.search = val;
+    else if (k === 'ai-input') out.aiInput = val;
+    else if (k === 'ai-train') out.aiTrain = val;
+  }
+  return out;
 }
 
 // ─── Bot-wall / paywall classification ──────────────────────────────────────

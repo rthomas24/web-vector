@@ -85,6 +85,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `maxRedirects` / `maxBytes` | `5` / `5242880` | — | `maxBytes` caps every body (PDFs included) |
 | `maxHtmlBytes` | `2097152` | — | lower cap for textual bodies (HTML/markdown/plain/XML/JSON); `image/*`, `video/*`, `audio/*`, `font/*`, archives (`zip`/`gzip`/`tar`/`7z`…) and scripts are rejected from the response headers (`UNSUPPORTED_CONTENT_TYPE`) without downloading the body; unlabelled `application/octet-stream` bodies are sniffed on the first KB (PDF/HTML/text pass) |
 | `respectRobotsTxt` | `true` | `WEBVECTOR_RESPECT_ROBOTS` | |
+| `contentSignals` | `respect` | — | [Content Signals](https://contentsignals.org) etiquette: `Content-Signal: search=yes, ai-input=no, ai-train=no` in the matching robots.txt group (parsed from the raw file — most robots libraries drop unknown directives) or a `content-signal` response header. `respect` refuses pages that declare `ai-input=no` (`FETCH_BLOCKED_CONTENT_SIGNAL`, never retried) and records the signal on `doc.contentSignal` otherwise; `record` only records; `ignore` neither. Real-world hit rate is tiny (Stack Overflow sets `search=no, ai-train=no`, not `ai-input`), so recall is unaffected. |
 | `userAgent` | `Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)` | `WEBVECTOR_USER_AGENT` | |
 | `retries` | `2` | — | on network errors / 408 / 429 / 5xx |
 | `allowPrivateNetworks` | `false` | `WEBVECTOR_ALLOW_PRIVATE_NETWORKS` | disables the SSRF guard — only for trusted local setups |

@@ -222,6 +222,13 @@ export const ingestionConfigSchema = z.object({
     .min(10_000)
     .default(2 * 1024 * 1024),
   respectRobotsTxt: z.boolean().default(true),
+  /**
+   * Content Signals (contentsignals.org — `Content-Signal: search=yes, ai-input=no, ai-train=no`
+   * in a robots.txt group, or a `content-signal` response header): `respect` refuses pages that say
+   * `ai-input=no` (FETCH_BLOCKED_CONTENT_SIGNAL) and records the signal on the document otherwise;
+   * `record` only records `doc.contentSignal`; `ignore` does neither.
+   */
+  contentSignals: z.enum(['ignore', 'record', 'respect']).default('respect'),
   userAgent: z
     .string()
     .default('Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)'),

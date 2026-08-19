@@ -5,13 +5,14 @@
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { acceptHeaderFor, Fetcher } from '../src/ingest/fetcher.js';
+import { acceptHeaderFor, Fetcher, parseContentSignal } from '../src/ingest/fetcher.js';
 import { parseResource } from '../src/ingest/index.js';
 import {
   cleanServedMarkdown,
   isServedMarkdown,
   parseServedMarkdown,
 } from '../src/ingest/markdown-clean.js';
+import { contentSignalFor, parseContentSignalGroups } from '../src/ingest/robots.js';
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -389,5 +390,97 @@ describe('early abort on non-content responses', () => {
     });
     const pdf = await f.fetch('https://big.example/doc.pdf');
     expect(pdf.bytes.byteLength).toBeGreaterThan(30_000);
+  });
+});
+
+// ─── C10 Content-Signal etiquette ────────────────────────────────────────────
+
+describe('content signals', () => {
+  it('parses Content-Signal from robots.txt groups (specific group before *)', () => {
+    const groups = parseContentSignalGroups(
+      [
+        '# comment',
+        'User-agent: *',
+        'Content-signal: search=no, ai-train=no',
+        'Disallow: /',
+        '',
+        'User-agent: WebVector',
+        'User-Agent: OtherBot',
+        'Content-Signal: search=yes, ai-input=yes',
+        'Allow: /',
+      ].join('\n'),
+    );
+    expect(groups).toHaveLength(2);
+    expect(contentSignalFor(groups, 'WebVector')).toBe('search=yes, ai-input=yes');
+    expect(contentSignalFor(groups, 'Googlebot')).toBe('search=no, ai-train=no');
+    const sig = parseContentSignal('search=no, ai-train=no', 'robots');
+    expect(sig).toMatchObject({ search: false, aiTrain: false, source: 'robots' });
+    expect(sig.aiInput).toBeUndefined();
+  });
+
+  it('respect: refuses ai-input=no from robots.txt or the header; record: attaches the signal', async () => {
+    server.use(
+      http.get('https://sig.example/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nContent-Signal: search=yes, ai-input=no\nAllow: /\n', {
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ),
+      http.get('https://sig.example/page', () =>
+        HttpResponse.text('# Page\n\nSome content that is long enough to matter here.', {
+          headers: { 'content-type': 'text/markdown' },
+        }),
+      ),
+      http.get('https://hdr.example/robots.txt', () => new HttpResponse('', { status: 404 })),
+      http.get('https://hdr.example/page', () =>
+        HttpResponse.text('<html><body><p>hello world hello world hello world</p></body></html>', {
+          headers: {
+            'content-type': 'text/html',
+            'content-signal': 'ai-train=no, search=yes, ai-input=no',
+          },
+        }),
+      ),
+      http.get('https://ok.example/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nContent-Signal: search=yes, ai-train=no\n', {
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ),
+      http.get('https://ok.example/page', () =>
+        HttpResponse.text('# Fine\n\nThis page allows ai-input by omission (no preference).', {
+          headers: { 'content-type': 'text/markdown' },
+        }),
+      ),
+    );
+    const respect = fetcher({ respectRobotsTxt: true, userAgent: 'WebVector/0.1' });
+    await expect(respect.fetch('https://sig.example/page')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_CONTENT_SIGNAL',
+      details: { source: 'robots' },
+    });
+    await expect(respect.fetch('https://hdr.example/page')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_CONTENT_SIGNAL',
+      details: { source: 'header' },
+    });
+    const ok = await respect.fetch('https://ok.example/page');
+    expect(ok.contentSignal).toMatchObject({ search: true, aiTrain: false, source: 'robots' });
+
+    const record = fetcher({
+      respectRobotsTxt: true,
+      userAgent: 'WebVector/0.1',
+      contentSignals: 'record',
+    });
+    const r = await record.fetch('https://sig.example/page');
+    expect(r.contentSignal).toMatchObject({ aiInput: false, source: 'robots' });
+    const h = await record.fetch('https://hdr.example/page');
+    expect(h.contentSignal).toMatchObject({ aiInput: false, aiTrain: false, source: 'header' });
+
+    const ignore = fetcher({
+      respectRobotsTxt: true,
+      userAgent: 'WebVector/0.1',
+      contentSignals: 'ignore',
+    });
+    expect((await ignore.fetch('https://sig.example/page')).contentSignal).toBeUndefined();
+
+    // The signal is copied onto the parsed document.
+    const out = await parseResource(r, {});
+    expect(out.page?.doc.contentSignal?.aiInput).toBe(false);
   });
 });

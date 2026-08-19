@@ -19,6 +19,8 @@ export type ErrorCode =
   | 'FETCH_BLOCKED_BOT'
   /** HTTP 402 pay-per-crawl (`details.vendor`, `details.price`). WebVector never pays. Never retried. */
   | 'FETCH_PAYMENT_REQUIRED'
+  /** robots.txt `Content-Signal:` or `content-signal` header says `ai-input=no` and `ingestion.contentSignals` is `respect`. */
+  | 'FETCH_BLOCKED_CONTENT_SIGNAL'
   | 'FETCH_HTTP_ERROR'
   | 'TOO_MANY_REDIRECTS'
   | 'UNSUPPORTED_CONTENT_TYPE'
