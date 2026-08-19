@@ -1,5 +1,4 @@
 {
-  "expectFail": "C13 extractor ensemble / page-type routing",
   "url": "https://shop.example.com/products/limiter-pro",
   "type": "e-commerce product page (JSON-LD Product with offers), price box, reviews widget, recommendations carousel",
   "minF1": 0.6,

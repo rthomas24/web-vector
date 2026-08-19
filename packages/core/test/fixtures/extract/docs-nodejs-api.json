@@ -1,5 +1,4 @@
 {
-  "expectFail": "C13 extractor ensemble / page-type routing",
   "url": "https://nodeish.example.org/api/limiter.html",
   "type": "Node.js-style API docs: column nav inside <main>-less layout, stability index, nested option lists, hljs code",
   "minF1": 0.85,

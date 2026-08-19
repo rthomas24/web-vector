@@ -1,10 +1,6 @@
 Write-Ahead Logging
 
-<details>
-
-<summary>Table Of Contents</summary>
-
-</details>
+**Table Of Contents**
 
 ## 1. Overview
 

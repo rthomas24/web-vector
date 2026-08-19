@@ -5,6 +5,17 @@ import { htmlToMarkdown } from 'mdream';
 import { WebVectorError } from '../errors.js';
 import type { ContentParser, ParseContext, ParsedDocument } from '../types.js';
 import { detectJsShell, guessLangFromScript, type JsShellSignals } from './extract-detect.js';
+import {
+  articleCandidate,
+  type Candidate,
+  type Choice,
+  candidateFrom,
+  chooseCandidate,
+  classifyPageType,
+  fullCandidate,
+  type PageType,
+  stripObviousChrome,
+} from './extract-ensemble.js';
 import { extractMeta } from './extract-meta.js';
 import { prepassDocument } from './extract-prepass.js';
 
@@ -101,8 +112,15 @@ export interface HtmlParserOptions {
   minArticleChars?: number;
   /** Minimum length to consider a page non-empty (default 80). */
   minPageChars?: number;
-  /** Try `defuddle` (optional peer) before mdream-minimal fallback. */
+  /** Try `defuddle` (optional peer) when the chosen extraction is still thin. */
   useDefuddle?: boolean;
+  /**
+   * `auto` (default): route by page type (Q&A/forum and docs pages use the whole main content,
+   * <pre> documents are unwrapped, articles run Readability with a recall guard against the full
+   * page); `readability`: classic Readability with whole-page fallback only when thin; `full`:
+   * always the whole page (chrome removed).
+   */
+  strategy?: 'auto' | 'readability' | 'full';
 }
 
 const STRIP_SELECTOR =
@@ -161,65 +179,113 @@ export class HtmlParser implements ContentParser {
     // Code/table fidelity pre-pass: highlighter soup → <pre><code class="language-x">, copy
     // buttons and heading anchors removed, data tables marked so Readability keeps them.
     const prepass = prepassDocument(document);
+    // Cookie walls, recommendation rails, share bars, flash notices: chrome on every page type.
+    stripObviousChrome(document);
 
-    let markdown = '';
-    let parser = 'readability';
+    // ── extractor ensemble + page-type routing ───────────────────────────
+    const strategy = this.opts.strategy ?? 'auto';
+    const pageType: PageType = classifyPageType(document, meta);
+    const runReadability = (): ReturnType<Readability['parse']> | null => {
+      try {
+        const clone = document.cloneNode(true) as unknown as Document;
+        return new Readability(clone as any, {
+          charThreshold: this.opts.charThreshold ?? 200,
+          keepClasses: false,
+          // Readability strips classes; keep the language markers so mdream emits fenced blocks.
+          classesToPreserve: prepass.languageClasses,
+        }).parse();
+      } catch {
+        return null;
+      }
+    };
+    const fullOpts = {
+      url,
+      tidy: tidyMarkdown,
+      mainOnly: pageType === 'docs',
+      unwrapPre: pageType === 'pre',
+    };
     let article: ReturnType<Readability['parse']> | null = null;
-    try {
-      const clone = document.cloneNode(true) as unknown as Document;
-      article = new Readability(clone as any, {
-        charThreshold: this.opts.charThreshold ?? 200,
-        keepClasses: false,
-        // Readability strips classes; keep the language markers so mdream emits fenced blocks.
-        classesToPreserve: prepass.languageClasses,
-      }).parse();
-    } catch {
-      article = null;
+    let readabilityCand: Candidate | undefined;
+    let fullCand: Candidate | undefined;
+    let choice: Choice | undefined;
+    if (strategy === 'readability' || (strategy === 'auto' && pageType === 'article')) {
+      article = runReadability();
+      if (article?.content)
+        readabilityCand = candidateFrom(
+          'readability',
+          tidyMarkdown(htmlToMarkdown(article.content, { origin: url })),
+        );
     }
-    if (article?.content) {
-      markdown = tidyMarkdown(htmlToMarkdown(article.content, { origin: url }));
-    }
-    if (markdown.length < minArticle) {
-      // fallback 1: defuddle (optional)
-      if (this.opts.useDefuddle) {
-        try {
-          const spec = 'defuddle/node';
-          const mod: any = await import(/* @vite-ignore */ spec);
-          const r = await mod.Defuddle(document as any, url, { markdown: true, useAsync: false });
-          if (r?.content && r.content.length > markdown.length) {
-            markdown = tidyMarkdown(r.content);
-            parser = 'defuddle';
-            if (!meta.title && r.title) meta.title = r.title;
-            if (!meta.publishedAt && r.published) meta.publishedAt = r.published;
-          }
-        } catch {
-          /* optional */
-        }
-      }
-      // fallback 2: mdream minimal on whole document
-      if (markdown.length < minArticle) {
-        try {
-          const whole = tidyMarkdown(
-            htmlToMarkdown(document.documentElement?.outerHTML ?? html, {
-              origin: url,
-              minimal: true,
-            }),
+    if (strategy === 'readability') {
+      // Classic behaviour: Readability, whole document only when the article is too thin.
+      if (!readabilityCand || readabilityCand.textLen < minArticle)
+        fullCand = fullCandidate(document, { ...fullOpts, mainOnly: false });
+      choice = chooseCandidate({
+        readability: readabilityCand,
+        full: fullCand,
+        minArticleChars: minArticle,
+      });
+    } else if (strategy === 'full' || pageType !== 'article') {
+      // Forums / Q&A (Readability deletes answers), docs (main container), <pre> documents.
+      fullCand = fullCandidate(document, fullOpts);
+      if (!fullCand || fullCand.textLen < minArticle) {
+        article ??= runReadability();
+        if (article?.content)
+          readabilityCand = candidateFrom(
+            'readability',
+            tidyMarkdown(htmlToMarkdown(article.content, { origin: url })),
           );
-          if (whole.length > markdown.length) {
-            markdown = whole;
-            parser = 'mdream-minimal';
-          }
-        } catch {
-          /* ignore */
+      }
+      choice =
+        fullCand && (!readabilityCand || fullCand.textLen >= readabilityCand.textLen * 0.5)
+          ? { candidate: fullCand, guard: undefined }
+          : chooseCandidate({
+              readability: readabilityCand,
+              full: fullCand,
+              minArticleChars: minArticle,
+            });
+    } else {
+      // Article: both candidates, Readability unless the recall guard says it dropped too much
+      // (or a single clean <article> exists and Readability's pick is link-heavy around it).
+      fullCand = fullCandidate(document, fullOpts);
+      choice = chooseCandidate({
+        readability: readabilityCand,
+        full: fullCand,
+        article: articleCandidate(document, fullOpts),
+        minArticleChars: minArticle,
+      });
+    }
+    let markdown = choice?.candidate.markdown ?? '';
+    let parser = choice
+      ? `${choice.candidate.name}${choice.guard ? `:${choice.guard}` : ''}`
+      : 'none';
+    if (choice?.candidate.name === 'readability' && !article) parser = 'readability';
+
+    // Optional: defuddle (peer) when the chosen text is still thin.
+    if (this.opts.useDefuddle && markdown.length < minArticle) {
+      try {
+        const spec = 'defuddle/node';
+        const mod: any = await import(/* @vite-ignore */ spec);
+        const r = await mod.Defuddle(document as any, url, { markdown: true, useAsync: false });
+        if (r?.content && r.content.length > markdown.length) {
+          markdown = tidyMarkdown(r.content);
+          parser = 'defuddle';
+          if (!meta.title && r.title) meta.title = r.title;
+          if (!meta.publishedAt && r.published) meta.publishedAt = r.published;
         }
+      } catch {
+        /* optional */
       }
     }
-    // Drop frontmatter mdream may add in minimal mode
+    // Drop frontmatter mdream may add
     markdown = markdown.replace(/^---\n[\s\S]*?\n---(?:\n+|$)/, '').trim();
     if (js.suspected && markdown.length < js.maxMarkdownLength) throw needsJsError(url, js);
     if (markdown.length < minPage) return null;
 
-    const title = (article?.title || meta.title || document.title || '').trim() || hostTitle(url);
+    const title =
+      (article?.title || meta.title || document.title || '').trim() ||
+      firstHeading(document, markdown) ||
+      hostTitle(url);
     const text = markdownToText(markdown);
     const lang = meta.lang ?? cleanField(article?.lang, 16) ?? guessLangFromScript(text);
     return {
@@ -267,6 +333,19 @@ export function needsJsError(url: string, js: JsShellSignals): WebVectorError {
       details: { signals: js.signals, framework: js.framework, bodyTextLength: js.bodyTextLength },
     },
   );
+}
+
+/** Title fallback for pages without <title>/og:title: first <h1>, `.h1` (rfc-editor), first heading. */
+function firstHeading(document: any, markdown: string): string | undefined {
+  try {
+    const h = document.querySelector('h1,.h1,h2');
+    const t = cleanField(h?.textContent, 200);
+    if (t) return t;
+  } catch {
+    /* ignore */
+  }
+  const m = /^#{1,3}\s+(.+)$/m.exec(markdown);
+  return m ? cleanField(m[1], 200) : undefined;
 }
 
 function hostTitle(url: string): string {

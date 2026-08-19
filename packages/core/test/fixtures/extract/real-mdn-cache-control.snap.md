@@ -1,6 +1,20 @@
-## Syntax
+# Cache-Control header
 
-http
+Baseline Widely available
+
+This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
+
+- [Learn more](https://developer.mozilla.org/en-US/docs/Glossary/Baseline/Compatibility)
+- [See full compatibility](#browser_compatibility)
+
+The HTTP **`Cache-Control`** header holds *directives* (instructions) in both requests and responses that control [caching](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching) in browsers and shared caches (e.g., Proxies, CDNs).
+
+| Header type | [Request header](https://developer.mozilla.org/en-US/docs/Glossary/Request_header), [Response header](https://developer.mozilla.org/en-US/docs/Glossary/Response_header) |
+| --- | --- |
+| [Forbidden request header](https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_request_header) | No |
+| [CORS-safelisted response header](https://developer.mozilla.org/en-US/docs/Glossary/CORS-safelisted_response_header) | Yes |
+
+## Syntax
 
 ```http
 Cache-Control: <directive>, <directive>, ...
@@ -18,75 +32,64 @@ The following table lists the standard `Cache-Control` directives:
 
 | Request | Response |
 | --- | --- |
-| [`max-age`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#max-age) | [`max-age`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#max-age) |
-| [`max-stale`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#max-stale) | - |
-| [`min-fresh`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#min-fresh) | - |
-| - | [`s-maxage`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#s-maxage) |
-| [`no-cache`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-cache) | [`no-cache`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-cache) |
-| [`no-store`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-store) | [`no-store`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-store) |
-| [`no-transform`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-transform) | [`no-transform`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#no-transform) |
-| [`only-if-cached`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#only-if-cached) | - |
-| - | [`must-revalidate`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#must-revalidate) |
-| - | [`proxy-revalidate`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#proxy-revalidate) |
-| - | [`must-understand`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#must-understand) |
-| - | [`private`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#private) |
-| - | [`public`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#public) |
-| - | [`immutable`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#immutable) |
-| - | [`stale-while-revalidate`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#stale-while-revalidate) |
-| [`stale-if-error`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#stale-if-error) | [`stale-if-error`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#stale-if-error) |
+| [`max-age`](#max-age) | [`max-age`](#max-age) |
+| [`max-stale`](#max-stale) | - |
+| [`min-fresh`](#min-fresh) | - |
+| - | [`s-maxage`](#s-maxage) |
+| [`no-cache`](#no-cache) | [`no-cache`](#no-cache) |
+| [`no-store`](#no-store) | [`no-store`](#no-store) |
+| [`no-transform`](#no-transform) | [`no-transform`](#no-transform) |
+| [`only-if-cached`](#only-if-cached) | - |
+| - | [`must-revalidate`](#must-revalidate) |
+| - | [`proxy-revalidate`](#proxy-revalidate) |
+| - | [`must-understand`](#must-understand) |
+| - | [`private`](#private) |
+| - | [`public`](#public) |
+| - | [`immutable`](#immutable) |
+| - | [`stale-while-revalidate`](#stale-while-revalidate) |
+| [`stale-if-error`](#stale-if-error) | [`stale-if-error`](#stale-if-error) |
 
-Note: Check the [compatibility table](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#browser_compatibility) for their support; user agents that don't recognize them should ignore them.
+Note: Check the [compatibility table](#browser_compatibility) for their support; user agents that don't recognize them should ignore them.
 
 ## Vocabulary
 
 This section defines the terms used in this document, some of which are from the specification.
 
-<dl><dt>[(HTTP) cache](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#http_cache)</dt>
-<dd>
+**[(HTTP) cache](#http_cache)**
 
 Implementation that holds requests and responses for reusing in subsequent requests. It can be either a shared cache or a private cache.
 
-</dd><dt>[Shared cache](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#shared_cache)</dt>
-<dd>
+**[Shared cache](#shared_cache)**
 
 Cache that exists between the origin server and clients (e.g., Proxy, CDN). It stores a single response and reuses it with multiple users — so developers should avoid storing personalized contents to be cached in the shared cache.
 
-</dd><dt>[Private cache](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#private_cache)</dt>
-<dd>
+**[Private cache](#private_cache)**
 
 Cache that exists in the client. It is also called *local cache* or *browser cache*. It can store and reuse personalized content for a single user.
 
-</dd><dt>[Store response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#store_response)</dt>
-<dd>
+**[Store response](#store_response)**
 
 Store a response in caches when the response is cacheable. However, the cached response is not always reused as-is. (Usually, "cache" means storing a response.)
 
-</dd><dt>[Reuse response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#reuse_response)</dt>
-<dd>
+**[Reuse response](#reuse_response)**
 
 Reuse cached responses for subsequent requests.
 
-</dd><dt>[Revalidate response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#revalidate_response)</dt>
-<dd>
+**[Revalidate response](#revalidate_response)**
 
 Ask the origin server whether or not the stored response is still [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age). Usually, the revalidation is done through a conditional request.
 
-</dd><dt>[Fresh response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#fresh_response)</dt>
-<dd>
+**[Fresh response](#fresh_response)**
 
 Indicates that the response is [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age). This usually means the response can be reused for subsequent requests, depending on request directives.
 
-</dd><dt>[Stale response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#stale_response)</dt>
-<dd>
+**[Stale response](#stale_response)**
 
 Indicates that the response is a [stale response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age). This usually means the response can't be reused as-is. Cache storage isn't required to remove stale responses immediately because revalidation could change the response from being stale to being [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) again.
 
-</dd><dt>[Age](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#age)</dt>
-<dd>
+**[Age](#age)**
 
 The time since a response was generated. It is a criterion for whether a response is [fresh or stale](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age).
-
-</dd></dl>
 
 ## Directives
 
@@ -98,8 +101,6 @@ This section lists directives that affect caching — both response directives a
 
 The `max-age=N` response directive indicates that the response remains [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) until *N* seconds after the response is generated.
 
-http
-
 ```http
 Cache-Control: max-age=604800
 ```
@@ -110,8 +111,6 @@ Note that `max-age` is not the elapsed time since the response was received; it 
 
 If the `max-age` value is negative (for example, `-1`) or isn't an integer (for example, `3599.99`), then the caching behavior is unspecified. Caches are encouraged to treat the value as if it were `0` (this is noted in the [Calculating Freshness Lifetime](https://httpwg.org/specs/rfc9111.html#calculating.freshness.lifetime "External link (opens in new tab)") section of the HTTP specification).
 
-http
-
 ```http
 Cache-Control: max-age=604800
 Age: 100
@@ -121,8 +120,6 @@ Age: 100
 
 The `s-maxage` response directive indicates how long the response remains [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) in a shared cache. The `s-maxage` directive is ignored by private caches, and overrides the value specified by the `max-age` directive or the `Expires` header for shared caches, if they are present.
 
-http
-
 ```http
 Cache-Control: s-maxage=604800
 ```
@@ -130,8 +127,6 @@ Cache-Control: s-maxage=604800
 #### `no-cache`
 
 The `no-cache` response directive indicates that the response can be stored in caches, but the response must be validated with the origin server before each reuse, even when the cache is disconnected from the origin server.
-
-http
 
 ```http
 Cache-Control: no-cache
@@ -149,8 +144,6 @@ The `must-revalidate` response directive indicates that the response can be stor
 
 Typically, `must-revalidate` is used with `max-age`.
 
-http
-
 ```http
 Cache-Control: max-age=604800, must-revalidate
 ```
@@ -167,8 +160,6 @@ The `proxy-revalidate` response directive is the equivalent of `must-revalidate`
 
 The `no-store` response directive indicates that any caches of any kind (private or shared) should not store this response.
 
-http
-
 ```http
 Cache-Control: no-store
 ```
@@ -176,8 +167,6 @@ Cache-Control: no-store
 #### `private`
 
 The `private` response directive indicates that the response can be stored only in a private cache (e.g., local caches in browsers).
-
-http
 
 ```http
 Cache-Control: private
@@ -191,8 +180,6 @@ If you forget to add `private` to a response with personalized content, then tha
 
 The `public` response directive indicates that the response can be stored in a shared cache. Responses for requests with `Authorization` header fields must not be stored in a shared cache; however, the `public` directive will cause such responses to be stored in a shared cache.
 
-http
-
 ```http
 Cache-Control: public
 ```
@@ -200,8 +187,6 @@ Cache-Control: public
 In general, when pages are under Basic Auth or Digest Auth, the browser sends requests with the `Authorization` header. This means that the response is access-controlled for restricted users (who have accounts), and it's fundamentally not shared-cacheable, even if it has `max-age`.
 
 You can use the `public` directive to unlock that restriction.
-
-http
 
 ```http
 Cache-Control: public, max-age=604800
@@ -216,8 +201,6 @@ If a request doesn't have an `Authorization` header, or you are already using `s
 The `must-understand` response directive indicates that a cache should store the response only if it understands the requirements for caching based on status code.
 
 `must-understand` should be coupled with `no-store` for fallback behavior.
-
-http
 
 ```http
 Cache-Control: must-understand, no-store
@@ -237,15 +220,11 @@ Some intermediaries transform content for various reasons. For example, some con
 
 The `immutable` response directive indicates that the response will not be updated while it's [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age).
 
-http
-
 ```http
 Cache-Control: public, max-age=604800, immutable
 ```
 
 A modern best practice for static resources is to include version/hashes in their URLs, while never modifying the resources — but instead, when necessary, *updating* the resources with newer versions that have new version-numbers/hashes, so that their URLs are different. That's called the **cache-busting** pattern.
-
-html
 
 ```html
 <script src="https://example.com/react.0.0.0.js"></script>
@@ -258,8 +237,6 @@ When you use a cache-busting pattern for resources and apply them to a long `max
 #### `stale-while-revalidate`
 
 The `stale-while-revalidate` response directive indicates that the cache could reuse a stale response while it revalidates it to a cache.
-
-http
 
 ```http
 Cache-Control: max-age=604800, stale-while-revalidate=86400
@@ -275,8 +252,6 @@ If no request happened during that period, the cache became [stale](https://deve
 
 The `stale-if-error` response directive indicates that the cache can reuse a [stale response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) when an upstream server generates an error, or when the error is generated locally. Here, an error is considered any response with a status code of 500, 502, 503, or 504.
 
-http
-
 ```http
 Cache-Control: max-age=604800, stale-if-error=86400
 ```
@@ -291,8 +266,6 @@ After the stale-if-error period passes, the client will receive any error genera
 
 The `no-cache` request directive asks caches to validate the response with the origin server before reuse.
 
-http
-
 ```http
 Cache-Control: no-cache
 ```
@@ -305,8 +278,6 @@ Browsers usually add `no-cache` to requests when users are **force reloading** a
 
 The `no-store` request directive allows a client to request that caches refrain from storing the request and corresponding response — even if the origin server's response could be stored.
 
-http
-
 ```http
 Cache-Control: no-store
 ```
@@ -315,8 +286,6 @@ Cache-Control: no-store
 
 The `max-age=N` request directive indicates that the client allows a stored response that is generated on the origin server within *N* seconds — where *N* may be any non-negative integer (including `0`).
 
-http
-
 ```http
 Cache-Control: max-age=10800
 ```
@@ -324,8 +293,6 @@ Cache-Control: max-age=10800
 In the case above, if the response with `Cache-Control: max-age=10800` was generated more than 3 hours ago (calculated from `max-age` and the `Age` header), the cache couldn't reuse that response.
 
 Many browsers use this directive for **reloading**, as explained below.
-
-http
 
 ```http
 Cache-Control: max-age=0
@@ -341,8 +308,6 @@ If the `max-age` value is negative (for example, `-1`) or isn't an integer (for 
 
 The `max-stale=N` request directive indicates that the client allows a stored response that is [stale](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) within *N* seconds. If no *N* value is specified, the client will accept a stale response of any age.
 
-http
-
 ```http
 Cache-Control: max-stale=3600
 ```
@@ -356,8 +321,6 @@ Note that the major browsers do not support requests with `max-stale`.
 #### `min-fresh`
 
 The `min-fresh=N` request directive indicates that the client allows a stored response that is [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) for at least *N* seconds.
-
-http
 
 ```http
 Cache-Control: min-fresh=600
@@ -379,7 +342,7 @@ The client indicates that an already-cached response should be returned. If a ca
 
 #### `stale-if-error`
 
-The `stale-if-error` request directive indicates that the browser is interested in receiving stale content on error from any intermediate server for a particular origin. This is not supported by any browser (see [Browser compatibility](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control#browser_compatibility)).
+The `stale-if-error` request directive indicates that the browser is interested in receiving stale content on error from any intermediate server for a particular origin. This is not supported by any browser (see [Browser compatibility](#browser_compatibility)).
 
 ## Use Cases
 
@@ -387,23 +350,17 @@ The `stale-if-error` request directive indicates that the browser is interested 
 
 If you don't want a response stored in caches, use the `no-store` directive.
 
-http
-
 ```http
 Cache-Control: no-store
 ```
 
 Note that `no-cache` means "it can be stored but don't reuse before validating" — so it's not for preventing a response from being stored.
 
-http
-
 ```http
 Cache-Control: no-cache
 ```
 
 In theory, if directives are conflicted, the most restrictive directive should be honored. So the example below is basically meaningless because `private`, `no-cache`, `max-age=0` and `must-revalidate` conflict with `no-store`.
-
-http
 
 ```http
 # conflicted
@@ -419,8 +376,6 @@ When you build static assets with versioning/hashing mechanisms, adding a versio
 
 For example:
 
-html
-
 ```html
 <!-- index.html -->
 <script src="/assets/react.min.js"></script>
@@ -431,8 +386,6 @@ The React library version will change when you update the library, and `hero.png
 
 In such a case, you could address the caching needs by using a specific, numbered version of the library, and including the hash of the picture in its URL.
 
-html
-
 ```html
 <!-- index.html -->
 <script src="/assets/react.0.0.0min.js"></script>
@@ -440,8 +393,6 @@ html
 ```
 
 You can add a long `max-age` value and `immutable` because the content will never change.
-
-http
 
 ```http
 # /assets/*
@@ -451,8 +402,6 @@ Cache-Control: max-age=31536000, immutable
 When you update the library or edit the picture, new content should have a new URL, and caches aren't reused. That is called the "cache busting" pattern.
 
 Use a `no-cache` to make sure that the HTML response itself is not cached. `no-cache` could cause revalidation, and the client will correctly receive a new version of the HTML response and static assets.
-
-http
 
 ```http
 # /index.html
@@ -469,15 +418,11 @@ If you don't add a `Cache-Control` header because the response is not intended t
 
 Adding `no-cache` to the response causes revalidation to the server, so you can serve a [fresh](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) response every time — or if the client already has a new one, just respond `304 Not Modified`.
 
-http
-
 ```http
 Cache-Control: no-cache
 ```
 
 Most HTTP/1.0 caches don't support `no-cache` directives, so historically `max-age=0` was used as a workaround. But only `max-age=0` could cause a [stale response](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Caching#fresh_and_stale_based_on_age) to be reused when caches disconnected from the origin server. `must-revalidate` addresses that. That's why the example below is equivalent to `no-cache`.
-
-http
 
 ```http
 Cache-Control: max-age=0, must-revalidate
@@ -511,3 +456,11 @@ Imagine that clients/caches store a [fresh](https://developer.mozilla.org/en-US/
 - [RFC 9111 – HTTP Caching](https://httpwg.org/specs/rfc9111.html "External link (opens in new tab)")
 - [RFC 5861 – HTTP Cache-Control Extensions for Stale Content](https://httpwg.org/specs/rfc5861.html "External link (opens in new tab)")
 - [RFC 8246 – HTTP Immutable Responses](https://httpwg.org/specs/rfc8246.html "External link (opens in new tab)")
+
+## Help improve MDN
+
+[Learn how to contribute](https://developer.mozilla.org/en-US/docs/MDN/Community/Getting_started)
+
+This page was last modified on Aug 12, 2026 by [MDN contributors](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control/contributors.txt).
+
+[View this page on GitHub](https://github.com/mdn/content/blob/main/files/en-us/web/http/reference/headers/cache-control/index.md?plain=1 "Folder: en-us/web/http/reference/headers/cache-control (Opens in a new tab)") • [Report a problem with this content](https://github.com/mdn/content/issues/new?template=page-report.yml&mdn-url=https%3A%2F%2Fdeveloper.mozilla.org%2Fen-US%2Fdocs%2FWeb%2FHTTP%2FReference%2FHeaders%2FCache-Control&metadata=%3C%21--+Do+not+make+changes+below+this+line+--%3E%0A%3Cdetails%3E%0A%3Csummary%3EPage+report+details%3C%2Fsummary%3E%0A%0A*+Folder%3A+%60en-us%2Fweb%2Fhttp%2Freference%2Fheaders%2Fcache-control%60%0A*+MDN+URL%3A+https%3A%2F%2Fdeveloper.mozilla.org%2Fen-US%2Fdocs%2FWeb%2FHTTP%2FReference%2FHeaders%2FCache-Control%0A*+GitHub+URL%3A+https%3A%2F%2Fgithub.com%2Fmdn%2Fcontent%2Fblob%2Fmain%2Ffiles%2Fen-us%2Fweb%2Fhttp%2Freference%2Fheaders%2Fcache-control%2Findex.md%0A*+Last+commit%3A+https%3A%2F%2Fgithub.com%2Fmdn%2Fcontent%2Fcommit%2F50da788b972b99730b4aeb8fec8fde3bde10975d%0A*+Document+last+modified%3A+2026-08-12T04%3A58%3A17.000Z%0A%0A%3C%2Fdetails%3E "This will take you to GitHub to file a new issue.")

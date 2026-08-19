@@ -219,6 +219,19 @@ export const ingestionConfigSchema = z.object({
   retries: z.number().int().min(0).max(5).default(2),
   allowPrivateNetworks: z.boolean().default(false),
   parsers: z.array(z.string()).default(['html', 'pdf', 'text']),
+  /** HTML extraction knobs (see ingest/extract-ensemble.ts). */
+  html: z
+    .object({
+      /**
+       * `auto` (default): route by page type — Q&A/forum threads and docs pages convert the whole
+       * main content (Readability deletes answers and sidebars-adjacent tables), <pre> documents
+       * are unwrapped, articles run Readability with a recall guard against the full page.
+       * `readability`: classic Readability, whole page only when the article is thin.
+       * `full`: always the whole page with navigation/chrome removed.
+       */
+      strategy: z.enum(['auto', 'readability', 'full']).default('auto'),
+    })
+    .default({ strategy: 'auto' }),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),

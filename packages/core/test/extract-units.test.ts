@@ -7,6 +7,14 @@ import {
   guessLangFromScript,
   normalizeLangTag,
 } from '../src/ingest/extract-detect.js';
+import {
+  type Candidate,
+  candidateFrom,
+  chooseCandidate,
+  classifyPageType,
+  findMainRoot,
+  removeChrome,
+} from '../src/ingest/extract-ensemble.js';
 import { extractMeta } from '../src/ingest/extract-meta.js';
 import { detectLang, prepassDocument } from '../src/ingest/extract-prepass.js';
 import { parseResource } from '../src/ingest/index.js';
@@ -364,5 +372,182 @@ describe('extract-prepass', () => {
     expect(detectLang(pres[0])).toBe('js');
     expect(detectLang(pres[1])).toBe('python');
     expect(detectLang(pres[2])).toBeUndefined();
+  });
+});
+
+describe('extract-ensemble', () => {
+  const doc = (body: string, head = '') =>
+    parseHTML(
+      `<!doctype html><html><head><title>T</title>${head}</head><body>${body}</body></html>`,
+    ).document;
+  const metaOf = (d: any, url = 'https://x.example/p') => extractMeta(d, url);
+  const prose = (n: number) =>
+    `<p>${'Plain prose sentence about caching that is long enough to count. '.repeat(n)}</p>`;
+
+  it('classifies Q&A by JSON-LD or post density, docs by TechArticle/kind/layout, pre by share', () => {
+    const qa = doc('<p>x</p>', '<script type="application/ld+json">{"@type":"QAPage"}</script>');
+    expect(classifyPageType(qa, metaOf(qa))).toBe('qa');
+    const forum = doc(
+      `<div class="post">${prose(2)}</div><div class="post">${prose(2)}</div><div class="post">${prose(2)}</div>`,
+    );
+    expect(classifyPageType(forum, metaOf(forum))).toBe('qa');
+    const tech = doc(
+      '<p>x</p>',
+      '<script type="application/ld+json">{"@type":"TechArticle"}</script>',
+    );
+    expect(classifyPageType(tech, metaOf(tech))).toBe('docs');
+    const layout = doc(
+      `<nav><a href="/">a</a></nav><main>${prose(3)}<pre>a</pre><pre>b</pre></main>`,
+    );
+    expect(classifyPageType(layout, metaOf(layout))).toBe('docs');
+    const pre = doc(`<pre>${'text line that is long enough to matter\n'.repeat(60)}</pre>`);
+    expect(classifyPageType(pre, metaOf(pre))).toBe('pre');
+    const art = doc(`<article>${prose(5)}</article>`);
+    expect(classifyPageType(art, metaOf(art))).toBe('article');
+  });
+
+  it('candidateFrom measures text, link density, structure and junk', () => {
+    const c = candidateFrom(
+      'x',
+      '# H\n\nSome text [link](u) more.\n\n```js\nx\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAccept all cookies. Subscribe to our newsletter.',
+    );
+    expect(c.headings).toBe(1);
+    expect(c.codeBlocks).toBe(1);
+    expect(c.tableRows).toBe(2);
+    expect(c.linkDensity).toBeGreaterThan(0);
+    expect(c.junkPer1k).toBeGreaterThan(0);
+    expect(c.score).toBeGreaterThan(0);
+  });
+
+  it('chooseCandidate applies the recall guard and article preference', () => {
+    const mk = (over: Partial<Candidate>): Candidate => ({
+      name: 'c',
+      markdown: '',
+      textLen: 1000,
+      linkDensity: 0.05,
+      headings: 2,
+      codeBlocks: 0,
+      tableRows: 0,
+      junkPer1k: 0,
+      score: 1,
+      ...over,
+    });
+    const r = mk({ name: 'readability' });
+    expect(
+      chooseCandidate({
+        readability: r,
+        full: mk({ name: 'full', textLen: 1500 }),
+        minArticleChars: 300,
+      })?.candidate.name,
+    ).toBe('readability');
+    expect(
+      chooseCandidate({
+        readability: r,
+        full: mk({ name: 'full', textLen: 4000 }),
+        minArticleChars: 300,
+      })?.guard,
+    ).toBe('text-recall');
+    expect(
+      chooseCandidate({
+        readability: r,
+        full: mk({ name: 'full', textLen: 1500, codeBlocks: 4 }),
+        minArticleChars: 300,
+      })?.guard,
+    ).toBe('code-recall');
+    expect(
+      chooseCandidate({
+        readability: r,
+        full: mk({ name: 'full', textLen: 1500, tableRows: 8 }),
+        minArticleChars: 300,
+      })?.guard,
+    ).toBe('table-recall');
+    expect(
+      chooseCandidate({
+        readability: mk({ textLen: 100 }),
+        full: mk({ name: 'full', textLen: 1500 }),
+        minArticleChars: 300,
+      })?.guard,
+    ).toBe('thin-article');
+    // link-heavy full page never wins on length alone
+    expect(
+      chooseCandidate({
+        readability: r,
+        full: mk({ name: 'full', textLen: 9000, linkDensity: 0.7 }),
+        minArticleChars: 300,
+      })?.candidate.name,
+    ).toBe('readability');
+    expect(
+      chooseCandidate({ readability: undefined, full: mk({ name: 'full' }), minArticleChars: 300 })
+        ?.guard,
+    ).toBe('no-article');
+    // a clean <article> beats a Readability pick that swallowed a file table
+    expect(
+      chooseCandidate({
+        readability: mk({ tableRows: 7 }),
+        full: mk({ name: 'full', textLen: 1400, tableRows: 7 }),
+        article: mk({ name: 'article', textLen: 850 }),
+        minArticleChars: 300,
+      })?.candidate.name,
+    ).toBe('article');
+  });
+
+  it('removeChrome drops page chrome but keeps article headers and content-bearing footers', () => {
+    const d = doc(
+      `<header class="site">Site nav</header><nav>Nav</nav><main><article><header><h1>Title</h1><p>By A</p></header>${prose(3)}<footer><a href="/e">Edit</a> <a href="/h">Helpful?</a></footer></article><aside>Related</aside></main><footer>© Foot</footer>`,
+    );
+    removeChrome(d.body);
+    const t = d.body.textContent.replace(/\s+/g, ' ');
+    expect(t).toContain('Title');
+    expect(t).toContain('By A');
+    expect(t).not.toContain('Site nav');
+    expect(t).not.toContain('Related');
+    expect(t).not.toContain('© Foot');
+    expect(t).not.toContain('Edit');
+  });
+
+  it('findMainRoot prefers the most specific container that still holds most of the text', () => {
+    const d = doc(
+      `<div id="content"><div class="colnav"><ul>${'<li><a href="/x">Nav item</a></li>'.repeat(20)}</ul></div><div id="apicontent">${prose(20)}</div></div>`,
+    );
+    expect(findMainRoot(d)?.id).toBe('apicontent');
+  });
+
+  it('HtmlParser strategy: auto keeps forum answers, readability drops them, full converts everything', async () => {
+    const answers = Array.from(
+      { length: 3 },
+      (_, i) =>
+        `<div class="answer" id="answer-${i}"><div class="s-prose"><p>Answer ${i}: ${'a detailed explanation with plenty of words to count as content. '.repeat(6)}</p></div><div class="comments"><div class="comment">Comment on ${i} that is reasonably long to be seen.</div></div></div>`,
+    ).join('');
+    const html = `<!doctype html><html><head><title>Q</title><script type="application/ld+json">{"@type":"QAPage"}</script></head><body><nav><a href="/">Home</a><a href="/q">Questions</a></nav><div id="content"><h1>How do buckets work?</h1><div class="question"><p>${'The question body explains the confusion in some detail. '.repeat(5)}</p></div><h2>3 Answers</h2>${answers}</div><div id="sidebar"><h4>Hot questions</h4><ul>${'<li><a href="/h">Hot thing</a></li>'.repeat(10)}</ul></div><footer>© Q&A Inc</footer></body></html>`;
+    const auto = await new HtmlParser().parseHtml(html, 'https://qa.example/q/1');
+    expect(auto?.parser).toMatch(/^mdream-full/);
+    expect(auto?.markdown).toContain('Answer 2:');
+    expect(auto?.markdown).toContain('Comment on 1');
+    expect(auto?.markdown).not.toContain('Hot thing');
+    expect(auto?.markdown).not.toContain('© Q&A Inc');
+    const full = await new HtmlParser({ strategy: 'full' }).parseHtml(
+      html,
+      'https://qa.example/q/1',
+    );
+    expect(full?.parser).toMatch(/^mdream-full/);
+    expect(full?.markdown).toContain('Answer 2:');
+    const rd = await new HtmlParser({ strategy: 'readability' }).parseHtml(
+      html,
+      'https://qa.example/q/1',
+    );
+    expect(rd?.parser).toMatch(/^readability|mdream-full/);
+  });
+
+  it('HtmlParser recall guard picks the full page when Readability keeps a fraction of it', async () => {
+    // Many short sibling sections: Readability keeps the densest one; the guard restores the rest.
+    const sections = Array.from(
+      { length: 12 },
+      (_, i) =>
+        `<section><h2>Section ${i}</h2><p>${`Section ${i} explains one distinct facet of the topic in a few sentences. `.repeat(3)}</p><table><tr><th>k</th><th>v</th></tr><tr><td>a${i}</td><td>${i}</td></tr><tr><td>b${i}</td><td>${i * 2}</td></tr></table></section>`,
+    ).join('');
+    const html = `<!doctype html><html><head><title>Ref</title></head><body><nav><a href="/">Home</a></nav><div class="wrapper"><div class="lead"><p>${'Lead paragraph that Readability likes because it is dense and long. '.repeat(15)}</p></div>${sections}</div><footer>© Foot</footer></body></html>`;
+    const d = await new HtmlParser().parseHtml(html, 'https://ref.example/all');
+    expect(d?.markdown).toContain('Section 11');
+    expect(d?.markdown).not.toContain('© Foot');
   });
 });

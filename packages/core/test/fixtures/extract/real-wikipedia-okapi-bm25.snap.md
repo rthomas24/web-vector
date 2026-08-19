@@ -10,13 +10,11 @@ BM25 is a [bag-of-words](https://en.wikipedia.org/wiki/Bag_of_words_model "Bag o
 
 Given a query Q, containing keywords ![{\\displaystyle q\_{1},...,q\_{n}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/4024517280628a21186b246939a2cc89c937f7e3), the BM25 score of a document D is:
 
-<dl><dd>![{\\displaystyle {\\text{score}}(D,Q)=\\sum \_{i=1}^{n}{\\text{IDF}}(q\_{i})\\cdot {\\frac {f(q\_{i},D)\\cdot (k\_{1}+1)}{f(q\_{i},D)+k\_{1}\\cdot \\left(1-b+b\\cdot {\\frac {|D|}{\\text{avgdl}}}\\right)}}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/8624885ce5cd14936807927801f6d29c315d3828)</dd>
-</dl>
+![{\\displaystyle {\\text{score}}(D,Q)=\\sum \_{i=1}^{n}{\\text{IDF}}(q\_{i})\\cdot {\\frac {f(q\_{i},D)\\cdot (k\_{1}+1)}{f(q\_{i},D)+k\_{1}\\cdot \\left(1-b+b\\cdot {\\frac {|D|}{\\text{avgdl}}}\\right)}}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/8624885ce5cd14936807927801f6d29c315d3828)
 
 where ![{\\displaystyle f(q\_{i},D)}](https://wikimedia.org/api/rest_v1/media/math/render/svg/7caf2f93a6527d4a76c07bd67980ec921167f990) is the number of times that the keyword ![{\\displaystyle q\_{i}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/2752dcbff884354069fe332b8e51eb0a70a531b6) occurs in the document D, ![{\\displaystyle |D|}](https://wikimedia.org/api/rest_v1/media/math/render/svg/7c936c42ab206e72c1fbc1ea103cc9eca1802af1) is the length of the document D in words, and avgdl is the average document length in the text collection from which documents are drawn. ![{\\displaystyle k\_{1}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/376315fd4983f01dada5ec2f7bebc48455b14a66) and b are free parameters, usually chosen, in absence of an advanced optimization, as ![{\\displaystyle k\_{1}\\in \[1.2,2.0\]}](https://wikimedia.org/api/rest_v1/media/math/render/svg/0af33de8946a560fed04ff522251656c8207f3db) and ![{\\displaystyle b=0.75}](https://wikimedia.org/api/rest_v1/media/math/render/svg/cc8113cfb95fd7d2a084b62f53ff1a54186bc11c).<sup>[\[3\]](https://en.wikipedia.org/wiki/Okapi_BM25#cite_note-3)</sup> ![{\\displaystyle {\\text{IDF}}(q\_{i})}](https://wikimedia.org/api/rest_v1/media/math/render/svg/e34b65be68e2123b44a9106fed33a0253229e356) is the IDF ([inverse document frequency](https://en.wikipedia.org/wiki/Inverse_document_frequency "Inverse document frequency")) weight of the query term ![{\\displaystyle q\_{i}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/2752dcbff884354069fe332b8e51eb0a70a531b6). It is usually computed as:
 
-<dl><dd>![{\\displaystyle {\\text{IDF}}(q\_{i})=\\ln \\left({\\frac {N-n(q\_{i})+0.5}{n(q\_{i})+0.5}}+1\\right)}](https://wikimedia.org/api/rest_v1/media/math/render/svg/23dda1c06c7bad8d76c69c2086cf8937b6997a03)</dd>
-</dl>
+![{\\displaystyle {\\text{IDF}}(q\_{i})=\\ln \\left({\\frac {N-n(q\_{i})+0.5}{n(q\_{i})+0.5}}+1\\right)}](https://wikimedia.org/api/rest_v1/media/math/render/svg/23dda1c06c7bad8d76c69c2086cf8937b6997a03)
 
 where N is the total number of documents in the collection, and ![{\\displaystyle n(q\_{i})}](https://wikimedia.org/api/rest_v1/media/math/render/svg/14dc99fdb5fe2428a1c46cd20a7255dbee944945) is the number of documents containing ![{\\displaystyle q\_{i}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/2752dcbff884354069fe332b8e51eb0a70a531b6).
 
@@ -26,25 +24,21 @@ There are several interpretations for IDF and slight variations on its formula. 
 
 Here is an interpretation from [information theory](https://en.wikipedia.org/wiki/Information_theory "Information theory"). Suppose a query term ![{\\displaystyle q}](https://wikimedia.org/api/rest_v1/media/math/render/svg/06809d64fa7c817ffc7e323f85997f783dbdf71d) appears in ![{\\displaystyle n(q)}](https://wikimedia.org/api/rest_v1/media/math/render/svg/bbd26739abf7d0b2055386c8a43df80e398167be) documents. Then a randomly picked document ![{\\displaystyle D}](https://wikimedia.org/api/rest_v1/media/math/render/svg/f34a0c600395e5d4345287e21fb26efd386990e6) will contain the term with probability ![{\\displaystyle {\\frac {n(q)}{N}}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/42db8d96fb7df8e92eb349eb1df81ddb61af8fb1) (where ![{\\displaystyle N}](https://wikimedia.org/api/rest_v1/media/math/render/svg/f5e3890c981ae85503089652feb48b191b57aae3) is again the cardinality of the set of documents in the collection). Therefore, the [information content](https://en.wikipedia.org/wiki/Information_content "Information content") of the message "![{\\displaystyle D}](https://wikimedia.org/api/rest_v1/media/math/render/svg/f34a0c600395e5d4345287e21fb26efd386990e6) contains ![{\\displaystyle q}](https://wikimedia.org/api/rest_v1/media/math/render/svg/06809d64fa7c817ffc7e323f85997f783dbdf71d)" is:
 
-<dl><dd>![{\\displaystyle -\\log {\\frac {n(q)}{N}}=\\log {\\frac {N}{n(q)}}.}](https://wikimedia.org/api/rest_v1/media/math/render/svg/92f7f5b617de20520d44e03ec5e04faf31490920)</dd>
-</dl>
+![{\\displaystyle -\\log {\\frac {n(q)}{N}}=\\log {\\frac {N}{n(q)}}.}](https://wikimedia.org/api/rest_v1/media/math/render/svg/92f7f5b617de20520d44e03ec5e04faf31490920)
 
 Now suppose we have two query terms ![{\\displaystyle q\_{1}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/9daa41f6e8f78ea6bb5711d7ac97901ce564b94e) and ![{\\displaystyle q\_{2}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/fd2d05084feb02b8ba29b0673440fb673b102589). If the two terms occur in documents entirely independently of each other, then the probability of seeing both ![{\\displaystyle q\_{1}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/9daa41f6e8f78ea6bb5711d7ac97901ce564b94e) and ![{\\displaystyle q\_{2}}](https://wikimedia.org/api/rest_v1/media/math/render/svg/fd2d05084feb02b8ba29b0673440fb673b102589) in a randomly picked document ![{\\displaystyle D}](https://wikimedia.org/api/rest_v1/media/math/render/svg/f34a0c600395e5d4345287e21fb26efd386990e6) is:
 
-<dl><dd>![{\\displaystyle {\\frac {n(q\_{1})}{N}}\\cdot {\\frac {n(q\_{2})}{N}},}](https://wikimedia.org/api/rest_v1/media/math/render/svg/b38127d11e84a12ac36a3dc34890af7294e2a03c)</dd>
-</dl>
+![{\\displaystyle {\\frac {n(q\_{1})}{N}}\\cdot {\\frac {n(q\_{2})}{N}},}](https://wikimedia.org/api/rest_v1/media/math/render/svg/b38127d11e84a12ac36a3dc34890af7294e2a03c)
 
 and the information content of such an event is:
 
-<dl><dd>![{\\displaystyle \\sum \_{i=1}^{2}\\log {\\frac {N}{n(q\_{i})}}.}](https://wikimedia.org/api/rest_v1/media/math/render/svg/4d9d8aef452ae91622ed5d5d2df133650cbdf050)</dd>
-</dl>
+![{\\displaystyle \\sum \_{i=1}^{2}\\log {\\frac {N}{n(q\_{i})}}.}](https://wikimedia.org/api/rest_v1/media/math/render/svg/4d9d8aef452ae91622ed5d5d2df133650cbdf050)
 
 With a small variation, this is exactly what is expressed by the IDF component of BM25.
 
 - **BM25+**<sup>[\[7\]](https://en.wikipedia.org/wiki/Okapi_BM25#cite_note-7)</sup> is an extension of BM25. BM25+ was developed to address one deficiency of the standard BM25 in which the component of term frequency normalization by document length is not properly lower-bounded; as a result of this deficiency, long documents which do match the query term can often be scored unfairly by BM25 as having a similar relevancy to shorter documents that do not contain the query term at all. The scoring formula of BM25+ only has one additional free parameter ![{\\displaystyle \\delta }](https://wikimedia.org/api/rest_v1/media/math/render/svg/c5321cfa797202b3e1f8620663ff43c4660ea03a) (the default value is 1.0) as compared with BM25:
 
-<dl><dd>![{\\displaystyle {\\text{score}}(D,Q)=\\sum \_{i=1}^{n}{\\text{IDF}}(q\_{i})\\cdot \\left\[{\\frac {f(q\_{i},D)\\cdot (k\_{1}+1)}{f(q\_{i},D)+k\_{1}\\cdot \\left(1-b+b\\cdot {\\frac {|D|}{\\text{avgdl}}}\\right)}}+\\delta \\right\]}](https://wikimedia.org/api/rest_v1/media/math/render/svg/8dcf99b661d7e7e5aa53091d1348cc643384383c)</dd>
-</dl>
+![{\\displaystyle {\\text{score}}(D,Q)=\\sum \_{i=1}^{n}{\\text{IDF}}(q\_{i})\\cdot \\left\[{\\frac {f(q\_{i},D)\\cdot (k\_{1}+1)}{f(q\_{i},D)+k\_{1}\\cdot \\left(1-b+b\\cdot {\\frac {|D|}{\\text{avgdl}}}\\right)}}+\\delta \\right\]}](https://wikimedia.org/api/rest_v1/media/math/render/svg/8dcf99b661d7e7e5aa53091d1348cc643384383c)
 
 1. [↑](https://en.wikipedia.org/wiki/Okapi_BM25#cite_ref-1) *["OKAPI"](https://web.archive.org/web/20231207112813/https://smcse.city.ac.uk/doc/cisr/web/okapi/okapi.html). *smcse.city.ac.uk*. Archived from [the original](https://smcse.city.ac.uk/doc/cisr/web/okapi/okapi.html) on 2023-12-07. Retrieved 2023-10-16.*
 2. [1](https://en.wikipedia.org/wiki/Okapi_BM25#cite_ref-robertson2009_2-0) [2](https://en.wikipedia.org/wiki/Okapi_BM25#cite_ref-robertson2009_2-1) *Stephen Robertson & Hugo Zaragoza (2009). ["The Probabilistic Relevance Framework: BM25 and Beyond"](http://dl.acm.org/citation.cfm?id=1704810). *Foundations and Trends in Information Retrieval*. **3** (4): 333–389. [doi](<https://en.wikipedia.org/wiki/Doi_(identifier)> "Doi (identifier)"): [10.1561/1500000019](https://doi.org/10.1561%2F1500000019). [S2CID](<https://en.wikipedia.org/wiki/S2CID_(identifier)> "S2CID (identifier)")  [207178704](https://api.semanticscholar.org/CorpusID:207178704).*

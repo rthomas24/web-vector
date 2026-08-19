@@ -1,5 +1,4 @@
 {
-  "expectFail": "C13 extractor ensemble / page-type routing",
   "url": "https://qa.example.com/questions/48213/how-does-a-token-bucket-handle-bursts",
   "type": "Stack-Overflow-like Q&A (QAPage JSON-LD): question + 3 answers with vote widgets and comments; Readability drops answers",
   "minF1": 0.75,

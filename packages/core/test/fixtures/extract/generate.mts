@@ -489,7 +489,6 @@ after     -> 10 requests per second sustained</code></pre>`,
     name: 'forum-qa',
     gold: contentGold,
     spec: {
-      expectFail: 'C13 extractor ensemble / page-type routing',
       url,
       type: 'Stack-Overflow-like Q&A (QAPage JSON-LD): question + 3 answers with vote widgets and comments; Readability drops answers',
       minF1: 0.75,
@@ -602,7 +601,6 @@ ${para('tokenBucket', 'slidingWindow')}
     name: 'github-repo',
     gold: readme,
     spec: {
-      expectFail: 'C13 extractor ensemble / page-type routing',
       url,
       type: 'GitHub-like repo landing page: global nav, file table, sidebar About/Releases, README article',
       minF1: 0.7,
@@ -1156,7 +1154,6 @@ Abstract
     name: 'product-page',
     gold,
     spec: {
-      expectFail: 'C13 extractor ensemble / page-type routing',
       url,
       type: 'e-commerce product page (JSON-LD Product with offers), price box, reviews widget, recommendations carousel',
       minF1: 0.6,
@@ -1339,7 +1336,6 @@ ${para('leakyBucket')}`;
     name: 'docs-nodejs-api',
     gold,
     spec: {
-      expectFail: 'C13 extractor ensemble / page-type routing',
       url,
       type: 'Node.js-style API docs: column nav inside <main>-less layout, stability index, nested option lists, hljs code',
       minF1: 0.85,

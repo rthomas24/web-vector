@@ -59,6 +59,10 @@ const HEADING_ANCHOR_SELECTOR = [
   'h6 a[href^="#"]',
 ].join(',');
 
+/** Short code-block chrome ("css", "Copy", "Bash") shown above/below <pre>; removed when short. */
+const CODE_LABEL_SELECTOR =
+  '.example-header,.code-header,.code-block-header,.codeblock-header,.code-title,.language-name,.code-lang,.highlight-header,.snippet-header,.code-block__header,.code-block-title,.code-toolbar>.toolbar,.buttonGroup__atx';
+
 const IN_PRE_NOISE_SELECTOR =
   '.linenos,.lineno,.line-number,.line-numbers,.ln,.hljs-ln-numbers,.hljs-ln-n,.gutter,.sr-only,[aria-hidden="true"],.copy,.clipboard';
 
@@ -116,10 +120,34 @@ export function prepassDocument(document: any): PrepassStats {
 /** Remove buttons, copy widgets, heading self-links and hidden gutters. */
 export function stripUiNoise(document: any): void {
   for (const el of [...document.querySelectorAll(UI_NOISE_SELECTOR)]) el.remove();
+  for (const el of [...document.querySelectorAll(CODE_LABEL_SELECTOR)]) {
+    if (String(el.textContent ?? '').trim().length <= 40) el.remove();
+  }
+  // <dl>/<details> have no markdown form (mdream passes the tags through): rewrite as bold terms
+  // + indented definitions / a bold summary + body so they read as text.
+  for (const dt of [...document.querySelectorAll('dt')]) {
+    const p = document.createElement('p');
+    const b = document.createElement('strong');
+    while (dt.firstChild) b.appendChild(dt.firstChild);
+    p.appendChild(b);
+    dt.replaceWith(p);
+  }
+  for (const el of [...document.querySelectorAll('dd,dl,details')]) {
+    const div = document.createElement('div');
+    while (el.firstChild) div.appendChild(el.firstChild);
+    el.replaceWith(div);
+  }
+  for (const s of [...document.querySelectorAll('summary')]) {
+    const p = document.createElement('p');
+    const b = document.createElement('strong');
+    while (s.firstChild) b.appendChild(s.firstChild);
+    p.appendChild(b);
+    s.replaceWith(p);
+  }
   // Heading self-links: <h2>Title<a href="#title">#</a></h2> → drop the symbol;
   // <h2><a class="heading-anchor" href="#x">Title</a></h2> → keep the text, drop the link.
   for (const a of [...document.querySelectorAll(HEADING_ANCHOR_SELECTOR)]) {
-    if (!a.isConnected) continue;
+    if (!document.contains(a)) continue;
     const t = (a.textContent ?? '').trim();
     if (HEADING_ANCHOR_TEXT_RE.test(t) || a.getAttribute('aria-hidden') === 'true') a.remove();
     else if (a.closest?.('h1,h2,h3,h4,h5,h6')) a.replaceWith(document.createTextNode(t));
@@ -140,7 +168,7 @@ export function stripUiNoise(document: any): void {
 export function collapseLineNumberTables(document: any): number {
   let n = 0;
   for (const table of [...document.querySelectorAll('table')]) {
-    if (!table.isConnected) continue;
+    if (!document.contains(table)) continue;
     const cls = String(table.className ?? '');
     const rows = [...table.querySelectorAll('tr')];
     if (rows.length === 0) continue;
@@ -196,7 +224,7 @@ function isNumericGutter(cell: any): boolean {
 export function normalizeCodeBlocks(document: any): number {
   let n = 0;
   for (const pre of [...document.querySelectorAll('pre')]) {
-    if (!pre.isConnected) continue;
+    if (!document.contains(pre)) continue;
     // Skip <pre> that only wraps prose-y HTML? No: mdream fences every <pre>; we normalise all.
     for (const br of [...pre.querySelectorAll('br')]) br.replaceWith(document.createTextNode('\n'));
     const lang = detectLang(pre);

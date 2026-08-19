@@ -1,70 +1,77 @@
-<dl><dt>Author:</dt>
-<dd>Guido van Rossum &lt;guido at python.org&gt;, Barry Warsaw &lt;barry at python.org&gt;, Alyssa Coghlan &lt;ncoghlan at gmail.com&gt;</dd>
-<dt>Status:</dt>
-<dd>Active</dd>
-<dt>Type:</dt>
-<dd>Process</dd>
-<dt>Created:</dt>
-<dd>05-Jul-2001</dd>
-<dt>Post-History:</dt>
-<dd>05-Jul-2001, 01-Aug-2013</dd></dl>
+# PEP 8 – Style Guide for Python Code
+
+**Author:**
+
+Guido van Rossum \<guido at python.org>, Barry Warsaw \<barry at python.org>, Alyssa Coghlan \<ncoghlan at gmail.com>
+
+**Status:**
+
+Active
+
+**Type:**
+
+Process
+
+**Created:**
+
+05-Jul-2001
+
+**Post-History:**
+
+05-Jul-2001, 01-Aug-2013
 
 ---
 
-<details>
+**Table of Contents**
 
-<summary>Table of Contents</summary>
-
-- [Introduction](https://peps.python.org/pep-0008/#introduction)
-- [A Foolish Consistency is the Hobgoblin of Little Minds](https://peps.python.org/pep-0008/#a-foolish-consistency-is-the-hobgoblin-of-little-minds)
-- [Code Lay-out](https://peps.python.org/pep-0008/#code-lay-out)
-  - [Indentation](https://peps.python.org/pep-0008/#indentation)
-  - [Tabs or Spaces?](https://peps.python.org/pep-0008/#tabs-or-spaces)
-  - [Maximum Line Length](https://peps.python.org/pep-0008/#maximum-line-length)
-  - [Should a Line Break Before or After a Binary Operator?](https://peps.python.org/pep-0008/#should-a-line-break-before-or-after-a-binary-operator)
-  - [Blank Lines](https://peps.python.org/pep-0008/#blank-lines)
-  - [Source File Encoding](https://peps.python.org/pep-0008/#source-file-encoding)
-  - [Imports](https://peps.python.org/pep-0008/#imports)
-  - [Module Level Dunder Names](https://peps.python.org/pep-0008/#module-level-dunder-names)
-- [String Quotes](https://peps.python.org/pep-0008/#string-quotes)
-- [Whitespace in Expressions and Statements](https://peps.python.org/pep-0008/#whitespace-in-expressions-and-statements)
-  - [Pet Peeves](https://peps.python.org/pep-0008/#pet-peeves)
-  - [Other Recommendations](https://peps.python.org/pep-0008/#other-recommendations)
-- [When to Use Trailing Commas](https://peps.python.org/pep-0008/#when-to-use-trailing-commas)
-- [Comments](https://peps.python.org/pep-0008/#comments)
-  - [Block Comments](https://peps.python.org/pep-0008/#block-comments)
-  - [Inline Comments](https://peps.python.org/pep-0008/#inline-comments)
-  - [Documentation Strings](https://peps.python.org/pep-0008/#documentation-strings)
-- [Naming Conventions](https://peps.python.org/pep-0008/#naming-conventions)
-  - [Overriding Principle](https://peps.python.org/pep-0008/#overriding-principle)
-  - [Descriptive: Naming Styles](https://peps.python.org/pep-0008/#descriptive-naming-styles)
-  - [Prescriptive: Naming Conventions](https://peps.python.org/pep-0008/#prescriptive-naming-conventions)
-  - [Names to Avoid](https://peps.python.org/pep-0008/#names-to-avoid)
-  - [ASCII Compatibility](https://peps.python.org/pep-0008/#ascii-compatibility)
-  - [Package and Module Names](https://peps.python.org/pep-0008/#package-and-module-names)
-  - [Class Names](https://peps.python.org/pep-0008/#class-names)
-  - [Type Variable Names](https://peps.python.org/pep-0008/#type-variable-names)
-  - [Exception Names](https://peps.python.org/pep-0008/#exception-names)
-  - [Global Variable Names](https://peps.python.org/pep-0008/#global-variable-names)
-  - [Function and Variable Names](https://peps.python.org/pep-0008/#function-and-variable-names)
-  - [Function and Method Arguments](https://peps.python.org/pep-0008/#function-and-method-arguments)
-  - [Method Names and Instance Variables](https://peps.python.org/pep-0008/#method-names-and-instance-variables)
-  - [Constants](https://peps.python.org/pep-0008/#constants)
-  - [Designing for Inheritance](https://peps.python.org/pep-0008/#designing-for-inheritance)
-  - [Public and Internal Interfaces](https://peps.python.org/pep-0008/#public-and-internal-interfaces)
-- [Programming Recommendations](https://peps.python.org/pep-0008/#programming-recommendations)
-  - [Function Annotations](https://peps.python.org/pep-0008/#function-annotations)
-  - [Variable Annotations](https://peps.python.org/pep-0008/#variable-annotations)
-- [References](https://peps.python.org/pep-0008/#references)
-- [Copyright](https://peps.python.org/pep-0008/#copyright)
-
-</details>
+- [Introduction](#introduction)
+- [A Foolish Consistency is the Hobgoblin of Little Minds](#a-foolish-consistency-is-the-hobgoblin-of-little-minds)
+- [Code Lay-out](#code-lay-out)
+  - [Indentation](#indentation)
+  - [Tabs or Spaces?](#tabs-or-spaces)
+  - [Maximum Line Length](#maximum-line-length)
+  - [Should a Line Break Before or After a Binary Operator?](#should-a-line-break-before-or-after-a-binary-operator)
+  - [Blank Lines](#blank-lines)
+  - [Source File Encoding](#source-file-encoding)
+  - [Imports](#imports)
+  - [Module Level Dunder Names](#module-level-dunder-names)
+- [String Quotes](#string-quotes)
+- [Whitespace in Expressions and Statements](#whitespace-in-expressions-and-statements)
+  - [Pet Peeves](#pet-peeves)
+  - [Other Recommendations](#other-recommendations)
+- [When to Use Trailing Commas](#when-to-use-trailing-commas)
+- [Comments](#comments)
+  - [Block Comments](#block-comments)
+  - [Inline Comments](#inline-comments)
+  - [Documentation Strings](#documentation-strings)
+- [Naming Conventions](#naming-conventions)
+  - [Overriding Principle](#overriding-principle)
+  - [Descriptive: Naming Styles](#descriptive-naming-styles)
+  - [Prescriptive: Naming Conventions](#prescriptive-naming-conventions)
+  - [Names to Avoid](#names-to-avoid)
+  - [ASCII Compatibility](#ascii-compatibility)
+  - [Package and Module Names](#package-and-module-names)
+  - [Class Names](#class-names)
+  - [Type Variable Names](#type-variable-names)
+  - [Exception Names](#exception-names)
+  - [Global Variable Names](#global-variable-names)
+  - [Function and Variable Names](#function-and-variable-names)
+  - [Function and Method Arguments](#function-and-method-arguments)
+  - [Method Names and Instance Variables](#method-names-and-instance-variables)
+  - [Constants](#constants)
+  - [Designing for Inheritance](#designing-for-inheritance)
+  - [Public and Internal Interfaces](#public-and-internal-interfaces)
+- [Programming Recommendations](#programming-recommendations)
+  - [Function Annotations](#function-annotations)
+  - [Variable Annotations](#variable-annotations)
+- [References](#references)
+- [Copyright](#copyright)
 
 ## Introduction
 
 This document gives coding conventions for the Python code comprising the standard library in the main Python distribution. Please see the companion informational PEP describing [style guidelines for the C code in the C implementation of Python](https://peps.python.org/pep-0007/ "PEP 7 – Style Guide for C Code").
 
-This document and [PEP 257](https://peps.python.org/pep-0257/ "PEP 257 – Docstring Conventions") (Docstring Conventions) were adapted from Guido’s original Python Style Guide essay, with some additions from Barry’s style guide [\[2\]](https://peps.python.org/pep-0008/#id6).
+This document and [PEP 257](https://peps.python.org/pep-0257/ "PEP 257 – Docstring Conventions") (Docstring Conventions) were adapted from Guido’s original Python Style Guide essay, with some additions from Barry’s style guide [\[2\]](#id6).
 
 This style guide evolves over time as additional conventions are identified and past conventions are rendered obsolete by changes in the language itself.
 
@@ -93,7 +100,7 @@ Some other good reasons to ignore a particular guideline:
 
 Use 4 spaces per indentation level.
 
-Continuation lines should align wrapped elements either vertically using Python’s implicit line joining inside parentheses, brackets and braces, or using a *hanging indent* [\[1\]](https://peps.python.org/pep-0008/#fn-hi). When using a hanging indent the following should be considered; there should be no arguments on the first line and further indentation should be used to clearly distinguish itself as a continuation line:
+Continuation lines should align wrapped elements either vertically using Python’s implicit line joining inside parentheses, brackets and braces, or using a *hanging indent* [\[1\]](#fn-hi). When using a hanging indent the following should be considered; there should be no arguments on the first line and further indentation should be used to clearly distinguish itself as a continuation line:
 
 ```text
 # Correct:
@@ -220,7 +227,7 @@ with open('/path/to/some/file/you/want/to/read') as file_1, \
     file_2.write(file_1.read())
 ```
 
-(See the previous discussion on [multiline if-statements](https://peps.python.org/pep-0008/#multiline-if-statements) for further thoughts on the indentation of such multiline `with`-statements.)
+(See the previous discussion on [multiline if-statements](#multiline-if-statements) for further thoughts on the indentation of such multiline `with`-statements.)
 
 Another such case is with `assert` statements.
 
@@ -240,7 +247,7 @@ income = (gross_wages +
           student_loan_interest)
 ```
 
-To solve this readability problem, mathematicians and their publishers follow the opposite convention. Donald Knuth explains the traditional rule in his *Computers and Typesetting* series: “Although formulas within a paragraph always break after binary operations and relations, displayed formulas always break before binary operations” [\[3\]](https://peps.python.org/pep-0008/#id7).
+To solve this readability problem, mathematicians and their publishers follow the opposite convention. Donald Knuth explains the traditional rule in his *Computers and Typesetting* series: “Although formulas within a paragraph always break after binary operations and relations, displayed formulas always break before binary operations” [\[3\]](#id7).
 
 Following the tradition from mathematics usually results in more readable code:
 
@@ -474,7 +481,7 @@ Avoid extraneous whitespace in the following situations:
   hypot2 = x * x + y * y
   c = (a + b) * (a - b)
   ```
-- Function annotations should use the normal rules for colons and always have spaces around the `->` arrow if present. (See [Function Annotations](https://peps.python.org/pep-0008/#function-annotations) below for more about function annotations.):
+- Function annotations should use the normal rules for colons and always have spaces around the `->` arrow if present. (See [Function Annotations](#function-annotations) below for more about function annotations.):
 
   ```text
   # Correct:
@@ -586,6 +593,63 @@ FILES = ['setup.cfg', 'tox.ini',]
 initialize(FILES, error=True,)
 ```
 
+## Comments
+
+Comments that contradict the code are worse than no comments. Always make a priority of keeping the comments up-to-date when the code changes!
+
+Comments should be complete sentences. The first word should be capitalized, unless it is an identifier that begins with a lower case letter (never alter the case of identifiers!).
+
+Block comments generally consist of one or more paragraphs built out of complete sentences, with each sentence ending in a period.
+
+You should use one or two spaces after a sentence-ending period in multi-sentence comments, except after the final sentence.
+
+Ensure that your comments are clear and easily understandable to other speakers of the language you are writing in.
+
+Python coders from non-English speaking countries: please write your comments in English, unless you are 120% sure that the code will never be read by people who don’t speak your language.
+
+### Block Comments
+
+Block comments generally apply to some (or all) code that follows them, and are indented to the same level as that code. Each line of a block comment starts with a `#` and a single space (unless it is indented text inside the comment).
+
+Paragraphs inside a block comment are separated by a line containing a single `#`.
+
+### Inline Comments
+
+Use inline comments sparingly.
+
+An inline comment is a comment on the same line as a statement. Inline comments should be separated by at least two spaces from the statement. They should start with a # and a single space.
+
+Inline comments are unnecessary and in fact distracting if they state the obvious. Don’t do this:
+
+```text
+x = x + 1                 # Increment x
+```
+
+But sometimes, this is useful:
+
+```text
+x = x + 1                 # Compensate for border
+```
+
+### Documentation Strings
+
+Conventions for writing good documentation strings (a.k.a. “docstrings”) are immortalized in [PEP 257](https://peps.python.org/pep-0257/ "PEP 257 – Docstring Conventions").
+
+- Write docstrings for all public modules, functions, classes, and methods. Docstrings are not necessary for non-public methods, but you should have a comment that describes what the method does. This comment should appear after the `def` line.
+- [PEP 257](https://peps.python.org/pep-0257/ "PEP 257 – Docstring Conventions") describes good docstring conventions. Note that most importantly, the `"""` that ends a multiline docstring should be on a line by itself:
+
+  ```text
+  """Return a foobang
+
+  Optional plotz says to frobnicate the bizbaz first.
+  """
+  ```
+- For one liner docstrings, please keep the closing `"""` on the same line:
+
+  ```text
+  """Return an ex-parrot."""
+  ```
+
 ## Naming Conventions
 
 The naming conventions of Python’s library are a bit of a mess, so we’ll never get this completely consistent – nevertheless, here are the currently recommended naming standards. New modules and packages (including third party frameworks) should be written to these standards, but where an existing library has a different style, internal consistency is preferred.
@@ -606,7 +670,7 @@ The following naming styles are commonly distinguished:
 - `lower_case_with_underscores`
 - `UPPERCASE`
 - `UPPER_CASE_WITH_UNDERSCORES`
-- `CapitalizedWords` (or CapWords, or CamelCase – so named because of the bumpy look of its letters [\[4\]](https://peps.python.org/pep-0008/#id8)). This is also sometimes known as StudlyCaps.
+- `CapitalizedWords` (or CapWords, or CamelCase – so named because of the bumpy look of its letters [\[4\]](#id8)). This is also sometimes known as StudlyCaps.
 
   Note: When using acronyms in CapWords, capitalize all the letters of the acronym. Thus HTTPServerError is better than HttpServerError.
 - `mixedCase` (differs from CapitalizedWords by initial lowercase character!)
@@ -936,7 +1000,7 @@ With the acceptance of [PEP 484](https://peps.python.org/pep-0484/ "PEP 484 – 
   # type: ignore
   ``` near the top of the file; this tells type checkers to ignore all annotations. (More fine-grained ways of disabling complaints from type checkers can be found in [PEP 484](https://peps.python.org/pep-0484/ "PEP 484 – Type Hints").)
 - Like linters, type checkers are optional, separate tools. Python interpreters by default should not issue any messages due to type checking and should not alter their behavior based on annotations.
-- Users who don’t want to use type checkers are free to ignore them. However, it is expected that users of third party library packages may want to run type checkers over those packages. For this purpose [PEP 484](https://peps.python.org/pep-0484/ "PEP 484 – Type Hints") recommends the use of stub files: .pyi files that are read by the type checker in preference of the corresponding .py files. Stub files can be distributed with a library, or separately (with the library author’s permission) through the typeshed repo [\[5\]](https://peps.python.org/pep-0008/#id9).
+- Users who don’t want to use type checkers are free to ignore them. However, it is expected that users of third party library packages may want to run type checkers over those packages. For this purpose [PEP 484](https://peps.python.org/pep-0484/ "PEP 484 – Type Hints") recommends the use of stub files: .pyi files that are read by the type checker in preference of the corresponding .py files. Stub files can be distributed with a library, or separately (with the library author’s permission) through the typeshed repo [\[5\]](#id9).
 
 ### Variable Annotations
 

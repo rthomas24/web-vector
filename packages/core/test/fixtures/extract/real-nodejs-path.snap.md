@@ -1,5 +1,9 @@
 ## Path
 
+**Source Code:** [lib/path.js](https://github.com/nodejs/node/blob/main/lib/path.js)
+
+[Stability: 2](https://nodejs.org/api/documentation.html#stability-index) - Stable
+
 The `node:path` module provides utilities for working with file and directory paths. It can be accessed using:
 
 ```cjs
@@ -26,7 +30,7 @@ path.basename('C:\\temp\\myfile.html');
 // Returns: 'myfile.html'
 ```
 
-To achieve consistent results when working with Windows file paths on any operating system, use [`path.win32`](https://nodejs.org/api/path.html#pathwin32):
+To achieve consistent results when working with Windows file paths on any operating system, use [`path.win32`](#pathwin32):
 
 On POSIX and Windows:
 
@@ -35,7 +39,7 @@ path.win32.basename('C:\\temp\\myfile.html');
 // Returns: 'myfile.html'
 ```
 
-To achieve consistent results when working with POSIX file paths on any operating system, use [`path.posix`](https://nodejs.org/api/path.html#pathposix):
+To achieve consistent results when working with POSIX file paths on any operating system, use [`path.posix`](#pathposix):
 
 On POSIX and Windows:
 
@@ -50,21 +54,17 @@ On Windows Node.js follows the concept of per-drive working directory. This beha
 
 Added in: v0.1.25
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
-| v6.0.0 | Passing a non-string as the <code>path</code> argument will throw now. |
-
-</details>
+| v6.0.0 | Passing a non-string as the `path` argument will throw now. |
 
 - `path`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 - `suffix`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type) An optional suffix to remove
 - Returns: [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 
-The `path.basename()` method returns the last portion of a `path`, similar to the Unix `basename` command. Trailing [directory separators](https://nodejs.org/api/path.html#pathsep) are ignored.
+The `path.basename()` method returns the last portion of a `path`, similar to the Unix `basename` command. Trailing [directory separators](#pathsep) are ignored.
 
 ```js
 path.basename('/foo/bar/baz/asdf/quux.html');
@@ -121,20 +121,16 @@ process.env.PATH.split(path.delimiter);
 
 Added in: v0.1.16
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
-| v6.0.0 | Passing a non-string as the <code>path</code> argument will throw now. |
-
-</details>
+| v6.0.0 | Passing a non-string as the `path` argument will throw now. |
 
 - `path`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 - Returns: [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 
-The `path.dirname()` method returns the directory name of a `path`, similar to the Unix `dirname` command. Trailing directory separators are ignored, see [`path.sep`](https://nodejs.org/api/path.html#pathsep).
+The `path.dirname()` method returns the directory name of a `path`, similar to the Unix `dirname` command. Trailing directory separators are ignored, see [`path.sep`](#pathsep).
 
 ```js
 path.dirname('/foo/bar/baz/asdf/quux');
@@ -147,15 +143,11 @@ A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if
 
 Added in: v0.1.25
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
-| v6.0.0 | Passing a non-string as the <code>path</code> argument will throw now. |
-
-</details>
+| v6.0.0 | Passing a non-string as the `path` argument will throw now. |
 
 - `path`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 - Returns: [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
@@ -188,15 +180,11 @@ A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if
 
 Added in: v0.11.15
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
-| v19.0.0 | The dot will be added if it is not specified in <code>ext</code>. |
-
-</details>
+| v19.0.0 | The dot will be added if it is not specified in `ext`. |
 
 - `pathObject`  [`<Object>`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object) Any JavaScript object having the following properties:
   - `dir`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
@@ -206,7 +194,7 @@ Added in: v0.11.15
   - `ext`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 - Returns: [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 
-The `path.format()` method returns a path string from an object. This is the opposite of [`path.parse()`](https://nodejs.org/api/path.html#pathparsepath).
+The `path.format()` method returns a path string from an object. This is the opposite of [`path.parse()`](#pathparsepath).
 
 When providing properties to the `pathObject` remember that there are combinations where one property has priority over another:
 
@@ -267,15 +255,11 @@ path.format({
 
 Added in: v22.5.0, v20.17.0
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
 | v24.8.0, v22.20.0 | Marking the API stable. |
-
-</details>
 
 - `path`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type) The path to glob-match against.
 - `pattern`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type) The glob to check the path against.
@@ -393,7 +377,7 @@ Added in: v0.11.15
 - `path`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 - Returns: [`<Object>`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)
 
-The `path.parse()` method returns an object whose properties represent significant elements of the `path`. Trailing directory separators are ignored, see [`path.sep`](https://nodejs.org/api/path.html#pathsep).
+The `path.parse()` method returns an object whose properties represent significant elements of the `path`. Trailing directory separators are ignored, see [`path.sep`](#pathsep).
 
 The returned object will have the following properties:
 
@@ -453,15 +437,11 @@ A [`TypeError`](https://nodejs.org/api/errors.html#class-typeerror) is thrown if
 
 Added in: v0.11.15
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
-| v15.3.0 | Exposed as <code>require('path/posix')</code>. |
-
-</details>
+| v15.3.0 | Exposed as `require('path/posix')`. |
 
 - Type: [`<Object>`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)
 
@@ -473,15 +453,11 @@ The API is accessible via `require('node:path').posix` or `require('node:path/po
 
 Added in: v0.5.0
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
 | v6.8.0 | On Windows, the leading slashes for UNC paths are now included in the return value. |
-
-</details>
 
 - `from`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
 - `to`  [`<string>`](https://developer.mozilla.org/docs/Web/JavaScript/Data_structures#string_type)
@@ -582,15 +558,11 @@ This method is meaningful only on Windows systems. On POSIX systems, the method 
 
 Added in: v0.11.15
 
-<details>
-
-<summary>History</summary>
+**History**
 
 | Version | Changes |
 | --- | --- |
-| v15.3.0 | Exposed as <code>require('path/win32')</code>. |
-
-</details>
+| v15.3.0 | Exposed as `require('path/win32')`. |
 
 - Type: [`<Object>`](https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Object)
 
