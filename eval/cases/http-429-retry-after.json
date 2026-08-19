@@ -1,0 +1,21 @@
+{
+  "id": "http-429-retry-after",
+  "query": "HTTP 429 Too Many Requests Retry-After",
+  "urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/503",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/403",
+    "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/500"
+  ],
+  "relevant": {
+    "urls": [
+      "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/429",
+      "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After"
+    ],
+    "phrases": [
+      "too many requests",
+      "retry-after"
+    ]
+  }
+}

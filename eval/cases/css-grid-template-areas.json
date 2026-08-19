@@ -1,0 +1,19 @@
+{
+  "id": "css-grid-template-areas",
+  "query": "CSS grid-template-areas named areas dot empty cell",
+  "urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-areas",
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-columns",
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Flexible_box_layout",
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Grid_layout",
+    "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-area"
+  ],
+  "relevant": {
+    "urls": [
+      "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-areas"
+    ],
+    "phrases": [
+      "grid-template-areas"
+    ]
+  }
+}

@@ -134,8 +134,8 @@ export const retrievalConfigSchema = z.object({
       variant: z.enum(['okapi', 'bmx']).default('okapi'),
       k1: z.number().min(0).default(1.2),
       b: z.number().min(0).max(1).default(0.75),
-      /** BM25+ lower bound (0 = off). */
-      delta: z.number().min(0).default(0),
+      /** BM25+ lower bound so long chunks containing a rare term aren't outscored by short ones lacking it (0 = off). */
+      delta: z.number().min(0).default(0.5),
       /** Bonus for covering more distinct query terms (0 = off; ignored for `bmx`, which has its own). */
       coverageWeight: z.number().min(0).default(0),
       /** Bonus when matched query terms co-occur in a tight window (0 = off). */
@@ -157,7 +157,7 @@ export const retrievalConfigSchema = z.object({
       variant: 'okapi',
       k1: 1.2,
       b: 0.75,
-      delta: 0,
+      delta: 0.5,
       coverageWeight: 0,
       proximityWeight: 0.3,
       fields: { title: 1, breadcrumb: 1.5, body: 1 },

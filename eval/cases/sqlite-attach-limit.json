@@ -1,0 +1,20 @@
+{
+  "id": "sqlite-attach-limit",
+  "query": "SQLite ATTACH DATABASE maximum number of attached databases",
+  "urls": [
+    "https://www.sqlite.org/lang_attach.html",
+    "https://www.sqlite.org/limits.html",
+    "https://www.sqlite.org/lang_createtable.html",
+    "https://www.sqlite.org/wal.html"
+  ],
+  "relevant": {
+    "urls": [
+      "https://www.sqlite.org/limits.html",
+      "https://www.sqlite.org/lang_attach.html"
+    ],
+    "phrases": [
+      "sqlite_max_attached",
+      "attached databases"
+    ]
+  }
+}

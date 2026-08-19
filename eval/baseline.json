@@ -1,16 +1,28 @@
 {
   "lexical": {
     "summary": {
-      "cases": 20,
+      "cases": 32,
       "phraseHit": 1,
-      "phraseMrr": 0.9416666666666668,
+      "phraseMrr": 0.9270833333333334,
       "urlRecall": 1,
-      "precision": 0.49375,
-      "distinctDomains": 1.2,
-      "tokens": 2924,
-      "latencyMs": 1229.05
+      "precision": 0.51953125,
+      "distinctDomains": 1.15625,
+      "tokens": 2921.6875,
+      "latencyMs": 1572.4375
     },
     "results": {
+      "asyncio-run-in-executor": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.25,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3055,
+        "latencyMs": 936,
+        "invalidPhrases": [],
+        "failures": 0
+      },
       "attention-is-all-you-need": {
         "phraseHit": 1,
         "phraseMrr": 1,
@@ -19,7 +31,19 @@
         "distinctDomains": 2,
         "passages": 8,
         "tokens": 2988,
-        "latencyMs": 1161,
+        "latencyMs": 1048,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "bayes-theorem-terms": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.875,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3067,
+        "latencyMs": 1216,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -30,8 +54,8 @@
         "precision": 0.25,
         "distinctDomains": 1,
         "passages": 8,
-        "tokens": 3103,
-        "latencyMs": 723,
+        "tokens": 3219,
+        "latencyMs": 712,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -43,7 +67,19 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2908,
-        "latencyMs": 1029,
+        "latencyMs": 1140,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "css-grid-template-areas": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.5,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 2522,
+        "latencyMs": 369,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -55,7 +91,19 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2170,
-        "latencyMs": 255,
+        "latencyMs": 217,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "http-429-retry-after": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.75,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 1802,
+        "latencyMs": 133,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -67,7 +115,7 @@
         "distinctDomains": 1,
         "passages": 6,
         "tokens": 2287,
-        "latencyMs": 3406,
+        "latencyMs": 3458,
         "invalidPhrases": [],
         "failures": 1
       },
@@ -78,8 +126,20 @@
         "precision": 0.5,
         "distinctDomains": 1,
         "passages": 8,
-        "tokens": 3206,
-        "latencyMs": 1148,
+        "tokens": 3195,
+        "latencyMs": 1128,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "java-island-not-language": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.25,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3077,
+        "latencyMs": 2679,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -91,7 +151,19 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2855,
-        "latencyMs": 606,
+        "latencyMs": 400,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "js-flatmap-depth": {
+        "phraseHit": 1,
+        "phraseMrr": 0.3333333333333333,
+        "urlRecall": 1,
+        "precision": 0.75,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 2741,
+        "latencyMs": 370,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -102,8 +174,8 @@
         "precision": 0.375,
         "distinctDomains": 1,
         "passages": 8,
-        "tokens": 3143,
-        "latencyMs": 949,
+        "tokens": 3113,
+        "latencyMs": 1013,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -114,8 +186,20 @@
         "precision": 0.5,
         "distinctDomains": 1,
         "passages": 8,
-        "tokens": 2629,
-        "latencyMs": 954,
+        "tokens": 2710,
+        "latencyMs": 916,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "node-fs-readfile-encoding": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.75,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3144,
+        "latencyMs": 2677,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -127,7 +211,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2946,
-        "latencyMs": 1503,
+        "latencyMs": 1466,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -139,7 +223,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2662,
-        "latencyMs": 619,
+        "latencyMs": 376,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -151,7 +235,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3228,
-        "latencyMs": 1067,
+        "latencyMs": 1195,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -163,7 +247,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2993,
-        "latencyMs": 1445,
+        "latencyMs": 1532,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -175,7 +259,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3193,
-        "latencyMs": 1064,
+        "latencyMs": 1080,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -187,7 +271,19 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 2815,
-        "latencyMs": 5117,
+        "latencyMs": 8609,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "rfc9110-safe-idempotent": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.5,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3015,
+        "latencyMs": 8832,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -198,8 +294,8 @@
         "precision": 0.5,
         "distinctDomains": 2,
         "passages": 8,
-        "tokens": 3002,
-        "latencyMs": 701,
+        "tokens": 3035,
+        "latencyMs": 712,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -211,7 +307,19 @@
         "distinctDomains": 2,
         "passages": 8,
         "tokens": 2755,
-        "latencyMs": 472,
+        "latencyMs": 443,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "sqlite-attach-limit": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.5,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 2938,
+        "latencyMs": 99,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -223,7 +331,7 @@
         "distinctDomains": 2,
         "passages": 8,
         "tokens": 3241,
-        "latencyMs": 460,
+        "latencyMs": 381,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -235,7 +343,43 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3226,
-        "latencyMs": 631,
+        "latencyMs": 658,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "tcp-vs-udp-aspects": {
+        "phraseHit": 1,
+        "phraseMrr": 0.5,
+        "urlRecall": 1,
+        "precision": 0.375,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3249,
+        "latencyMs": 2063,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "temporal-api-date-replacement": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.375,
+        "distinctDomains": 2,
+        "passages": 8,
+        "tokens": 3214,
+        "latencyMs": 1468,
+        "invalidPhrases": [],
+        "failures": 0
+      },
+      "unicode-max-code-point": {
+        "phraseHit": 1,
+        "phraseMrr": 1,
+        "urlRecall": 1,
+        "precision": 0.875,
+        "distinctDomains": 1,
+        "passages": 8,
+        "tokens": 3001,
+        "latencyMs": 1536,
         "invalidPhrases": [],
         "failures": 0
       },
@@ -247,7 +391,7 @@
         "distinctDomains": 1,
         "passages": 8,
         "tokens": 3130,
-        "latencyMs": 1271,
+        "latencyMs": 1456,
         "invalidPhrases": [],
         "failures": 0
       }

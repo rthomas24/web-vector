@@ -1,0 +1,25 @@
+{
+  "id": "tcp-vs-udp-aspects",
+  "query": "TCP vs UDP differences",
+  "relatedQueries": [
+    "UDP connectionless no handshake",
+    "TCP three-way handshake reliable delivery"
+  ],
+  "urls": [
+    "https://en.wikipedia.org/wiki/Transmission_Control_Protocol",
+    "https://en.wikipedia.org/wiki/User_Datagram_Protocol",
+    "https://en.wikipedia.org/wiki/Internet_Protocol",
+    "https://en.wikipedia.org/wiki/Hypertext_Transfer_Protocol",
+    "https://en.wikipedia.org/wiki/QUIC"
+  ],
+  "relevant": {
+    "urls": [
+      "https://en.wikipedia.org/wiki/Transmission_Control_Protocol",
+      "https://en.wikipedia.org/wiki/User_Datagram_Protocol"
+    ],
+    "phrases": [
+      "connectionless",
+      "three-way handshake"
+    ]
+  }
+}

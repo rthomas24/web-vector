@@ -1,0 +1,18 @@
+{
+  "id": "temporal-api-date-replacement",
+  "query": "JavaScript Temporal API replacement for Date time zones",
+  "urls": [
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Temporal",
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date",
+    "https://en.wikipedia.org/wiki/JavaScript",
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/DateTimeFormat"
+  ],
+  "relevant": {
+    "urls": [
+      "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Temporal"
+    ],
+    "phrases": [
+      "temporal"
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "node-fs-readfile-encoding",
+  "query": "fs.readFile encoding option utf8 string vs buffer",
+  "urls": [
+    "https://nodejs.org/api/fs.html",
+    "https://nodejs.org/api/buffer.html",
+    "https://nodejs.org/api/path.html",
+    "https://nodejs.org/api/stream.html"
+  ],
+  "relevant": {
+    "urls": [
+      "https://nodejs.org/api/fs.html"
+    ],
+    "phrases": [
+      "fs.readfile",
+      "encoding"
+    ]
+  }
+}

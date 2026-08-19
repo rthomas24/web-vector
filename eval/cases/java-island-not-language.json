@@ -1,0 +1,19 @@
+{
+  "id": "java-island-not-language",
+  "query": "Java island volcanoes population Indonesia",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Java_(programming_language)",
+    "https://en.wikipedia.org/wiki/Java",
+    "https://en.wikipedia.org/wiki/JavaScript",
+    "https://en.wikipedia.org/wiki/Java_(software_platform)",
+    "https://en.wikipedia.org/wiki/Indonesia"
+  ],
+  "relevant": {
+    "urls": [
+      "https://en.wikipedia.org/wiki/Java"
+    ],
+    "phrases": [
+      "volcan"
+    ]
+  }
+}

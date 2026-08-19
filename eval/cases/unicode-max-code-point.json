@@ -1,0 +1,21 @@
+{
+  "id": "unicode-max-code-point",
+  "query": "Unicode maximum code point value 10FFFF planes",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Unicode",
+    "https://en.wikipedia.org/wiki/UTF-8",
+    "https://en.wikipedia.org/wiki/UTF-16",
+    "https://en.wikipedia.org/wiki/Plane_(Unicode)",
+    "https://en.wikipedia.org/wiki/Code_point"
+  ],
+  "relevant": {
+    "urls": [
+      "https://en.wikipedia.org/wiki/Plane_(Unicode)",
+      "https://en.wikipedia.org/wiki/Code_point",
+      "https://en.wikipedia.org/wiki/Unicode"
+    ],
+    "phrases": [
+      "10ffff"
+    ]
+  }
+}

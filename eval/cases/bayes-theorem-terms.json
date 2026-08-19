@@ -1,0 +1,21 @@
+{
+  "id": "bayes-theorem-terms",
+  "query": "Bayes theorem posterior prior likelihood",
+  "urls": [
+    "https://en.wikipedia.org/wiki/Bayes%27_theorem",
+    "https://en.wikipedia.org/wiki/Conditional_probability",
+    "https://en.wikipedia.org/wiki/Bayesian_inference",
+    "https://en.wikipedia.org/wiki/Probability_theory",
+    "https://en.wikipedia.org/wiki/Naive_Bayes_classifier"
+  ],
+  "relevant": {
+    "urls": [
+      "https://en.wikipedia.org/wiki/Bayes%27_theorem",
+      "https://en.wikipedia.org/wiki/Bayesian_inference"
+    ],
+    "phrases": [
+      "posterior",
+      "likelihood"
+    ]
+  }
+}

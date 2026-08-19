@@ -1,0 +1,17 @@
+{
+  "id": "rfc9110-safe-idempotent",
+  "query": "RFC 9110 which HTTP methods are safe and idempotent",
+  "urls": [
+    "https://www.rfc-editor.org/rfc/rfc9110.html",
+    "https://www.rfc-editor.org/rfc/rfc9111.html",
+    "https://www.rfc-editor.org/rfc/rfc9112.html"
+  ],
+  "relevant": {
+    "urls": [
+      "https://www.rfc-editor.org/rfc/rfc9110.html"
+    ],
+    "phrases": [
+      "idempotent"
+    ]
+  }
+}
