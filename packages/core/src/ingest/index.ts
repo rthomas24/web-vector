@@ -6,6 +6,7 @@ import { sha256 } from '../util/hash.js';
 import { LRU } from '../util/lru.js';
 import { canonicalizeUrl } from '../util/url.js';
 import { type FetchedResource, Fetcher, type FetcherOptions } from './fetcher.js';
+import { isServedMarkdown, parseServedMarkdown } from './markdown-clean.js';
 import {
   cleanField,
   createParsers,
@@ -17,7 +18,14 @@ import {
 export type { ChunkerOptions, TextChunk, TokenCounter } from './chunker.js';
 export { approxTokens, chunkMarkdown, loadTokenCounter } from './chunker.js';
 export type { FetchedResource, FetcherOptions } from './fetcher.js';
-export { Fetcher, parseContentType } from './fetcher.js';
+export { acceptHeaderFor, Fetcher, parseContentType } from './fetcher.js';
+export type { CleanedMarkdown, ServedMarkdownContext } from './markdown-clean.js';
+export {
+  cleanServedMarkdown,
+  isServedMarkdown,
+  parseFrontmatter,
+  parseServedMarkdown,
+} from './markdown-clean.js';
 export type { HtmlParserOptions } from './parsers.js';
 export {
   createParsers,
@@ -153,9 +161,13 @@ export async function parseResource(
   opts: Pick<IngestOptions, 'parsers' | 'cache' | 'logger'>,
 ): Promise<Omit<IngestOutcome, 'ms'>> {
   const parsers = opts.parsers ?? createParsers();
-  const parser = selectParser(parsers, res.contentType, res.finalUrl, res.bytes);
   const url = res.url;
-  if (!parser) {
+  // Served markdown (negotiated `text/markdown` or a .md file): skip Readability, run the cleaner.
+  const served = isServedMarkdown(res.contentType, res.finalUrl);
+  const parser = served
+    ? undefined
+    : selectParser(parsers, res.contentType, res.finalUrl, res.bytes);
+  if (!parser && !served) {
     return {
       url,
       ok: false,
@@ -168,11 +180,17 @@ export async function parseResource(
     };
   }
   try {
-    const doc = await parser.parse(res.bytes, {
-      url: res.finalUrl,
-      contentType: res.contentType,
-      charset: res.charset,
-    });
+    const doc = served
+      ? parseServedMarkdown(res.bytes, {
+          url: res.finalUrl,
+          charset: res.charset,
+          headers: res.headers,
+        })
+      : await (parser as ContentParser).parse(res.bytes, {
+          url: res.finalUrl,
+          contentType: res.contentType,
+          charset: res.charset,
+        });
     if (!doc) {
       return {
         url,

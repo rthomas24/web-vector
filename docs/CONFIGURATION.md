@@ -88,6 +88,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `retries` | `2` | — | on network errors / 408 / 429 / 5xx |
 | `allowPrivateNetworks` | `false` | `WEBVECTOR_ALLOW_PRIVATE_NETWORKS` | disables the SSRF guard — only for trusted local setups |
 | `parsers` | `[html, pdf, text]` | — | |
+| `acceptMarkdown` | `prefer` | — | `prefer` sends `Accept: text/markdown, text/html;q=0.9, …` so sites that serve markdown to agents (Cloudflare "Markdown for Agents", Mintlify, Vercel docs) return 10–100× smaller bodies; `accept` lists markdown after HTML; `off` never asks. Served markdown skips Readability and goes through a cleaner that lifts frontmatter (`title`/`description`/`date`), drops MDX `import`/`export`/JSX and `[Skip to content]` links, and records `x-markdown-tokens` / `content-signal` into `doc.metadata` (`parser: 'server-markdown'`). The body is treated as untrusted text like any page. |
 | `chunkSize` / `chunkOverlap` | `480` / `60` | `WEBVECTOR_CHUNK_SIZE` / `WEBVECTOR_CHUNK_OVERLAP` | tokens |
 | `maxChunksPerPage` / `minChunkChars` | `200` / `100` | — | |
 | `useProviderContent` | `true` | — | use page text returned by Tavily/Exa instead of fetching |

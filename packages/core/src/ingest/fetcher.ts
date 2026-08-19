@@ -29,6 +29,12 @@ export interface FetcherOptions {
   headers?: Record<string, string>;
   /** Custom DNS resolver (tests). */
   resolve?: (hostname: string) => Promise<string[]>;
+  /**
+   * Content negotiation for served markdown (Cloudflare "Markdown for Agents", Mintlify, Vercel…):
+   * `prefer` (default) asks for `text/markdown` first, `accept` lists it after HTML, `off` never
+   * advertises it. Served markdown is 10–100× smaller than the HTML and skips Readability.
+   */
+  acceptMarkdown?: 'prefer' | 'accept' | 'off';
 }
 
 export interface FetchedResource {
@@ -44,6 +50,19 @@ export interface FetchedResource {
 }
 
 const RETRY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+const ACCEPT_HEADERS = {
+  prefer:
+    'text/markdown, text/html;q=0.9, application/xhtml+xml;q=0.9, application/pdf;q=0.8, text/plain;q=0.7, */*;q=0.5',
+  accept:
+    'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.9,text/plain;q=0.8,text/markdown;q=0.8,*/*;q=0.5',
+  off: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.9,text/plain;q=0.8,*/*;q=0.5',
+} as const;
+
+/** The `Accept` header sent for page fetches under a given `acceptMarkdown` mode. */
+export function acceptHeaderFor(mode: FetcherOptions['acceptMarkdown'] = 'prefer'): string {
+  return ACCEPT_HEADERS[mode] ?? ACCEPT_HEADERS.prefer;
+}
 
 /**
  * Polite, safe HTTP fetcher built on global fetch:
@@ -147,8 +166,7 @@ export class Fetcher {
           redirect: 'manual',
           headers: {
             'user-agent': this.opts.userAgent,
-            accept:
-              'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.9,text/plain;q=0.8,text/markdown;q=0.8,*/*;q=0.5',
+            accept: acceptHeaderFor(this.opts.acceptMarkdown),
             'accept-language': 'en-US,en;q=0.9,*;q=0.5',
             'accept-encoding': 'gzip, deflate, br',
             ...(sameOrigin ? this.opts.headers : stripCredentialHeaders(this.opts.headers)),

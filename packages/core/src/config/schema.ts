@@ -219,6 +219,13 @@ export const ingestionConfigSchema = z.object({
   retries: z.number().int().min(0).max(5).default(2),
   allowPrivateNetworks: z.boolean().default(false),
   parsers: z.array(z.string()).default(['html', 'pdf', 'text']),
+  /**
+   * Content negotiation for served markdown (Cloudflare "Markdown for Agents", Mintlify, Vercel…):
+   * `prefer` asks for `text/markdown` first (measured 10–100× smaller bodies on docs sites),
+   * `accept` lists it after HTML, `off` never advertises it. Served markdown bypasses Readability
+   * and goes through the served-markdown cleaner (`parser: 'server-markdown'`).
+   */
+  acceptMarkdown: z.enum(['prefer', 'accept', 'off']).default('prefer'),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
