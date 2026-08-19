@@ -30,6 +30,7 @@ export const PROVIDER_URL_ENV: Record<string, string[]> = {
   chroma: ['CHROMA_URL'],
   qdrant: ['QDRANT_URL'],
   pgvector: ['PGVECTOR_URL', 'DATABASE_URL', 'POSTGRES_URL'],
+  sqlite: ['WEBVECTOR_SQLITE_STORE'],
 };
 
 export function envKeyFor(

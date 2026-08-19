@@ -322,6 +322,11 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
 
     const session = this.resolveSession(opts.sessionId, c);
     if (c.embedder) await session.store.init?.(c.dimensions, c.embedder.model);
+    if (!session.restored && c.sharedStore && !session.id.startsWith('ephemeral-')) {
+      const n = await c.sessions.restore(session);
+      if (n)
+        this.logger.debug(`session ${session.id}: restored ${n} chunk(s) from ${c.sharedStore.id}`);
+    }
 
     // ── 1. search ────────────────────────────────────────────────────────
     const ts = Date.now();

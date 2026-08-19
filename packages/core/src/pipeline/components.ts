@@ -14,6 +14,7 @@ import { createParsers } from '../ingest/parsers.js';
 import { createReranker, LlmReranker } from '../rerankers/index.js';
 import type { BM25Options } from '../retrieval/bm25.js';
 import { HeuristicExpander, LlmExpander } from '../retrieval/expansion.js';
+import { probeRuntime } from '../runtime.js';
 import { buildSearchStack, type FallbackSearchProvider } from '../search/index.js';
 import { createVectorStore } from '../stores/index.js';
 import { MemoryVectorStore } from '../stores/memory.js';
@@ -103,12 +104,17 @@ export async function buildComponents(
       logger.warn(
         `store.provider "${cfg.store.provider}" is ignored in lexical-only mode (no vectors to store).`,
       );
+    } else if (cfg.store.provider === 'sqlite' && !(await probeRuntime()).sqlite) {
+      logger.warn(
+        'store.provider "sqlite" needs node:sqlite (Node ≥ 22.13); falling back to the in-memory store.',
+      );
     } else {
       sharedStore = createVectorStore(cfg.store.provider, {
         url: cfg.store.url,
         apiKey: cfg.store.apiKey,
         collection: cfg.store.collection,
         options: cfg.store.options,
+        sessionTtlMs: cfg.store.sessionTtlMs,
         logger,
       });
     }
@@ -128,6 +134,8 @@ export async function buildComponents(
     sharedStore: !!sharedStore,
     storeFactory: () => sharedStore ?? new MemoryVectorStore(),
     bm25: bm25Options,
+    // Persistent mode: idle eviction drops in-memory state only; rows stay and are restored later.
+    retainOnEvict: (id) => cfg.store.mode === 'persistent' && id === 'persistent',
   });
 
   const fetcher = new Fetcher({ ...cfg.ingestion, fetch: fetchImpl, logger });

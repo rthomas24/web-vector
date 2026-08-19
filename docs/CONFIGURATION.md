@@ -47,11 +47,12 @@ Code-only: `embeddings.instance` (an `EmbeddingProvider`, e.g. from `webvector/a
 
 | key | default | env | notes |
 |---|---|---|---|
-| `provider` | `memory` | `WEBVECTOR_STORE_PROVIDER` | `memory` `chroma` `qdrant` `pgvector`; ignored in lexical mode |
-| `mode` | `ephemeral` | `WEBVECTOR_STORE_MODE` | `ephemeral` (per call) · `session` (reuse by `sessionId`, TTL) · `persistent` (external store) |
+| `provider` | `memory` | `WEBVECTOR_STORE_PROVIDER` | `memory` `sqlite` `chroma` `qdrant` `pgvector`; ignored in lexical mode. `sqlite` is the zero-dependency persistent store (see PROVIDERS.md) |
+| `mode` | `ephemeral` | `WEBVECTOR_STORE_MODE` | `ephemeral` (per call) · `session` (reuse by `sessionId`, TTL) · `persistent` (one shared session that survives restarts with `sqlite`/external stores) |
 | `collection` | `webvector` | `WEBVECTOR_STORE_COLLECTION` | table / collection name |
-| `url` / `apiKey` | — | `CHROMA_URL` `QDRANT_URL` `QDRANT_API_KEY` `DATABASE_URL` / `WEBVECTOR_STORE_URL` `WEBVECTOR_STORE_API_KEY` | |
-| `sessionTtlMs` | `1800000` (30 min) | `WEBVECTOR_SESSION_TTL_MS` | |
+| `url` / `apiKey` | — | `WEBVECTOR_SQLITE_STORE` `CHROMA_URL` `QDRANT_URL` `QDRANT_API_KEY` `DATABASE_URL` / `WEBVECTOR_STORE_URL` `WEBVECTOR_STORE_API_KEY` | for `sqlite`, `url` is a file path (default `~/.local/share/webvector/store.sqlite`, `XDG_DATA_HOME` respected) |
+| `sessionTtlMs` | `1800000` (30 min) | `WEBVECTOR_SESSION_TTL_MS` | idle sessions are dropped; persistent stores also expire their rows on disk (the `persistent` session is kept) |
+| `options.vec` | `false` | — | `sqlite` only: load the optional `sqlite-vec` extension and rank in SQL |
 | `maxSessions` | `100` | — | LRU |
 
 Code-only: `store.instance` (a `VectorStore`).

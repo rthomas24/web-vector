@@ -164,6 +164,13 @@ export interface VectorStore {
   capabilities(): VectorStoreCapabilities;
   /** Optional: number of stored chunks (memory store). */
   size?(): number | Promise<number>;
+  /** Optional: one chunk (with vector) by id — lets the pipeline reuse vectors for MMR. */
+  get?(id: string): Chunk | undefined;
+  /**
+   * Optional: chunks of a session (or all) without vectors. Persistent stores implement this so a
+   * session's BM25 side-index and chunk map can be rebuilt after a restart.
+   */
+  listChunks?(sessionId?: string): Promise<Chunk[]>;
 }
 
 // ─── Content parsing ─────────────────────────────────────────────────────────
