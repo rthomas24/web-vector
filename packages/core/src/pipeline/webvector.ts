@@ -153,6 +153,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       logger: this.logger,
       signal: opts.signal,
       fastPaths: this.config.ingestion.fastPaths,
+      archiveFallback: this.config.ingestion.archiveFallback,
     });
     if (!outcome.ok || !outcome.page) {
       const f = outcome.failure as Failure;
@@ -588,6 +589,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       logger: this.logger,
       signal,
       fastPaths: this.config.ingestion.fastPaths,
+      archiveFallback: this.config.ingestion.archiveFallback,
     });
     if (!outcome.ok || !outcome.page)
       return { failure: outcome.failure as Failure, ms: outcome.ms };

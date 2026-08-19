@@ -250,6 +250,14 @@ export const ingestionConfigSchema = z.object({
    * through robots.txt/SSRF/politeness; any failure falls back to the original URL.
    */
   fastPaths: z.union([z.boolean(), z.array(z.string())]).default(true),
+  /**
+   * Wayback Machine fallback (opt-in): `'blocked'` retries bot-walled (FETCH_BLOCKED_BOT),
+   * pay-walled (FETCH_PAYMENT_REQUIRED), 404/410 and needs-JS pages from web.archive.org via the
+   * availability API; `'always'` any fetch failure except robots/SSRF/content-signal refusals.
+   * ≈1 request/s process-wide, a 429 disables it for 10 min, never for `isAccessibleForFree:false`
+   * pages; archived documents carry `doc.fetchedFrom: 'archive'` and `doc.archivedAt`.
+   */
+  archiveFallback: z.union([z.literal(false), z.enum(['blocked', 'always'])]).default(false),
   chunkSize: z.number().int().min(64).max(4096).default(480),
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),

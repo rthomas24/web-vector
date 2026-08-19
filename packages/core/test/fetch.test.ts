@@ -13,7 +13,12 @@ import {
   stackExchangeSite,
 } from '../src/ingest/fast-paths.js';
 import { acceptHeaderFor, Fetcher, parseContentSignal } from '../src/ingest/fetcher.js';
-import { assessProviderContent, ingestUrl, parseResource } from '../src/ingest/index.js';
+import {
+  assessProviderContent,
+  ingestUrl,
+  parseResource,
+  resetArchiveFallbackState,
+} from '../src/ingest/index.js';
 import {
   cleanServedMarkdown,
   isServedMarkdown,
@@ -987,4 +992,153 @@ describe('provider-content quality gate', () => {
     await make(false).research('article text');
     expect(fetched).toBe(2);
   });
+});
+
+// ─── C15 Wayback fallback (opt-in) ───────────────────────────────────────────
+
+describe('archive fallback', () => {
+  const article = (t: string) =>
+    `<html><head><title>${t}</title></head><body><article><h1>${t}</h1><p>${'Archived article body text that is long enough to extract. '.repeat(12)}</p></article></body></html>`;
+  const availability = (ts: string | null) =>
+    HttpResponse.json(
+      ts
+        ? {
+            archived_snapshots: {
+              closest: {
+                available: true,
+                status: '200',
+                timestamp: ts,
+                url: `http://web.archive.org/web/${ts}/x`,
+              },
+            },
+          }
+        : { archived_snapshots: {} },
+    );
+
+  it("'blocked': bot-walled page is served from the Wayback snapshot, marked fetchedFrom/archivedAt", async () => {
+    resetArchiveFallbackState();
+    const calls: string[] = [];
+    server.use(
+      http.get(
+        'https://walled.example/post',
+        () =>
+          new HttpResponse('Just a moment...', {
+            status: 403,
+            headers: { 'cf-mitigated': 'challenge' },
+          }),
+      ),
+      http.get('https://archive.org/wayback/available', ({ request }) => {
+        calls.push(request.url);
+        return availability('20260115123045');
+      }),
+      http.get('https://web.archive.org/web/*', ({ request }) => {
+        calls.push(request.url);
+        return request.url ===
+          'https://web.archive.org/web/20260115123045id_/https://walled.example/post'
+          ? HttpResponse.html(article('Walled post'))
+          : new HttpResponse('nf', { status: 404 });
+      }),
+    );
+    const off = await ingestUrl('https://walled.example/post', { fetcher: fetcher() });
+    expect(off.failure?.code).toBe('FETCH_BLOCKED_BOT');
+    expect(calls).toHaveLength(0);
+    const on = await ingestUrl('https://walled.example/post', {
+      fetcher: fetcher(),
+      archiveFallback: 'blocked',
+    });
+    expect(on.ok).toBe(true);
+    expect(on.page?.doc.url).toBe('https://walled.example/post');
+    expect(on.page?.finalUrl).toBe(
+      'https://web.archive.org/web/20260115123045id_/https://walled.example/post',
+    );
+    expect(on.page?.doc.fetchedFrom).toBe('archive');
+    expect(on.page?.doc.archivedAt).toBe('2026-01-15T12:30:45.000Z');
+    expect(on.page?.doc.metadata?.archiveUrl).toContain('web.archive.org');
+    expect(on.page?.doc.markdown).toContain('Archived article body');
+    expect(calls[0]).toContain('wayback/available?url=https%3A%2F%2Fwalled.example%2Fpost');
+  }, 15_000);
+
+  it("'blocked' covers 404 but not 500; 'always' covers 500; robots refusals are never archived", async () => {
+    resetArchiveFallbackState();
+    server.use(
+      http.get('https://gone.example/old', () => new HttpResponse('nf', { status: 404 })),
+      http.get('https://down.example/x', () => new HttpResponse('err', { status: 500 })),
+      http.get('https://robots.example/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nDisallow: /\n', {
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ),
+      http.get('https://archive.org/wayback/available', () => availability('20250101000000')),
+      http.get('https://web.archive.org/web/*', ({ request }) => {
+        if (request.url.endsWith('id_/https://gone.example/old'))
+          return HttpResponse.html(article('Old page'));
+        if (request.url.endsWith('id_/https://down.example/x'))
+          return HttpResponse.html(article('Down page'));
+        return new HttpResponse('nf', { status: 404 });
+      }),
+    );
+    const gone = await ingestUrl('https://gone.example/old', {
+      fetcher: fetcher(),
+      archiveFallback: 'blocked',
+    });
+    expect(gone.ok).toBe(true);
+    expect(gone.page?.doc.title).toBe('Old page');
+    const down = await ingestUrl('https://down.example/x', {
+      fetcher: fetcher(),
+      archiveFallback: 'blocked',
+    });
+    expect(down.ok).toBe(false);
+    const downAlways = await ingestUrl('https://down.example/x', {
+      fetcher: fetcher(),
+      archiveFallback: 'always',
+    });
+    expect(downAlways.ok).toBe(true);
+    expect(downAlways.page?.doc.title).toBe('Down page');
+    const robots = await ingestUrl('https://robots.example/p', {
+      fetcher: fetcher({ respectRobotsTxt: true }),
+      archiveFallback: 'always',
+    });
+    expect(robots.failure?.code).toBe('FETCH_BLOCKED_ROBOTS');
+  }, 20_000);
+
+  it('paywalled snapshots (isAccessibleForFree:false) are refused; a 429 disables the fallback', async () => {
+    resetArchiveFallbackState();
+    let availabilityCalls = 0;
+    server.use(
+      http.get('https://paid.example/story', () => new HttpResponse('nf', { status: 404 })),
+      http.get('https://busy.example/a', () => new HttpResponse('nf', { status: 404 })),
+      http.get('https://busy.example/b', () => new HttpResponse('nf', { status: 404 })),
+      http.get('https://archive.org/wayback/available', ({ request }) => {
+        availabilityCalls++;
+        const url = new URL(request.url).searchParams.get('url') ?? '';
+        if (url.startsWith('https://busy.example/'))
+          return new HttpResponse('slow down', { status: 429 });
+        return availability('20240101000000');
+      }),
+      http.get('https://web.archive.org/web/*', () =>
+        HttpResponse.html(
+          `<html><head><script type="application/ld+json">{"@type":"NewsArticle","isAccessibleForFree":false,"headline":"Paid"}</script></head><body><article><h1>Paid</h1><p>${'Paywalled text. '.repeat(30)}</p></article></body></html>`,
+        ),
+      ),
+    );
+    const paid = await ingestUrl('https://paid.example/story', {
+      fetcher: fetcher(),
+      archiveFallback: 'blocked',
+    });
+    expect(paid.ok).toBe(false);
+    expect(paid.failure?.code).toBe('FETCH_HTTP_ERROR');
+    const a = await ingestUrl('https://busy.example/a', {
+      fetcher: fetcher(),
+      archiveFallback: 'blocked',
+    });
+    expect(a.ok).toBe(false);
+    expect(availabilityCalls).toBe(2);
+    const b = await ingestUrl('https://busy.example/b', {
+      fetcher: fetcher(),
+      archiveFallback: 'blocked',
+    });
+    expect(b.ok).toBe(false);
+    expect(availabilityCalls).toBe(2); // disabled after the 429 — no further lookups
+    resetArchiveFallbackState();
+  }, 20_000);
 });

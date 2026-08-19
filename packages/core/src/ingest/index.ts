@@ -136,6 +136,12 @@ export interface IngestOptions {
   fastPaths?: boolean | string[];
   /** Environment for optional fast-path API keys (default `process.env`). */
   env?: NodeJS.ProcessEnv;
+  /**
+   * Wayback Machine fallback (`ingestion.archiveFallback`): `'blocked'` retries bot-walled /
+   * paywalled / 404-410 / needs-JS pages from web.archive.org, `'always'` any fetch failure except
+   * robots/SSRF/content-signal refusals; `false` (default) never.
+   */
+  archiveFallback?: false | 'blocked' | 'always';
 }
 
 export interface IngestOutcome {
@@ -152,6 +158,19 @@ export async function ingestUrl(url: string, opts: IngestOptions): Promise<Inges
   const t0 = Date.now();
   const cached = opts.cache?.get(url);
   if (cached) return { url, ok: true, page: cached, cached: true, ms: 0 };
+  const first = await fetchAndParse(url, opts);
+  if (first.ok || !opts.archiveFallback) return { ...first, ms: Date.now() - t0 };
+  if (archiveEligible(first, opts.archiveFallback)) {
+    const archived = await ingestFromArchive(url, opts);
+    if (archived?.ok) return { ...archived, ms: Date.now() - t0 };
+  }
+  return { ...first, ms: Date.now() - t0 };
+}
+
+async function fetchAndParse(
+  url: string,
+  opts: IngestOptions,
+): Promise<Omit<IngestOutcome, 'ms'> & { error?: WebVectorError }> {
   let res: FetchedResource | undefined;
   // Fast path (arXiv HTML, GitHub raw, HN/SO/GitHub-issue APIs…): try once, fall back on any failure.
   const fp = selectFastPath(cleanUrl(url).url, opts.fastPaths ?? true);
@@ -181,11 +200,158 @@ export async function ingestUrl(url: string, opts: IngestOptions): Promise<Inges
       url,
       ok: false,
       failure: { url, code: e.code, message: e.message, stage: 'ingest' },
-      ms: Date.now() - t0,
+      error: e,
     };
   }
-  const outcome = await parseResource(res, opts);
-  return { ...outcome, ms: Date.now() - t0 };
+  return parseResource(res, opts);
+}
+
+// ─── Wayback Machine fallback (opt-in) ───────────────────────────────────────
+
+const ARCHIVE_NEVER = new Set([
+  'ABORTED',
+  'FETCH_BLOCKED_ROBOTS',
+  'FETCH_BLOCKED_SSRF',
+  'FETCH_BLOCKED_CONTENT_SIGNAL',
+]);
+const ARCHIVE_BLOCKED = new Set(['FETCH_BLOCKED_BOT', 'FETCH_PAYMENT_REQUIRED', 'PARSE_NEEDS_JS']);
+/** Wayback etiquette: ≈1 request/s process-wide; a 429 switches the fallback off for a while. */
+const ARCHIVE_MIN_INTERVAL_MS = 1000;
+const ARCHIVE_DISABLE_MS = 10 * 60_000;
+const archiveState = { nextSlot: 0, disabledUntil: 0 };
+
+/** Test hook: clear the archive limiter / disable state. */
+export function resetArchiveFallbackState(): void {
+  archiveState.nextSlot = 0;
+  archiveState.disabledUntil = 0;
+}
+
+function archiveEligible(
+  outcome: { failure?: Failure; error?: WebVectorError },
+  mode: 'blocked' | 'always',
+): boolean {
+  const code = outcome.failure?.code ?? '';
+  if (ARCHIVE_NEVER.has(code)) return false;
+  if (mode === 'always') return true;
+  if (ARCHIVE_BLOCKED.has(code)) return true;
+  const status = (outcome.error?.details as { status?: number } | undefined)?.status;
+  return code === 'FETCH_HTTP_ERROR' && (status === 404 || status === 410);
+}
+
+async function archiveSlot(signal?: AbortSignal): Promise<void> {
+  const now = Date.now();
+  const wait = Math.max(0, archiveState.nextSlot - now);
+  archiveState.nextSlot = Math.max(now, archiveState.nextSlot) + ARCHIVE_MIN_INTERVAL_MS;
+  if (wait > 0)
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(resolve, wait);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(t);
+          reject(new WebVectorError('Ingest aborted', { code: 'ABORTED', stage: 'ingest' }));
+        },
+        { once: true },
+      );
+    });
+}
+
+interface WaybackAvailable {
+  archived_snapshots?: { closest?: { available?: boolean; status?: string; timestamp?: string } };
+}
+
+/** Wayback timestamp (YYYYMMDDhhmmss) → ISO. */
+function waybackIso(ts: string): string | undefined {
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})?(\d{2})?(\d{2})?$/.exec(ts);
+  if (!m) return undefined;
+  const d = new Date(
+    Date.UTC(
+      +(m[1] as string),
+      +(m[2] as string) - 1,
+      +(m[3] as string),
+      +(m[4] ?? 0),
+      +(m[5] ?? 0),
+      +(m[6] ?? 0),
+    ),
+  );
+  return Number.isFinite(d.getTime()) ? d.toISOString() : undefined;
+}
+
+/**
+ * Look the URL up in the Wayback availability API (archive.org/wayback/available?url=…) and fetch
+ * the raw snapshot (web.archive.org/web/{ts}id_/{url}) through the normal guarded fetcher.
+ * Never used for pages that declare `isAccessibleForFree: false` (paywall). Returns undefined
+ * when there is no usable snapshot.
+ */
+async function ingestFromArchive(
+  url: string,
+  opts: IngestOptions,
+): Promise<Omit<IngestOutcome, 'ms'> | undefined> {
+  if (Date.now() < archiveState.disabledUntil) return undefined;
+  const log = (m: string) => opts.logger?.debug(`archive fallback: ${m}`);
+  const rateLimited = (err: unknown) => {
+    if (WebVectorError.is(err, 'PROVIDER_RATE_LIMITED')) {
+      archiveState.disabledUntil = Date.now() + ARCHIVE_DISABLE_MS;
+      log(`429 from archive.org — disabled for ${ARCHIVE_DISABLE_MS / 60_000} min`);
+    }
+  };
+  let ts: string | undefined;
+  try {
+    await archiveSlot(opts.signal);
+    const avail = await opts.fetcher.fetch(
+      `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`,
+      opts.signal,
+      { retries: 0 },
+    );
+    const closest = (JSON.parse(new TextDecoder().decode(avail.bytes)) as WaybackAvailable)
+      .archived_snapshots?.closest;
+    if (closest?.available && /^2\d\d$/.test(closest.status ?? '') && closest.timestamp)
+      ts = closest.timestamp;
+  } catch (err) {
+    if (WebVectorError.is(err, 'ABORTED')) throw err;
+    rateLimited(err);
+    log(`availability lookup failed for ${url} (${err instanceof Error ? err.message : err})`);
+    return undefined;
+  }
+  if (!ts) {
+    log(`no snapshot for ${url}`);
+    return undefined;
+  }
+  const archiveUrl = `https://web.archive.org/web/${ts}id_/${url}`;
+  let res: FetchedResource;
+  try {
+    await archiveSlot(opts.signal);
+    res = await opts.fetcher.fetch(archiveUrl, opts.signal, { retries: 0 });
+  } catch (err) {
+    if (WebVectorError.is(err, 'ABORTED')) throw err;
+    rateLimited(err);
+    log(`snapshot fetch failed for ${archiveUrl} (${err instanceof Error ? err.message : err})`);
+    return undefined;
+  }
+  // Paywall guard: never serve archived copies of pages that declare themselves not free.
+  const head = new TextDecoder('utf-8', { fatal: false }).decode(res.bytes.subarray(0, 512 * 1024));
+  if (/["']isAccessibleForFree["']\s*:\s*(?:false|["']false["'])/i.test(head)) {
+    log(`snapshot of ${url} declares isAccessibleForFree:false — not used`);
+    return undefined;
+  }
+  const outcome = await parseResource(
+    { ...res, url, finalUrl: archiveUrl },
+    { ...opts, cache: undefined },
+  );
+  if (!outcome.ok || !outcome.page) return undefined;
+  const archivedAt = waybackIso(ts);
+  const page: CachedPage = {
+    ...outcome.page,
+    doc: {
+      ...outcome.page.doc,
+      fetchedFrom: 'archive',
+      archivedAt,
+      metadata: { ...outcome.page.doc.metadata, archiveUrl },
+    },
+  };
+  opts.cache?.set(url, page);
+  log(`served ${url} from ${archiveUrl}`);
+  return { ...outcome, page };
 }
 
 /** Parse an already-fetched resource. */
