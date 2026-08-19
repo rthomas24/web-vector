@@ -8,6 +8,7 @@ import type {
   SearchProvider,
   VectorStore,
 } from '../types.js';
+import { DEFAULT_USER_AGENT } from '../util/version.js';
 
 // ─── Zod schema for serialisable config (files / env) ────────────────────────
 
@@ -229,9 +230,13 @@ export const ingestionConfigSchema = z.object({
    * `record` only records `doc.contentSignal`; `ignore` does neither.
    */
   contentSignals: z.enum(['ignore', 'record', 'respect']).default('respect'),
-  userAgent: z
-    .string()
-    .default('Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)'),
+  /**
+   * Self-describing agent identity: `WebVector/<version> (+https://github.com/rthomas24/web-vector;
+   * user-directed research agent)`. robots.txt groups match on the `WebVector` product token.
+   */
+  userAgent: z.string().default(DEFAULT_USER_AGENT),
+  /** Optional contact address sent as the `From:` request header (crawler etiquette, RFC 9110 §10.1.2). */
+  contactEmail: z.email().optional(),
   retries: z.number().int().min(0).max(5).default(2),
   allowPrivateNetworks: z.boolean().default(false),
   parsers: z.array(z.string()).default(['html', 'pdf', 'text']),

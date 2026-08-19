@@ -47,6 +47,8 @@ export interface FetcherOptions {
    * signal otherwise; `record` only records it on the resource; `ignore` does neither.
    */
   contentSignals?: 'ignore' | 'record' | 'respect';
+  /** Sent as the `From:` header so site operators can reach whoever runs the agent. */
+  contactEmail?: string;
 }
 
 /** Per-request overrides (used by fast paths / archive lookups). */
@@ -238,6 +240,7 @@ export class Fetcher {
             accept: acceptHeaderFor(this.opts.acceptMarkdown),
             'accept-language': 'en-US,en;q=0.9,*;q=0.5',
             'accept-encoding': 'gzip, deflate, br',
+            ...(this.opts.contactEmail ? { from: this.opts.contactEmail } : {}),
             ...(sameOrigin ? this.opts.headers : stripCredentialHeaders(this.opts.headers)),
             ...(sameOrigin ? extraHeaders : stripCredentialHeaders(extraHeaders)),
           },

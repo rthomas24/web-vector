@@ -126,6 +126,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): WebVectorCo
       totalDeadlineMs: num(env.WEBVECTOR_TOTAL_DEADLINE_MS),
       respectRobotsTxt: bool(env.WEBVECTOR_RESPECT_ROBOTS),
       userAgent: env.WEBVECTOR_USER_AGENT,
+      contactEmail: env.WEBVECTOR_CONTACT_EMAIL,
       allowPrivateNetworks: bool(env.WEBVECTOR_ALLOW_PRIVATE_NETWORKS),
       chunkSize: num(env.WEBVECTOR_CHUNK_SIZE),
       chunkOverlap: num(env.WEBVECTOR_CHUNK_OVERLAP),

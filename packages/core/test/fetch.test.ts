@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { ingestionConfigSchema } from '../src/config/schema.js';
 import {
   cooldownFastPath,
   registerFastPath,
@@ -29,6 +30,7 @@ import { WebVector } from '../src/pipeline/webvector.js';
 import { customSearchProvider } from '../src/search/providers.js';
 import { silentLogger } from '../src/util/logger.js';
 import { canonicalizeUrl, cleanUrl, normalizeUrl } from '../src/util/url.js';
+import { DEFAULT_USER_AGENT } from '../src/util/version.js';
 
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -1141,4 +1143,34 @@ describe('archive fallback', () => {
     expect(availabilityCalls).toBe(2); // disabled after the 429 — no further lookups
     resetArchiveFallbackState();
   }, 20_000);
+});
+
+// ─── Agent identity: self-describing UA + From: header ───────────────────────
+
+describe('agent identity', () => {
+  it('defaults to a self-describing User-Agent and sends From: when contactEmail is set', async () => {
+    const cfg = ingestionConfigSchema.parse({});
+    expect(cfg.userAgent).toMatch(
+      /^WebVector\/\d+\.\d+\.\d+ \(\+https:\/\/github\.com\/rthomas24\/web-vector; user-directed research agent\)$/,
+    );
+    expect(cfg.userAgent).toBe(DEFAULT_USER_AGENT);
+    expect(cfg.contactEmail).toBeUndefined();
+    expect(() => ingestionConfigSchema.parse({ contactEmail: 'not-an-email' })).toThrow();
+    let from: string | null = 'unset';
+    let ua: string | null = null;
+    server.use(
+      http.get('https://id.example/', ({ request }) => {
+        from = request.headers.get('from');
+        ua = request.headers.get('user-agent');
+        return HttpResponse.text('# Hi\n\nA body long enough to be a document for the parser.', {
+          headers: { 'content-type': 'text/markdown' },
+        });
+      }),
+    );
+    await fetcher({ userAgent: cfg.userAgent }).fetch('https://id.example/');
+    expect(from).toBeNull();
+    expect(ua).toBe(cfg.userAgent);
+    await fetcher({ contactEmail: 'ops@example.com' }).fetch('https://id.example/');
+    expect(from).toBe('ops@example.com');
+  });
 });
