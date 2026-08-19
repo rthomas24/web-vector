@@ -28,7 +28,7 @@ import {
   webSearchToolDefinition,
 } from '../pipeline/tool.js';
 import type { WebVector } from '../pipeline/webvector.js';
-import { runTool, type ToolInclude, type ToolRunResult } from './anthropic.js';
+import { type RunToolOptions, runTool, type ToolInclude, type ToolRunResult } from './anthropic.js';
 
 export interface OpenAIResponsesTool {
   type: 'function';
@@ -83,7 +83,7 @@ export async function runOpenAITool(
   wv: WebVector,
   name: string,
   args: string | Record<string, unknown>,
-  opts: { signal?: AbortSignal; maxOutputTokens?: number } = {},
+  opts: RunToolOptions = {},
 ): Promise<ToolRunResult> {
   let input: Record<string, unknown>;
   try {

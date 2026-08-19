@@ -136,9 +136,13 @@ const wv = new WebVector({
 
 const res = await wv.research('How does Node 24 handle AbortSignal.any?', {
   relatedQueries: ['AbortSignal.any example'],  // extra angles (also searched)
+  objective: 'whether composed signals leak',    // long-form intent: ranking only, never searched
+  category: 'docs',                             // news | research | github | pdf | docs
   freshness: 'year',                            // day | week | month | year
   domainsAllow: ['nodejs.org', 'developer.mozilla.org'],
   sessionId: 'conversation-42',                 // pages already read this session are reused
+  deadlineMs: 20_000,                           // partial results after 20 s (degraded: 'partial')
+  responseFormat: 'concise',                    // markdown shape; see output.* config
   onProgress: (p) => console.error(p.stage, p.message),
 });
 ```
@@ -155,6 +159,8 @@ await generateText({ model, tools: await webVectorTools(wv), stopWhen: isStepCou
 
 // Anthropic Messages API           // OpenAI Responses API            // LangChain.js
 import { anthropicTools, runAnthropicTool } from 'webvector/anthropic';
+//   runAnthropicTool(wv, name, input, { format: 'search_result' }) → search_result blocks (native citations)
+//   anthropicTools({ maxUses: 5, allowedDomains: ['docs.python.org'] }) + the same opts on the runner = guardrails
 import { openaiTools, runOpenAITool } from 'webvector/openai';
 import { langchainTools } from 'webvector/langchain';
 
@@ -261,7 +267,9 @@ interface ResearchResult {
   stats: { search, ingest, embed, retrieve, totalMs, warnings };   // timings + counts per stage
   markdown?: string;                       // the pre-rendered version above
   degraded?: 'search_only' | 'partial';    // e.g. every fetch failed → search snippets returned instead
+  degradedReason?: string;                 // why (deadline reached, embeddings unavailable, …)
 }
+// stats.output = { chars, approxTokens } of the rendered markdown
 ```
 
 ## 9. Errors and failures

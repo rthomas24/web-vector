@@ -20,7 +20,7 @@
 import type { EmbeddingModel, LanguageModel, RerankingModel, Tool } from 'ai';
 import { importOptional } from '../errors.js';
 import { runFetchTool } from '../pipeline/fetch-tool.js';
-import { renderMarkdown } from '../pipeline/format.js';
+import { type ResponseFormat, renderMarkdown, suggestedQueriesFor } from '../pipeline/format.js';
 import {
   toResearchOptions,
   WEB_FETCH_DESCRIPTION,
@@ -57,6 +57,8 @@ async function ai(): Promise<AiModule> {
 export interface AiSdkToolOptions {
   /** What the model sees. Default: rendered markdown (compact). Set 'json' to send the structured result. */
   modelOutput?: 'markdown' | 'json';
+  /** Markdown shape sent to the model (default `concise`); the app still gets the full ResearchResult. */
+  responseFormat?: ResponseFormat;
   /** Approx token budget for the markdown sent to the model (default 3000). */
   maxOutputTokens?: number;
   /** Extra research options applied on every call (e.g. a fixed sessionId). */
@@ -87,9 +89,11 @@ export async function webResearchTool(
         ? { type: 'json' as const, value: stripForModel(output) as any }
         : {
             type: 'text' as const,
-            value:
-              output.markdown ??
-              renderMarkdown(output, { maxTokens: opts.maxOutputTokens ?? 3000 }),
+            value: renderMarkdown(output, {
+              maxTokens: opts.maxOutputTokens ?? 3000,
+              format: opts.responseFormat ?? 'concise',
+              suggestedQueries: suggestedQueriesFor(output),
+            }),
           },
   } as any) as Tool<WebResearchInput, ResearchResult>;
 }
