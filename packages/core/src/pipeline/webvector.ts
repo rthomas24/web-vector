@@ -621,6 +621,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       chunkOverlap: i.chunkOverlap,
       maxChunks: i.maxChunksPerPage,
       minChunkChars: i.minChunkChars,
+      dropSharedBoilerplate: i.dropSharedBoilerplate,
     };
   }
 

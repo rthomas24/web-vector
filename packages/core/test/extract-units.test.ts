@@ -2,6 +2,7 @@
 import { parseHTML } from 'linkedom';
 import { htmlToMarkdown } from 'mdream';
 import { describe, expect, it } from 'vitest';
+import { type BoilerplateChunk, HostBoilerplateIndex } from '../src/ingest/extract-boilerplate.js';
 import {
   detectJsShell,
   guessLangFromScript,
@@ -27,6 +28,7 @@ import { parseResource } from '../src/ingest/index.js';
 import { HtmlParser, tidyMarkdown } from '../src/ingest/parsers.js';
 import { ingestDocument } from '../src/pipeline/ingest-stage.js';
 import { ephemeralSession } from '../src/pipeline/session.js';
+import { contentHash } from '../src/util/hash.js';
 
 const shell = (body: string, head = '') =>
   `<!doctype html><html><head><title>t</title>${head}</head><body>${body}</body></html>`;
@@ -637,5 +639,109 @@ describe('extract-recover', () => {
       'https://p.example/a',
     );
     expect(off === null || off.parser !== 'jsonld-body').toBe(true);
+  });
+});
+
+describe('same-host boilerplate suppression', () => {
+  const nav = `Home Products Pricing Docs Blog Careers Contact Subscribe to our newsletter for updates every week. ${'Footer link text here. '.repeat(6)}`;
+  const body = (i: number) =>
+    `Unique article body number ${i}. ${`Sentence ${i} about caching and freshness with different words each time. `.repeat(12)}`;
+  const mk = (id: string, url: string, text: string): BoilerplateChunk => ({
+    id,
+    url,
+    text,
+    contentHash: contentHash(text),
+  });
+
+  it('drops repeated blocks on later pages, retracts the earlier copy, keeps code and unique text', () => {
+    const idx = new HostBoilerplateIndex();
+    const p1 = idx.judge('https://h.example/a', [
+      mk('a-nav', 'https://h.example/a', nav),
+      mk('a-body', 'https://h.example/a', body(1)),
+      mk('a-code', 'https://h.example/a', `\`\`\`js\n${nav}\n\`\`\``),
+    ]);
+    expect(p1.drop.size).toBe(0);
+    const p2 = idx.judge('https://h.example/b', [
+      mk('b-nav', 'https://h.example/b', nav),
+      mk('b-body', 'https://h.example/b', body(2)),
+      mk('b-code', 'https://h.example/b', `\`\`\`js\n${nav}\n\`\`\``),
+    ]);
+    expect([...p2.drop]).toEqual(['b-nav']);
+    expect([...p2.retract]).toEqual(['a-nav']);
+    expect(p2.duplicatePage).toBe(false);
+    // near-verbatim variant (active item differs) is caught by shingles
+    const p3 = idx.judge('https://h.example/c', [
+      mk('c-nav', 'https://h.example/c', `${nav} (current: Blog)`),
+      mk('c-body', 'https://h.example/c', body(3)),
+    ]);
+    expect(p3.drop.has('c-nav')).toBe(true);
+    // other hosts are independent
+    const other = idx.judge('https://other.example/a', [
+      mk('o-nav', 'https://other.example/a', nav),
+    ]);
+    expect(other.drop.size).toBe(0);
+  });
+  it('treats a page that repeats an earlier page as a duplicate (drop only, no retraction)', () => {
+    const idx = new HostBoilerplateIndex();
+    const chunks = (u: string) => [
+      mk(`${u}-1`, u, body(1)),
+      mk(`${u}-2`, u, body(2)),
+      mk(`${u}-3`, u, body(3)),
+    ];
+    idx.judge('https://h.example/x', chunks('https://h.example/x'));
+    const dup = idx.judge('https://h.example/x?page=1', chunks('https://h.example/x?page=1'));
+    expect(dup.duplicatePage).toBe(true);
+    expect(dup.drop.size).toBe(3);
+    expect(dup.retract.size).toBe(0);
+  });
+  it('ingestDocument drops shared chunks and retracts earlier ones from the lexical index', async () => {
+    const session = ephemeralSession();
+    const c = { embedder: undefined, countTokens: undefined } as any;
+    const cache = { get: () => undefined, set: () => {} } as any;
+    const md = (i: number) => `# Page ${i}\n\n${body(i)}\n\n## Footer\n\n${nav}`;
+    const ingest = (i: number, drop?: boolean) =>
+      ingestDocument(c, cache, {
+        doc: {
+          url: `https://h.example/p${i}`,
+          title: `P${i}`,
+          markdown: md(i),
+          text: md(i),
+          contentType: 'text/html',
+          parser: 'x',
+        },
+        page: { pageHash: `h${i}`, fetchedAt: 'now' },
+        query: 'q',
+        session,
+        chunking: { chunkSize: 200, chunkOverlap: 0, maxChunks: 20, dropSharedBoilerplate: drop },
+      });
+    const a = await ingest(1);
+    const navA = a.chunks.find((ch) => ch.text.includes('Subscribe to our newsletter'));
+    expect(navA).toBeDefined();
+    expect(session.bm25.has(navA!.id)).toBe(true);
+    const b = await ingest(2);
+    expect(b.chunks.some((ch) => ch.text.includes('Subscribe to our newsletter'))).toBe(false);
+    expect(session.bm25.has(navA!.id)).toBe(false);
+    expect(session.chunks.has(navA!.id)).toBe(false);
+    expect(b.chunks.some((ch) => ch.text.includes('Unique article body number 2'))).toBe(true);
+    // opt-out keeps everything
+    const s2 = ephemeralSession();
+    const ingestOff = (i: number) =>
+      ingestDocument(c, cache, {
+        doc: {
+          url: `https://h.example/p${i}`,
+          title: `P${i}`,
+          markdown: md(i),
+          text: md(i),
+          contentType: 'text/html',
+          parser: 'x',
+        },
+        page: { pageHash: `h${i}`, fetchedAt: 'now' },
+        query: 'q',
+        session: s2,
+        chunking: { chunkSize: 200, chunkOverlap: 0, maxChunks: 20, dropSharedBoilerplate: false },
+      });
+    await ingestOff(1);
+    const off = await ingestOff(2);
+    expect(off.chunks.some((ch) => ch.text.includes('Subscribe to our newsletter'))).toBe(true);
   });
 });

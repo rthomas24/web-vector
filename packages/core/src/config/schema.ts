@@ -262,6 +262,12 @@ export const ingestionConfigSchema = z.object({
   chunkOverlap: z.number().int().min(0).default(60),
   maxChunksPerPage: z.number().int().min(1).default(200),
   minChunkChars: z.number().int().min(1).default(100),
+  /**
+   * Drop chunks whose text already appeared on another page of the same host in this session
+   * (navigation, footers, "related" rails) and retract the earlier copies from the lexical index;
+   * code blocks are never dropped.
+   */
+  dropSharedBoilerplate: z.boolean().default(true),
   /** Use provider-returned page content (Tavily raw_content / Exa text) instead of fetching when available. */
   useProviderContent: z.boolean().default(true),
   cache: z

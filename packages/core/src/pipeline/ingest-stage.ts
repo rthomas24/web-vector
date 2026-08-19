@@ -6,6 +6,7 @@
 import type { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
 import { chunkMarkdown } from '../ingest/chunker.js';
+import { HostBoilerplateIndex } from '../ingest/extract-boilerplate.js';
 import type { CachedPage } from '../ingest/index.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
 import type { Chunk, Failure, ParsedDocument, SearchResult } from '../types.js';
@@ -21,7 +22,18 @@ export interface IngestDocumentInput {
   result?: Pick<SearchResult, 'rank' | 'source' | 'publishedAt' | 'title'>;
   query: string;
   session: Session;
-  chunking: { chunkSize: number; chunkOverlap: number; maxChunks: number; minChunkChars?: number };
+  chunking: {
+    chunkSize: number;
+    chunkOverlap: number;
+    maxChunks: number;
+    minChunkChars?: number;
+    /**
+     * Drop chunks whose text (content hash or ≥ 80 % of word shingles) already appeared on another
+     * page of the same host in this session — nav, footers, "related" rails — and retract the
+     * earlier copies from the lexical index. Code blocks are never dropped. Default true.
+     */
+    dropSharedBoilerplate?: boolean;
+  };
   signal?: AbortSignal;
 }
 
@@ -56,7 +68,7 @@ export async function ingestDocument(
     countTokens: c.countTokens,
     title,
   });
-  const chunks: Chunk[] = textChunks.map((tc) => {
+  let chunks: Chunk[] = textChunks.map((tc) => {
     const hash = contentHash(tc.text);
     return {
       id: sha256(`${canonical}#${hash}`),
@@ -88,6 +100,33 @@ export async function ingestDocument(
       },
     };
   });
+
+  // Same-host boilerplate: text repeated across pages of one host is chrome, not content.
+  let kept = chunks;
+  if (chunking.dropSharedBoilerplate !== false && chunks.length) {
+    let index = boilerplateIndexes.get(session);
+    if (!index) {
+      index = new HostBoilerplateIndex();
+      boilerplateIndexes.set(session, index);
+    }
+    const verdict = index.judge(
+      canonical,
+      chunks.map((ch) => ({
+        id: ch.id,
+        url: canonical,
+        text: ch.text,
+        contentHash: ch.metadata.contentHash,
+      })),
+    );
+    if (verdict.drop.size) kept = chunks.filter((ch) => !verdict.drop.has(ch.id));
+    for (const id of verdict.retract) {
+      // Earlier copies leave the lexical index and the passage map; vector stores have no delete,
+      // so a hybrid run may still see them via the store until the session ends.
+      if (session.bm25.has(id)) session.bm25.remove(id);
+      session.chunks.delete(id);
+    }
+  }
+  chunks = kept;
 
   const stats: EmbedStats = { chunks: 0, cached: 0, batches: 0, ms: 0 };
   let toEmbed: Chunk[] = [];
@@ -132,6 +171,9 @@ export function pageAt(
   }
   return page;
 }
+
+/** Per-session host → seen-chunk index for boilerplate suppression (GC'd with the session). */
+const boilerplateIndexes = new WeakMap<Session, HostBoilerplateIndex>();
 
 /** Embed chunks, using the content-hash cache to skip texts embedded before with this model. */
 async function embedChunks(
