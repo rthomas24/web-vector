@@ -265,6 +265,8 @@ interface ResearchResult {
   markdown?: string;                       // the pre-rendered version above
   degraded?: 'search_only' | 'partial';    // e.g. every fetch failed → search snippets returned instead
   coverage?: Record<string, number>;       // with relatedQueries: passages covering each sub-question
+  evidence?: { level: 'strong'|'weak'|'none'; coverage; distinctDomains; topScoreRatio; cutoffPosition;
+               suggestedQueries: string[] }; // LLM-free "is this enough?" verdict + what to search next
 }
 ```
 

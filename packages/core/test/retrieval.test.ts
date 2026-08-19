@@ -707,3 +707,78 @@ describe('recency boost', () => {
     expect(recencyHalfLifeDays({ after: '2024-01-01' }, 99)).toBe(99);
   });
 });
+
+describe('evidence gate', () => {
+  const passage = (text: string, url: string): any => ({
+    index: 1,
+    text,
+    url,
+    title: 't',
+    score: 1,
+    chunkIndex: 0,
+    startOffset: 0,
+    endOffset: text.length,
+    fetchedAt: '',
+    matchedQueries: [],
+    citation: '',
+  });
+  it('levels: strong / weak / none from coverage, domains, score shape', async () => {
+    const { assessEvidence } = await import('../src/retrieval/evidence.js');
+    const domainOf = (u: string) => new URL(u).hostname;
+    const strong = assessEvidence(
+      'reciprocal rank fusion constant',
+      [
+        passage('Reciprocal rank fusion uses a constant k of 60.', 'https://a.com/x'),
+        passage('The rank fusion constant dampens top ranks.', 'https://b.com/y'),
+      ],
+      { topK: 4, domainOf, signals: { topScoreRatio: 3, cutoffPosition: 0.5 } },
+    );
+    expect(strong.level).toBe('strong');
+    expect(strong.coverage).toBe(1);
+    expect(strong.distinctDomains).toBe(2);
+    const weak = assessEvidence(
+      'reciprocal rank fusion constant',
+      [passage('Fusion of ranked lists is common.', 'https://a.com/x')],
+      { topK: 4, domainOf, signals: { topScoreRatio: 1.1, cutoffPosition: 0.25 } },
+    );
+    expect(weak.level).toBe('weak');
+    // Missing query words are suggested on their own (surface forms, not stems).
+    expect(weak.suggestedQueries.some((q) => q.startsWith('reciprocal constant'))).toBe(true);
+    const none = assessEvidence(
+      'zebra stripes',
+      [passage('Bananas are yellow.', 'https://a.com')],
+      {
+        topK: 4,
+        domainOf,
+      },
+    );
+    expect(none.level).toBe('none');
+    expect(assessEvidence('zebra', [], { topK: 4, domainOf }).level).toBe('none');
+  });
+  it('suggests PRF terms and bridge entities that the query does not name', async () => {
+    const { bridgeEntities, prfTerms, assessEvidence } = await import(
+      '../src/retrieval/evidence.js'
+    );
+    const texts = [
+      'AbortSignal.any() composes signals. See also AbortSignal.timeout for deadlines. Node Streams use it.',
+      'With AbortSignal.timeout you get a deadline; Node Streams and fetch accept the signal. [Ref](https://x.org/y) <sup>[1]</sup>',
+    ];
+    const ents = bridgeEntities(texts, 'AbortSignal.any usage');
+    expect(ents).toContain('AbortSignal.timeout');
+    expect(ents).toContain('Node Streams'); // capitalised bigram seen twice
+    expect(ents.some((e) => e.includes('x.org'))).toBe(false); // link targets never leak
+    const terms = prfTerms(texts, 'AbortSignal.any usage', 4);
+    expect(terms).toContain('abortsignal.timeout');
+    expect(terms).not.toContain('sup');
+    const ev = assessEvidence(
+      'AbortSignal.any usage',
+      [passage(texts[0]!, 'https://nodejs.org/api')],
+      {
+        topK: 4,
+        domainOf: () => 'nodejs.org',
+      },
+    );
+    expect(ev.suggestedQueries.some((q) => q.includes('AbortSignal.timeout'))).toBe(true);
+    expect(ev.suggestedQueries.length).toBeLessThanOrEqual(4);
+  });
+});

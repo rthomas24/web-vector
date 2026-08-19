@@ -62,6 +62,8 @@ export interface RetrieveOutput {
   lexicalOnly: boolean;
   /** Passages per related query (aspect) when aspect coverage ran. */
   coverage?: Record<string, number>;
+  /** Inputs for the evidence gate. */
+  signals: { topScoreRatio: number; cutoffPosition: number };
 }
 
 type Candidate = ScoredChunk & {
@@ -175,7 +177,14 @@ export async function runRetrieveStage(
       for (const h of hits) if ((bm25Best.get(h.id) ?? 0) < h.score) bm25Best.set(h.id, h.score);
     });
   }
-  if (lists.length === 0) return { passages: [], candidates: 0, reranked: false, lexicalOnly };
+  if (lists.length === 0)
+    return {
+      passages: [],
+      candidates: 0,
+      reranked: false,
+      lexicalOnly,
+      signals: { topScoreRatio: 0, cutoffPosition: 0 },
+    };
 
   // SERP prior: the engine's ordering as one more list over the current candidates.
   if (rc.serpPriorWeight > 0) {
@@ -424,7 +433,14 @@ export async function runRetrieveStage(
     for (const p of passages)
       for (const q of p.matchedQueries) if (q in coverage) coverage[q] = (coverage[q] ?? 0) + 1;
   }
-  return { passages, candidates, reranked, lexicalOnly, coverage };
+  // Evidence signals: how peaked the fused distribution is (top passage vs mean candidate) and how
+  // many of the requested slots survived the cutoffs.
+  const meanFused = allCands.reduce((a, x) => a + x.fused, 0) / Math.max(1, allCands.length);
+  const signals = {
+    topScoreRatio: cut.length && meanFused > 0 ? rankScore(cut[0] as Candidate) / meanFused : 0,
+    cutoffPosition: passages.length / Math.max(1, topK),
+  };
+  return { passages, candidates, reranked, lexicalOnly, coverage, signals };
 }
 
 /**

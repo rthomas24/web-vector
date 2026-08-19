@@ -167,6 +167,11 @@ export const retrievalConfigSchema = z.object({
   corroborationBoost: z.boolean().default(false),
   /** Word-3-gram Jaccard threshold for two chunks to count as corroborating each other. */
   corroborationJaccard: z.number().min(0).max(1).default(0.25),
+  /**
+   * When `result.evidence.level` is `weak`/`none`, run one more search round with the top
+   * suggested queries inside the same call (same run deadline). 0 = off (default), max 1.
+   */
+  autoRetry: z.number().int().min(0).max(1).default(0),
   minScore: z.number().min(-1).max(1).nullable().default(null),
   relativeCutoff: z.number().min(0).max(1).default(0.6),
   /**

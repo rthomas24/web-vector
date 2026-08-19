@@ -328,6 +328,14 @@ export interface ResearchStats {
     ms: number;
     /** Approximate tokens of the returned markdown (or passage texts when markdown is off). */
     tokensReturned?: number;
+    /** Present when `autoRetry` ran a second search round inside this call. */
+    autoRetry?: {
+      queries: string[];
+      newPages: number;
+      levelBefore: 'strong' | 'weak' | 'none';
+      levelAfter: 'strong' | 'weak' | 'none';
+      ms: number;
+    };
   };
   totalMs: number;
   warnings: string[];
@@ -348,6 +356,25 @@ export interface ResearchResult {
    * `retrieval.aspectCoverage`). Only present when related queries were given.
    */
   coverage?: Record<string, number>;
+  /**
+   * LLM-free evidence-sufficiency verdict: is this enough to answer, and if not, what to search
+   * next. `strong` | `weak` | `none`, with the signals behind it and `suggestedQueries`.
+   */
+  evidence?: Evidence;
+}
+
+/** Evidence-sufficiency gate output (see retrieval/evidence.ts). */
+export interface Evidence {
+  level: 'strong' | 'weak' | 'none';
+  /** Fraction of distinct query terms present in the top-3 passages. */
+  coverage: number;
+  distinctDomains: number;
+  /** Top passage's fused score over the mean candidate score (peaked = confident). */
+  topScoreRatio: number;
+  /** Returned passages / requested topK. */
+  cutoffPosition: number;
+  /** Follow-up queries (pseudo-relevance-feedback terms, bridge entities, missing query terms). */
+  suggestedQueries: string[];
 }
 
 export interface ProgressEvent {
@@ -379,6 +406,12 @@ export interface ResearchOptions {
   maxOutputTokens?: number;
   /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
   explain?: boolean;
+  /**
+   * When the evidence gate says `weak`/`none`, run one more search round with the suggested
+   * queries inside this call (bounded by the same run deadline). 0 or 1; overrides
+   * `retrieval.autoRetry`.
+   */
+  autoRetry?: number;
 }
 
 // ─── Logging ────────────────────────────────────────────────────────────────

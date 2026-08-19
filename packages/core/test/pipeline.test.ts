@@ -333,6 +333,57 @@ describe('WebVector pipeline (mocked)', () => {
     expect(r3.passages.map((p) => p.index)).toEqual(r3.passages.map((_, i) => i + 1));
     await wv3.close();
   });
+  it('reports an evidence verdict with suggested queries and can auto-retry once', async () => {
+    mockSites();
+    server.use(
+      http.get('https://zebra.example/stripes', () =>
+        HttpResponse.html(
+          page('Zebra stripes', [
+            'Zebra stripes purpose: the stripes deter biting flies and may help with thermoregulation.',
+            'Stripes also confuse predators through motion dazzle.',
+          ]),
+        ),
+      ),
+    );
+    let calls: string[] = [];
+    const provider = customSearchProvider('mock2', async (q: string) => {
+      calls.push(q);
+      const base = await search.search('x');
+      // Only a follow-up query surfaces the answering page.
+      return q === 'zebra stripes purpose'
+        ? base
+        : [{ url: 'https://zebra.example/stripes', title: 'Zebra', rank: 1 }, ...base];
+    });
+    // Strong evidence on an answerable query.
+    const wv = make();
+    const ok = await wv.research('reciprocal rank fusion formula', { topK: 4 });
+    expect(ok.evidence?.level).toBe('strong');
+    expect(ok.evidence?.coverage).toBeGreaterThan(0.6);
+    expect(Array.isArray(ok.evidence?.suggestedQueries)).toBe(true);
+    await wv.close();
+
+    // Nothing relevant → 'none', suggestions still produced (from snippets), no retry by default.
+    const wv2 = make({ search: { instance: provider, fallbackProviders: [] } });
+    const none = await wv2.research('zebra stripes purpose', { topK: 4 });
+    expect(none.evidence?.level).toBe('none');
+    expect(none.evidence?.coverage).toBe(0);
+    expect(none.stats.retrieve.autoRetry).toBeUndefined();
+    await wv2.close();
+
+    // autoRetry: one more search round with the suggestions, new pages ingested, verdict updated.
+    calls = [];
+    const wv3 = make({ search: { instance: provider, fallbackProviders: [] } });
+    const retried = await wv3.research('zebra stripes purpose', { topK: 4, autoRetry: 1 });
+    expect(retried.stats.retrieve.autoRetry).toBeDefined();
+    expect(retried.stats.retrieve.autoRetry!.levelBefore).toBe('none');
+    expect(retried.stats.retrieve.autoRetry!.newPages).toBe(1);
+    expect(retried.stats.retrieve.autoRetry!.queries.length).toBeGreaterThan(0);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(retried.passages.some((p) => p.url.includes('zebra.example'))).toBe(true);
+    expect(retried.evidence?.level).not.toBe('none');
+    expect(retried.sources.some((s) => s.url.includes('zebra.example'))).toBe(true);
+    await wv3.close();
+  });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
     await expect(wv.research('   ')).rejects.toMatchObject({ code: 'INVALID_CONFIG' });

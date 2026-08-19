@@ -27,6 +27,7 @@ import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
 import { approxTokens } from '../ingest/chunker.js';
 import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
+import { assessEvidence } from '../retrieval/evidence.js';
 import type {
   Failure,
   Logger,
@@ -35,6 +36,7 @@ import type {
   ProgressEvent,
   ResearchOptions,
   ResearchResult,
+  ResearchStats,
   SearchOptions,
   SearchResult,
   SourceSummary,
@@ -53,7 +55,7 @@ import {
   ingestDocument,
   isFatalIngestError,
 } from './ingest-stage.js';
-import { runRetrieveStage } from './retrieve-stage.js';
+import { type RetrieveOutput, registrableDomain, runRetrieveStage } from './retrieve-stage.js';
 import { runSearchStage } from './search-stage.js';
 import { ephemeralSession, type Session, type SessionRegistry } from './session.js';
 
@@ -313,6 +315,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     let okPages = 0;
     let cachedPages = 0;
     let done = 0;
+    let batchTotal = targets.length;
     progress({
       stage: 'ingest',
       done: 0,
@@ -409,66 +412,74 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         progress({
           stage: 'ingest',
           done,
-          total: targets.length,
-          message: `Fetched ${done}/${targets.length}`,
+          total: batchTotal,
+          message: `Fetched ${done}/${batchTotal}`,
         });
       }
     };
 
-    const settled = await settleWithDeadline(
-      targets.map((r) =>
-        ingestOne(r).then(
-          () => undefined as unknown,
-          (e) => e as unknown,
+    /** Ingest a batch of results under a deadline; per-URL failures are recorded, fatal ones thrown. */
+    const ingestBatch = async (batch: SearchResult[], deadlineMs: number): Promise<void> => {
+      done = 0;
+      batchTotal = batch.length;
+      const settled = await settleWithDeadline(
+        batch.map((r) =>
+          ingestOne(r).then(
+            () => undefined as unknown,
+            (e) => e as unknown,
+          ),
         ),
-      ),
-      cfg.ingestion.totalDeadlineMs,
-      () => 'deadline' as const,
-      () => runAbort.abort(new Error('run deadline exceeded')), // stop orphaned work
-    );
-    let fatal: WebVectorError | undefined;
-    settled.forEach((outcome, i) => {
-      const url = targets[i]?.url ?? '';
-      if (outcome === 'deadline') {
-        const s = sources.get(canonicalizeUrl(url));
-        if (s && s.status === 'failed' && !s.failure) {
-          const f: Failure = {
-            url,
-            code: 'FETCH_TIMEOUT',
-            message: `Deadline of ${cfg.ingestion.totalDeadlineMs}ms exceeded`,
-            stage: 'ingest',
-          };
-          s.failure = f;
-          failures.push(f);
+        deadlineMs,
+        () => 'deadline' as const,
+        () => runAbort.abort(new Error('run deadline exceeded')), // stop orphaned work
+      );
+      let fatal: WebVectorError | undefined;
+      settled.forEach((outcome, i) => {
+        const url = batch[i]?.url ?? '';
+        if (outcome === 'deadline') {
+          const s = sources.get(canonicalizeUrl(url));
+          if (s && s.status === 'failed' && !s.failure) {
+            const f: Failure = {
+              url,
+              code: 'FETCH_TIMEOUT',
+              message: `Deadline of ${cfg.ingestion.totalDeadlineMs}ms exceeded`,
+              stage: 'ingest',
+            };
+            s.failure = f;
+            failures.push(f);
+          }
+        } else if (outcome instanceof Error && !fatal) {
+          fatal = WebVectorError.from(outcome, { code: 'INTERNAL', stage: 'ingest' });
         }
-      } else if (outcome instanceof Error && !fatal) {
-        fatal = WebVectorError.from(outcome, { code: 'INTERNAL', stage: 'ingest' });
+      });
+      if (fatal && isFatalIngestError(fatal)) {
+        if (cfg.retrieval.fallbackToLexical && session.chunks.size) {
+          warnings.push(`Embedding failed (${fatal.code}); falling back to lexical retrieval.`);
+        } else throw fatal;
       }
-    });
-    if (fatal && isFatalIngestError(fatal)) {
-      if (cfg.retrieval.fallbackToLexical && session.chunks.size) {
-        warnings.push(`Embedding failed (${fatal.code}); falling back to lexical retrieval.`);
-      } else throw fatal;
-    }
-    const ingestMs = Date.now() - ti;
+    };
+    await ingestBatch(targets, cfg.ingestion.totalDeadlineMs);
+    let ingestMs = Date.now() - ti;
     stageDone('ingest', ingestMs);
     if (opts.signal?.aborted) throw new WebVectorError('Research aborted', { code: 'ABORTED' });
 
     // ── 4. retrieve ──────────────────────────────────────────────────────
     const tr = Date.now();
     progress({ stage: 'retrieve', done: 0, total: 1, message: 'Retrieving relevant passages' });
-    const queries = dedupeStrings([query, ...related, ...expanded]);
+    let queries = dedupeStrings([query, ...related, ...expanded]);
     let passages: Passage[] = [];
     let candidates = 0;
     let reranked = false;
     let coverage: ResearchResult['coverage'];
     let degraded: ResearchResult['degraded'];
-    const hasChunks =
-      session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
-    if (hasChunks) {
+    let signals: RetrieveOutput['signals'] | undefined;
+    const retrieve = async (qs: string[]): Promise<void> => {
+      const hasChunks =
+        session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
+      if (!hasChunks) return;
       const r = await runRetrieveStage(c, cfg.retrieval, {
         session,
-        queries,
+        queries: qs,
         relatedQueries: related,
         searchResults: results,
         topK,
@@ -483,7 +494,70 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       candidates = r.candidates;
       reranked = r.reranked;
       coverage = r.coverage;
+      signals = r.signals;
       if (r.lexicalOnly && c.embedder) degraded = 'partial'; // configured lexical mode is not degraded
+    };
+    await retrieve(queries);
+    const assess = () =>
+      assessEvidence(query, passages, {
+        topK,
+        signals,
+        domainOf: registrableDomain,
+        fallbackTexts: results.slice(0, 5).map((r) => `${r.title}. ${r.snippet ?? ''}`),
+      });
+    let evidence = assess();
+
+    // ── 4b. auto-retry: one more search round with the suggested queries (same deadline) ──
+    let autoRetryStats: ResearchStats['retrieve']['autoRetry'];
+    const autoRetry = Math.min(1, opts.autoRetry ?? cfg.retrieval.autoRetry);
+    const remaining = cfg.ingestion.totalDeadlineMs - (Date.now() - ti);
+    if (
+      autoRetry > 0 &&
+      evidence.level !== 'strong' &&
+      evidence.suggestedQueries.length &&
+      remaining > 2000 &&
+      !signal.aborted
+    ) {
+      const t2 = Date.now();
+      const retryQueries = evidence.suggestedQueries.slice(0, 2);
+      const levelBefore = evidence.level;
+      let newPages = 0;
+      try {
+        const again = await runSearchStage(c, {
+          query: retryQueries[0] as string,
+          related: retryQueries.slice(1),
+          maxPages,
+          failures,
+          options: {
+            ...this.defaultSearchOptions(),
+            count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
+            freshness: opts.freshness ?? cfg.search.freshness,
+            domainsAllow: opts.domainsAllow,
+            domainsBlock: opts.domainsBlock,
+            signal,
+          },
+        });
+        searched.attempts.push(...again.attempts);
+        const fresh = again.results
+          .filter((r) => !sources.has(canonicalizeUrl(r.url)))
+          .slice(0, maxPages);
+        newPages = fresh.length;
+        for (const r of fresh) results.push(r);
+        if (fresh.length) await ingestBatch(fresh, remaining - (Date.now() - t2));
+        queries = dedupeStrings([...queries, ...retryQueries]);
+        await retrieve(queries);
+        evidence = assess();
+      } catch (err) {
+        warnings.push(`Auto-retry failed: ${err instanceof Error ? err.message : err}`);
+      }
+      autoRetryStats = {
+        queries: retryQueries,
+        newPages,
+        levelBefore,
+        levelAfter: evidence.level,
+        ms: Date.now() - t2,
+      };
+      ingestMs = Date.now() - ti;
     }
     if (
       passages.length === 0 &&
@@ -537,13 +611,20 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           ms: ingestMs,
         },
         embed: this.embedStats(c, embedTotals),
-        retrieve: { candidates, queries: queries.length, reranked, ms: retrieveMs },
+        retrieve: {
+          candidates,
+          queries: queries.length,
+          reranked,
+          ms: retrieveMs,
+          ...(autoRetryStats ? { autoRetry: autoRetryStats } : {}),
+        },
         totalMs: Date.now() - t0,
         warnings,
       },
       degraded,
       sessionId: opts.sessionId,
       ...(coverage ? { coverage } : {}),
+      evidence,
     };
     if (opts.markdown ?? cfg.output.markdown) {
       // Callers may tighten the operator's token budget, never loosen it.

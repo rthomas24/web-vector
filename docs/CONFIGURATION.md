@@ -68,6 +68,7 @@ Code-only: `store.instance` (a `VectorStore`).
 | `mmr` / `mmrLambda` | `true` / `0.7` | `WEBVECTOR_MMR` | diversity re-ranking |
 | `recency.weight` / `recency.halfLifeDays` | `0.3` / `180` | — | only when the caller sets `freshness`: score × (1 + w·0.5^(age/halfLife)), capped +30 %, undated pages never penalised; half-life follows the request (day 2 · week 7 · month 30 · year 180), `halfLifeDays` for `{after, before}` |
 | `corroborationBoost` / `corroborationJaccard` | `false` / `0.25` | — | `Passage.corroboration` (distinct domains whose chunks say the same thing: word-3-gram Jaccard ≥ threshold or cosine ≥ 0.85) is always reported; the boost × (1 + 0.1·min(n−1, 3)) is opt-in |
+| `autoRetry` | `0` | — | when `result.evidence.level` is `weak`/`none`, run one more search round with the top suggested queries inside the same call (same run deadline); max `1`; per-call `autoRetry` overrides |
 | `aspectCoverage` / `aspectLambda` | `auto` / `0.5` | — | xQuAD-lite: caller-supplied `relatedQueries` are aspects; the top-k is re-selected so every aspect is covered before any gets a third passage; `result.coverage` reports passages per aspect. `off` disables |
 | `minScore` | `null` | — | absolute cosine floor |
 | `relativeCutoff` | `0.6` | — | drop candidates below 0.6 × the best cosine (0 disables) |
@@ -114,4 +115,4 @@ Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch impl
 
 ## Per-call options (`research(query, opts)` / tool arguments)
 
-`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens` (packs passages into the budget and appends an "N more passages omitted" footer; `stats.retrieve.tokensReturned` reports the approximate size). Numeric limits are capped by the configured values above.
+`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `autoRetry` (0/1), `maxOutputTokens` (packs passages into the budget and appends an "N more passages omitted" footer; `stats.retrieve.tokensReturned` reports the approximate size). Numeric limits are capped by the configured values above.

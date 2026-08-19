@@ -1,4 +1,6 @@
 export { BM25Index, lightStem, tokenize } from './bm25.js';
+export type { AssessOptions, Evidence, EvidenceLevel, EvidenceSignals } from './evidence.js';
+export { assessEvidence, bridgeEntities, prfTerms } from './evidence.js';
 export { HeuristicExpander, LlmExpander } from './expansion.js';
 export type { Adjacent, Aspect, MmrOptions, Ranked } from './fusion.js';
 export {
