@@ -425,6 +425,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           contentType: page.doc.contentType,
           fetchedAt: page.fetchedAt,
           bytes: page.bytes,
+          approxTokens: approxTokens(page.doc.markdown),
           title: page.doc.title || r.title,
           ms,
         });

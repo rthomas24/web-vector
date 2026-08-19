@@ -278,6 +278,8 @@ export interface SourceSummary {
   searchRank: number;
   bytes?: number;
   ms?: number;
+  /** Approximate tokens of the page's Markdown (chars/4, CJK-aware) — what a full fetch would cost. */
+  approxTokens?: number;
   failure?: Failure;
 }
 

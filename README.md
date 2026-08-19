@@ -262,7 +262,7 @@ interface ResearchResult {
   passages: Passage[];                     // ranked; each: text, url, title, score (0–1), cosine?, bm25?,
                                            //   rerankScore?, chunkIndex, startOffset, endOffset, publishedAt?,
                                            //   fetchedAt, matchedQueries, citation "[n] Title — url"
-  sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, failure?
+  sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, approxTokens, failure?
   failures: Failure[];                     // per-URL / per-stage problems with machine codes (never thrown)
   stats: { search, ingest, embed, retrieve, totalMs, warnings };   // timings + counts per stage
   markdown?: string;                       // the pre-rendered version above

@@ -279,6 +279,7 @@ export const webResearchOutputSchema = z.object({
       searchRank: z.number().int(),
       bytes: z.number().optional(),
       ms: z.number().optional(),
+      approxTokens: z.number().optional(),
       failure: failureSchema.optional(),
     }),
   ),

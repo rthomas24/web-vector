@@ -5,7 +5,8 @@ import { anthropicTools, runAnthropicTool } from 'webvector/anthropic';
 
 const client = new Anthropic();
 const wv = new WebVector();
-const tools = anthropicTools({ include: ['webvector_research', 'webvector_fetch'] });
+// Guardrails (optional): the same options on the runner enforce them; here they only document the policy.
+const tools = anthropicTools({ include: ['webvector_research', 'webvector_fetch'], maxUses: 6 });
 const messages: any[] = [
   { role: 'user', content: 'Explain reciprocal rank fusion and cite two sources.' },
 ];
@@ -28,7 +29,10 @@ for (let i = 0; i < 6; i++) {
     break;
   }
   messages.push({ role: 'assistant', content: res.content });
-  const results = await Promise.all(uses.map((u) => runAnthropicTool(wv, u.name, u.input)));
+  // format: 'search_result' → tool_result.content becomes search_result blocks and Claude cites them natively
+  const results = await Promise.all(
+    uses.map((u) => runAnthropicTool(wv, u.name, u.input, { format: 'search_result' })),
+  );
   messages.push({
     role: 'user',
     content: uses.map((u, j) => ({
