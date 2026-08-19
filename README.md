@@ -257,7 +257,8 @@ interface ResearchResult {
                                            //   rerankScore?, chunkIndex, chunkCount? (merged neighbours),
                                            //   startOffset, endOffset, publishedAt?, fetchedAt, matchedQueries,
                                            //   highlight? { text, startOffset, endOffset } (best sentence window),
-                                           //   citation "[n] Title — url"
+                                           //   corroboration? (distinct domains saying the same thing),
+                                           //   citation "[n] Title — url (YYYY-MM-DD)"
   sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, failure?
   failures: Failure[];                     // per-URL / per-stage problems with machine codes (never thrown)
   stats: { search, ingest, embed, retrieve, totalMs, warnings };   // timings + counts per stage

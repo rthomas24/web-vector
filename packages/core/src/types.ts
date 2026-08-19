@@ -252,6 +252,11 @@ export interface Passage {
   fromSnippet?: boolean;
   /** Best 1–3 sentence window for the query (`output.highlights`); offsets are into the page markdown. */
   highlight?: { text: string; startOffset: number; endOffset: number };
+  /**
+   * Distinct registrable domains (including this passage's own) whose retrieved chunks say the
+   * same thing (word-3-gram Jaccard ≥ 0.25 or cosine ≥ 0.85). 1 = uncorroborated.
+   */
+  corroboration?: number;
   /** Ranking breakdown; present only when `explain: true` was requested. */
   explain?: PassageExplain;
 }
@@ -272,6 +277,8 @@ export interface PassageExplain {
   mergedChunks?: number[];
   /** xQuAD objective value when aspect coverage re-selected the top-k (`retrieval.aspectCoverage`). */
   aspectScore?: number;
+  /** Multipliers applied to the fused score (`recency`, `corroboration`, `sourcePrior`, `preferPrimary`). */
+  multipliers?: Record<string, number>;
 }
 
 export interface SourceSummary {

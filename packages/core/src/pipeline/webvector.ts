@@ -477,6 +477,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         warnings,
         explain: opts.explain,
         highlights: cfg.output.highlights,
+        freshness: opts.freshness ?? cfg.search.freshness,
       });
       passages = r.passages;
       candidates = r.candidates;
@@ -499,6 +500,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           stage: 'ingest',
         });
     }
+    if (cfg.output.order === 'date-asc' && passages.length > 1) passages = orderByDate(passages);
     for (const p of passages) {
       const s = sources.get(canonicalizeUrl(p.url));
       if (s) {
@@ -650,6 +652,22 @@ function snippetPassages(results: SearchResult[], query: string): Passage[] {
     citation: citationFor(i + 1, r.title, r.url),
     fromSnippet: true,
   }));
+}
+
+/**
+ * Oldest → newest (undated first), renumbering indices/citations so [n] markers stay consistent.
+ * Newest-last keeps the freshest evidence closest to the model's answer.
+ */
+function orderByDate(passages: Passage[]): Passage[] {
+  const key = (p: Passage) => (p.publishedAt ? Date.parse(p.publishedAt) || 0 : 0);
+  return passages
+    .slice()
+    .sort((a, b) => key(a) - key(b) || a.index - b.index)
+    .map((p, i) => ({
+      ...p,
+      index: i + 1,
+      citation: citationFor(i + 1, p.title, p.url, p.publishedAt),
+    }));
 }
 
 function dedupeStrings(arr: string[]): string[] {

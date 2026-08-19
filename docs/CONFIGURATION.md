@@ -66,6 +66,8 @@ Code-only: `store.instance` (a `VectorStore`).
 | `rrfK` / `lexicalWeight` / `expansionWeight` | `60` / `0.5` / `0.7` | — | fusion weights |
 | `maxPerSource` | `3` | `WEBVECTOR_MAX_PER_SOURCE` | passages per page |
 | `mmr` / `mmrLambda` | `true` / `0.7` | `WEBVECTOR_MMR` | diversity re-ranking |
+| `recency.weight` / `recency.halfLifeDays` | `0.3` / `180` | — | only when the caller sets `freshness`: score × (1 + w·0.5^(age/halfLife)), capped +30 %, undated pages never penalised; half-life follows the request (day 2 · week 7 · month 30 · year 180), `halfLifeDays` for `{after, before}` |
+| `corroborationBoost` / `corroborationJaccard` | `false` / `0.25` | — | `Passage.corroboration` (distinct domains whose chunks say the same thing: word-3-gram Jaccard ≥ threshold or cosine ≥ 0.85) is always reported; the boost × (1 + 0.1·min(n−1, 3)) is opt-in |
 | `aspectCoverage` / `aspectLambda` | `auto` / `0.5` | — | xQuAD-lite: caller-supplied `relatedQueries` are aspects; the top-k is re-selected so every aspect is covered before any gets a third passage; `result.coverage` reports passages per aspect. `off` disables |
 | `minScore` | `null` | — | absolute cosine floor |
 | `relativeCutoff` | `0.6` | — | drop candidates below 0.6 × the best cosine (0 disables) |
@@ -103,6 +105,7 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `output.maxPassageChars` | `1500` | — | per passage in the markdown (merged passages may use 2×) |
 | `output.maxTokens` | `0` (off) | — | token budget for the rendered markdown; passages are packed by score per token (top passage and one per source first), omitted indices are listed in a footer; `maxOutputTokens` per call can only tighten it |
 | `output.highlights` | `true` | — | compute `Passage.highlight` — the best 1–3 sentence window for the query (idf-weighted term coverage, + cosine when an embedder exists); code fences/tables are never cut |
+| `output.order` | `score` | — | `date-asc` orders passages oldest → newest (undated first; indices renumbered) so the freshest evidence sits closest to the answer |
 | `output.passageMode` | `full` | — | `full` renders whole passages in the markdown; `highlight` renders only each passage's highlight window (~65 % fewer tokens on the eval) |
 | `output.includeSnippetsOnFailure` | `true` | — | return search snippets when no page could be fetched (`degraded: 'search_only'`) |
 | `logging.level` | `warn` | `WEBVECTOR_LOG_LEVEL` | `silent` `error` `warn` `info` `debug` (stderr) |

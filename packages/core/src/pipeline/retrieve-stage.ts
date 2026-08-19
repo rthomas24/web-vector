@@ -22,11 +22,12 @@ import {
   type Ranked,
   rrf,
   scoreFusion,
+  shingleJaccard,
   xquad,
 } from '../retrieval/fusion.js';
 import { leadWindow, rankHighlightWindows, toHighlight } from '../retrieval/highlight.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
-import type { Passage, PassageExplain, ScoredChunk, SearchResult } from '../types.js';
+import type { Freshness, Passage, PassageExplain, ScoredChunk, SearchResult } from '../types.js';
 import { combine, dot } from '../util/vector.js';
 import type { Components } from './components.js';
 import { citationFor } from './format.js';
@@ -49,6 +50,8 @@ export interface RetrieveInput {
   explain?: boolean;
   /** Compute `Passage.highlight` (best sentence window per passage). Default true. */
   highlights?: boolean;
+  /** Caller's freshness request; enables the recency boost (`retrieval.recency`). */
+  freshness?: Freshness;
 }
 
 export interface RetrieveOutput {
@@ -65,6 +68,10 @@ type Candidate = ScoredChunk & {
   fused: number;
   /** xQuAD objective value at selection time (aspect coverage mode). */
   aspectScore?: number;
+  /** Score multipliers applied to `fused` (recency, corroboration, source priors) — for explain. */
+  multipliers?: Record<string, number>;
+  /** Distinct registrable domains whose candidate chunks corroborate this one (incl. its own). */
+  corroboration?: number;
   /** Set on a passage assembled from neighbouring chunks (see `mergeAdjacentCandidates`). */
   parts?: Candidate[];
 };
@@ -226,6 +233,9 @@ export async function runRetrieveStage(
     cands.push({ ...chunk, vector, score: cosineBest.get(f.id) ?? 0, fused: f.score });
   }
   const candidates = cands.length;
+  // Every fusion candidate (before cutoffs/dedupe): corroboration is counted against these, since
+  // near-duplicate removal is exactly what deletes the corroborating copies.
+  const allCands = cands.slice();
 
   // ── filter: cosine cutoffs (when vectors exist) or lexical relative cutoff, then near-duplicates ──
   if (!lexicalOnly && cosineBest.size) {
@@ -242,6 +252,28 @@ export async function runRetrieveStage(
     cands = cands.filter((x) => (lexRel.get(x.id) ?? 0) >= rc.lexicalRelativeCutoff);
   }
   cands = dedupeChunks(cands, rc.nearDuplicateThreshold);
+
+  // ── score multipliers: recency (only with a freshness request), corroboration (opt-in) ──
+  const boost = (x: Candidate, name: string, m: number) => {
+    if (m === 1) return;
+    x.fused *= m;
+    x.multipliers ??= {};
+    x.multipliers[name] = round(m, 3);
+  };
+  if (input.freshness && rc.recency.weight > 0) {
+    const halfLife = recencyHalfLifeDays(input.freshness, rc.recency.halfLifeDays);
+    for (const x of cands)
+      boost(x, 'recency', recencyBoost(x.metadata.publishedAt, halfLife, rc.recency.weight));
+  }
+  const corroborationOf = corroborationCounter(allCands, rc.corroborationJaccard);
+  if (rc.corroborationBoost) {
+    // Pairwise text similarity is O(n²): only the top slice of candidates competes for a boost.
+    for (const x of cands.slice(0, 80)) {
+      x.corroboration = corroborationOf(x);
+      boost(x, 'corroboration', 1 + 0.1 * Math.min(x.corroboration - 1, 3));
+    }
+    cands.sort((a, b) => b.fused - a.fused);
+  }
 
   // ── diversify → rerank → cut ─────────────────────────────────────────
   const poolK = Math.max(topK * 2, rc.rerankTopN);
@@ -355,6 +387,7 @@ export async function runRetrieveStage(
       lists: entries,
       ...(x.parts ? { mergedChunks: x.parts.map((p) => p.metadata.chunkIndex) } : {}),
       ...(x.aspectScore !== undefined ? { aspectScore: round(x.aspectScore, 6) } : {}),
+      ...(x.multipliers ? { multipliers: x.multipliers } : {}),
     };
   };
 
@@ -377,7 +410,8 @@ export async function runRetrieveStage(
       publishedAt: x.metadata.publishedAt,
       fetchedAt: x.metadata.fetchedAt,
       matchedQueries: matchedFor(x, matched, query),
-      citation: citationFor(i + 1, x.metadata.title, x.metadata.url),
+      corroboration: x.corroboration ?? corroborationOf(x),
+      citation: citationFor(i + 1, x.metadata.title, x.metadata.url, x.metadata.publishedAt),
       ...(input.explain ? { explain: explainFor(x.id, x) } : {}),
     };
   });
@@ -511,6 +545,71 @@ function mergeAdjacentCandidates(
     if (added === 0) break;
   }
   return selected;
+}
+
+/** Half-life for the recency boost implied by a freshness request. */
+export function recencyHalfLifeDays(freshness: Freshness, fallback: number): number {
+  switch (freshness) {
+    case 'day':
+      return 2;
+    case 'week':
+      return 7;
+    case 'month':
+      return 30;
+    case 'year':
+      return 180;
+    default:
+      return fallback;
+  }
+}
+
+/**
+ * Exponential-decay recency multiplier: 1 + w·0.5^(ageDays/halfLife), capped at 1.3. Undated
+ * pages get exactly 1 (never penalised); future dates count as age 0.
+ */
+export function recencyBoost(
+  publishedAt: string | undefined,
+  halfLifeDays: number,
+  weight: number,
+  now = Date.now(),
+): number {
+  if (!publishedAt) return 1;
+  const t = Date.parse(publishedAt);
+  if (Number.isNaN(t)) return 1;
+  const ageDays = Math.max(0, (now - t) / 86_400_000);
+  return Math.min(1.3, 1 + weight * 0.5 ** (ageDays / Math.max(1, halfLifeDays)));
+}
+
+/**
+ * Corroboration = number of distinct registrable domains (including the chunk's own) whose
+ * candidate chunks say the same thing: word-3-gram Jaccard ≥ `minJaccard`, or cosine ≥ 0.85 when
+ * both chunks have vectors. Shingle sets are computed lazily and cached per candidate.
+ */
+function corroborationCounter(cands: Candidate[], minJaccard: number): (x: Candidate) => number {
+  const cache = new Map<string, number>();
+  const domain = new Map<string, string>();
+  const domainOf = (x: Candidate) => {
+    let d = domain.get(x.id);
+    if (!d) {
+      d = registrableDomain(x.metadata.url);
+      domain.set(x.id, d);
+    }
+    return d;
+  };
+  return (x: Candidate) => {
+    const hit = cache.get(x.id);
+    if (hit !== undefined) return hit;
+    const domains = new Set<string>([domainOf(x)]);
+    for (const o of cands) {
+      if (o.id === x.id) continue;
+      const d = domainOf(o);
+      if (domains.has(d)) continue;
+      const cos = x.vector && o.vector ? dot(x.vector, o.vector) : 0;
+      if (cos >= 0.85 || shingleJaccard(x.text, o.text, 3) >= minJaccard) domains.add(d);
+    }
+    cache.set(x.id, domains.size);
+    return domains.size;
+  };
 }
 
 /** matchedQueries of a passage = union over its merged parts (or the chunk itself). */

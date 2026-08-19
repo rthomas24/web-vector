@@ -157,6 +157,12 @@ export function renderMarkdown(result: ResearchResult, opts: MarkdownRenderOptio
   return parts.filter(Boolean).join('\n\n');
 }
 
-export function citationFor(index: number, title: string, url: string): string {
-  return `[${index}] ${title} — ${url}`;
+export function citationFor(
+  index: number,
+  title: string,
+  url: string,
+  publishedAt?: string,
+): string {
+  const date = publishedAt ? ` (${publishedAt.slice(0, 10)})` : '';
+  return `[${index}] ${title} — ${url}${date}`;
 }

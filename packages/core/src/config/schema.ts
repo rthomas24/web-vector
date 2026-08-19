@@ -148,6 +148,25 @@ export const retrievalConfigSchema = z.object({
   aspectCoverage: z.enum(['auto', 'off']).default('auto'),
   /** xQuAD λ: 0 = pure relevance, 1 = pure aspect coverage. */
   aspectLambda: z.number().min(0).max(1).default(0.5),
+  /**
+   * Recency boost, applied only when the caller asks for `freshness`:
+   * score × (1 + weight · 0.5^(ageDays / halfLife)), capped at +30 %; undated pages are never
+   * penalised. Half-life follows the freshness request (day 2 · week 7 · month 30 · year 180 days);
+   * `halfLifeDays` is used for `{ after, before }` ranges.
+   */
+  recency: z
+    .object({
+      weight: z.number().min(0).max(0.3).default(0.3),
+      halfLifeDays: z.number().min(1).default(180),
+    })
+    .default({ weight: 0.3, halfLifeDays: 180 }),
+  /**
+   * Boost passages corroborated by other domains: × (1 + 0.1·min(n−1, 3)) where n =
+   * `Passage.corroboration`. Off by default (the count is always reported).
+   */
+  corroborationBoost: z.boolean().default(false),
+  /** Word-3-gram Jaccard threshold for two chunks to count as corroborating each other. */
+  corroborationJaccard: z.number().min(0).max(1).default(0.25),
   minScore: z.number().min(-1).max(1).nullable().default(null),
   relativeCutoff: z.number().min(0).max(1).default(0.6),
   /**
@@ -265,6 +284,12 @@ export const outputConfigSchema = z.object({
   highlights: z.boolean().default(true),
   /** `full` renders whole passages in the markdown; `highlight` renders only the highlight window. */
   passageMode: z.enum(['full', 'highlight']).default('full'),
+  /**
+   * `score` (default) or `date-asc`: passages ordered oldest → newest (undated first) so the most
+   * recent evidence sits closest to the model's answer (FreshPrompt: up to +2.2 % accuracy).
+   * Passage indices are renumbered after ordering.
+   */
+  order: z.enum(['score', 'date-asc']).default('score'),
   includeSnippetsOnFailure: z.boolean().default(true),
 });
 

@@ -687,3 +687,23 @@ describe('xQuAD aspect coverage', () => {
     expect(xquad(ids, relevance, [A, B], 3, 0).items).toEqual(['a1', 'a2', 'a3']);
   });
 });
+
+describe('recency boost', () => {
+  it('decays with a half-life, never penalises undated pages, caps at +30 %', async () => {
+    const { recencyBoost, recencyHalfLifeDays } = await import('../src/pipeline/retrieve-stage.js');
+    const now = Date.parse('2026-08-19T00:00:00Z');
+    const day = 86_400_000;
+    expect(recencyBoost(undefined, 30, 0.3, now)).toBe(1);
+    expect(recencyBoost('not a date', 30, 0.3, now)).toBe(1);
+    expect(recencyBoost(new Date(now).toISOString(), 30, 0.3, now)).toBeCloseTo(1.3, 6);
+    expect(recencyBoost(new Date(now - 30 * day).toISOString(), 30, 0.3, now)).toBeCloseTo(1.15, 6);
+    expect(recencyBoost(new Date(now - 300 * day).toISOString(), 30, 0.3, now)).toBeLessThan(1.001);
+    expect(recencyBoost(new Date(now + 10 * day).toISOString(), 30, 0.3, now)).toBeCloseTo(1.3, 6);
+    expect(recencyBoost(new Date(now).toISOString(), 30, 0.9, now)).toBe(1.3); // hard cap
+    expect(recencyHalfLifeDays('day', 180)).toBe(2);
+    expect(recencyHalfLifeDays('week', 180)).toBe(7);
+    expect(recencyHalfLifeDays('month', 180)).toBe(30);
+    expect(recencyHalfLifeDays('year', 180)).toBe(180);
+    expect(recencyHalfLifeDays({ after: '2024-01-01' }, 99)).toBe(99);
+  });
+});

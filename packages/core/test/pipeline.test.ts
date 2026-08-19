@@ -264,6 +264,75 @@ describe('WebVector pipeline (mocked)', () => {
     expect(r2.passages[0]!.highlight).toBeUndefined();
     await off.close();
   });
+  it('reports corroboration across domains, boosts it only when enabled, and orders by date', async () => {
+    const shared =
+      'Reciprocal rank fusion sums one over k plus rank across lists; the constant k is usually sixty and it dampens the effect of high ranks.';
+    server.use(
+      http.get('https://rrf.example/intro', () =>
+        HttpResponse.html(
+          `<!doctype html><html><head><title>RRF intro</title><meta property="article:published_time" content="2020-01-15"></head><body><article><h1>RRF intro</h1><p>${shared} ${'More rrf filler text about fusion. '.repeat(8)}</p></article></body></html>`,
+        ),
+      ),
+      http.get('https://fruit.example/banana', () =>
+        HttpResponse.html(
+          `<!doctype html><html><head><title>Mirror</title><meta property="article:published_time" content="2025-06-01"></head><body><article><h1>Mirror</h1><p>As the docs put it: ${shared} ${'Different mirror filler words here. '.repeat(8)}</p></article></body></html>`,
+        ),
+      ),
+      http.get('https://py.example/doc', () =>
+        HttpResponse.html(
+          page('Python docs', [
+            'Python rank fusion is different, it merges rank lists by formula.',
+          ]),
+        ),
+      ),
+      http.get('https://down.example/x', () => new HttpResponse('nope', { status: 500 })),
+      http.get('*/robots.txt', () => new HttpResponse('', { status: 404 })),
+    );
+    const wv = make({ retrieval: { nearDuplicateThreshold: 1, mmr: false, relativeCutoff: 0 } });
+    const res = await wv.research('reciprocal rank fusion constant k', { topK: 4 });
+    const rrf = res.passages.find((p) => p.url.includes('rrf.example'));
+    const mirror = res.passages.find((p) => p.url.includes('fruit.example'));
+    expect(rrf?.corroboration).toBe(2);
+    expect(mirror?.corroboration).toBe(2);
+    expect(res.passages.find((p) => p.url.includes('py.example'))?.corroboration).toBe(1);
+    // Dates always show in citations when known.
+    expect(rrf?.citation).toMatch(/\(2020-01-15\)$/);
+    expect(res.passages[0]!.explain).toBeUndefined();
+    await wv.close();
+
+    // Recency: only with a freshness request; the 2025 mirror gets a multiplier, the 2020 page ~1.
+    const wv2 = make({ retrieval: { nearDuplicateThreshold: 1, mmr: false, relativeCutoff: 0 } });
+    const r2 = await wv2.research('reciprocal rank fusion constant k', {
+      topK: 4,
+      freshness: 'year',
+      explain: true,
+    });
+    const m2 = r2.passages.find((p) => p.url.includes('fruit.example'))!;
+    const o2 = r2.passages.find((p) => p.url.includes('rrf.example'))!;
+    expect(m2.explain?.multipliers?.recency).toBeGreaterThan(1.05);
+    expect(o2.explain?.multipliers?.recency ?? 1).toBeLessThan(1.02);
+    await wv2.close();
+
+    // Corroboration boost (opt-in) multiplies corroborated passages; date-asc ordering renumbers.
+    const wv3 = make({
+      retrieval: {
+        nearDuplicateThreshold: 1,
+        mmr: false,
+        relativeCutoff: 0,
+        corroborationBoost: true,
+      },
+      output: { order: 'date-asc' },
+    });
+    const r3 = await wv3.research('reciprocal rank fusion constant k', { topK: 4, explain: true });
+    expect(
+      r3.passages.find((p) => p.url.includes('rrf.example'))?.explain?.multipliers?.corroboration,
+    ).toBeCloseTo(1.1, 5);
+    const dates = r3.passages.map((p) => p.publishedAt ?? '');
+    const sorted = [...dates].sort();
+    expect(dates).toEqual(sorted);
+    expect(r3.passages.map((p) => p.index)).toEqual(r3.passages.map((_, i) => i + 1));
+    await wv3.close();
+  });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
     await expect(wv.research('   ')).rejects.toMatchObject({ code: 'INVALID_CONFIG' });
