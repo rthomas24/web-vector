@@ -10,6 +10,7 @@ import { loadTokenCounter, type TokenCounter } from '../ingest/chunker.js';
 import { Fetcher, PageCache } from '../ingest/index.js';
 import { createParsers } from '../ingest/parsers.js';
 import { createReranker, LlmReranker } from '../rerankers/index.js';
+import type { BM25Options } from '../retrieval/bm25.js';
 import { HeuristicExpander, LlmExpander } from '../retrieval/expansion.js';
 import { buildSearchStack, type FallbackSearchProvider } from '../search/index.js';
 import { createVectorStore } from '../stores/index.js';
@@ -39,6 +40,20 @@ export interface Components {
   reranker?: Reranker;
   countTokens: TokenCounter;
   sessions: SessionRegistry;
+  /** Lexical index options (shared by registered and ephemeral sessions). */
+  bm25Options: BM25Options;
+}
+
+export function bm25OptionsFrom(b: WebVectorFileConfig['retrieval']['bm25']): BM25Options {
+  return {
+    variant: b.variant,
+    k1: b.k1,
+    b: b.b,
+    delta: b.delta,
+    coverageWeight: b.coverageWeight,
+    proximityWeight: b.proximityWeight,
+    fieldWeights: { title: b.fields.title, breadcrumb: b.fields.breadcrumb, body: b.fields.body },
+  };
 }
 
 export async function buildComponents(
@@ -92,11 +107,13 @@ export async function buildComponents(
     );
   }
 
+  const bm25Options = bm25OptionsFrom(cfg.retrieval.bm25);
   const sessions = new SessionRegistry({
     ttlMs: cfg.store.sessionTtlMs,
     maxSessions: cfg.store.maxSessions,
     sharedStore: !!sharedStore,
     storeFactory: () => sharedStore ?? new MemoryVectorStore(),
+    bm25: bm25Options,
   });
 
   const fetcher = new Fetcher({ ...cfg.ingestion, fetch: fetchImpl, logger });
@@ -124,6 +141,7 @@ export async function buildComponents(
     reranker,
     countTokens,
     sessions,
+    bm25Options,
   };
 }
 

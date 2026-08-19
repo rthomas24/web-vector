@@ -6,6 +6,7 @@
  *   npm run eval -- --semantic        # use local embeddings (needs @huggingface/transformers)
  *   npm run eval -- --case rrf        # only cases whose id contains "rrf"
  *   npm run eval -- --json out.json   # also write per-case results
+ *   npm run eval -- --config '{"retrieval":{"bm25":{"variant":"bmx"}}}'   # try config overrides
  *   WEBVECTOR_HTTP_FIXTURES=auto npm run eval   # record fixtures for new cases
  *
  * Each case in eval/cases/*.json supplies the query, the candidate URLs (what a search engine would
@@ -148,6 +149,7 @@ function score(c: EvalCase, res: ResearchResult, latencyMs: number): CaseMetrics
 
 async function main() {
   const semantic = flag('--semantic');
+  const overrides = opt('--config') ? JSON.parse(opt('--config') as string) : {};
   const cases = loadCases(opt('--case'));
   if (cases.length === 0) {
     console.error('No eval cases found.');
@@ -172,10 +174,17 @@ async function main() {
       c.urls.map((url, i) => ({ url, title: url, rank: i + 1 })),
     );
     const wv = await WebVector.create({
+      ...overrides,
       search: { provider: 'eval', instance: provider, fallbackProviders: [] },
       embeddings: { provider: semantic ? 'local' : 'none' },
-      retrieval: { topK: c.topK ?? 8 },
-      ingestion: { maxPages: Math.max(c.urls.length, 1), cache: { enabled: false } },
+      retrieval: { ...(overrides.retrieval ?? {}), topK: c.topK ?? 8 },
+      ingestion: {
+        maxPages: Math.max(c.urls.length, 1),
+        cache: { enabled: false },
+        // Replay is instant; don't let robots Crawl-delay / politeness pacing distort timings.
+        maxCrawlDelayMs: 0,
+        perHostMinIntervalMs: 0,
+      },
       output: { markdown: true },
       logging: { level: 'silent' },
       fetch: fetchImpl,

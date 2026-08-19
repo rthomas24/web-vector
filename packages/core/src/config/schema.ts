@@ -127,6 +127,41 @@ export const retrievalConfigSchema = z.object({
   rerankApiKey: z.string().optional(),
   rerankTopN: z.number().int().min(1).default(50),
   fallbackToLexical: z.boolean().default(true),
+  /** Lexical (BM25) scoring knobs; see retrieval/bm25.ts. */
+  bm25: z
+    .object({
+      /** `okapi` = classic BM25 saturation; `bmx` = entropy-weighted coverage variant (arXiv:2408.06643). */
+      variant: z.enum(['okapi', 'bmx']).default('okapi'),
+      k1: z.number().min(0).default(1.2),
+      b: z.number().min(0).max(1).default(0.75),
+      /** BM25+ lower bound (0 = off). */
+      delta: z.number().min(0).default(0),
+      /** Bonus for covering more distinct query terms (0 = off; ignored for `bmx`, which has its own). */
+      coverageWeight: z.number().min(0).default(0),
+      /** Bonus when matched query terms co-occur in a tight window (0 = off). */
+      proximityWeight: z.number().min(0).default(0.3),
+      /**
+       * BM25F field weights: page title / heading breadcrumb / chunk body. The breadcrumb carries
+       * section context a chunk's own words lack; the title is shared by every chunk of a page, so
+       * weighting it mostly favours long pages — keep it at 1 unless you rank whole pages.
+       */
+      fields: z
+        .object({
+          title: z.number().min(0).default(1),
+          breadcrumb: z.number().min(0).default(1.5),
+          body: z.number().min(0).default(1),
+        })
+        .default({ title: 1, breadcrumb: 1.5, body: 1 }),
+    })
+    .default({
+      variant: 'okapi',
+      k1: 1.2,
+      b: 0.75,
+      delta: 0,
+      coverageWeight: 0,
+      proximityWeight: 0.3,
+      fields: { title: 1, breadcrumb: 1.5, body: 1 },
+    }),
 });
 
 export const ingestionConfigSchema = z.object({
@@ -134,6 +169,11 @@ export const ingestionConfigSchema = z.object({
   maxConcurrentFetches: z.number().int().min(1).max(64).default(8),
   perHostConcurrency: z.number().int().min(1).default(2),
   perHostMinIntervalMs: z.number().int().min(0).default(500),
+  /**
+   * Upper bound applied to robots.txt `Crawl-delay` (some sites declare 15–30 s, which would
+   * serialise a handful of pages past the run deadline). 0 ignores Crawl-delay entirely.
+   */
+  maxCrawlDelayMs: z.number().int().min(0).default(10_000),
   timeoutMs: z.number().int().min(1000).default(15_000),
   totalDeadlineMs: z.number().int().min(1000).default(45_000),
   maxRedirects: z.number().int().min(0).max(20).default(5),

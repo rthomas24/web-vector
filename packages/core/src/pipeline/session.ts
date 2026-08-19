@@ -1,4 +1,4 @@
-import { BM25Index } from '../retrieval/bm25.js';
+import { BM25Index, type BM25Options } from '../retrieval/bm25.js';
 import { MemoryVectorStore } from '../stores/memory.js';
 import type { VectorStore } from '../types.js';
 import { LRU } from '../util/lru.js';
@@ -24,6 +24,8 @@ export interface SessionRegistryOptions {
   /** Factory for the per-session store. Memory mode creates a fresh store per session; external modes share one. */
   storeFactory: (sessionId: string) => VectorStore;
   sharedStore: boolean;
+  /** Options for each session's lexical index. */
+  bm25?: BM25Options;
 }
 
 /** LRU+TTL registry of research sessions. */
@@ -44,7 +46,7 @@ export class SessionRegistry {
       s = {
         id,
         store: this.opts.storeFactory(id),
-        bm25: new BM25Index(),
+        bm25: new BM25Index(this.opts.bm25),
         chunks: new Map(),
         urls: new Set(),
         createdAt: Date.now(),
@@ -92,11 +94,11 @@ export class SessionRegistry {
 }
 
 /** Ephemeral session: never registered, discarded after the call. */
-export function ephemeralSession(store?: VectorStore): Session {
+export function ephemeralSession(store?: VectorStore, bm25?: BM25Options): Session {
   return {
     id: `ephemeral-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     store: store ?? new MemoryVectorStore(),
-    bm25: new BM25Index(),
+    bm25: new BM25Index(bm25),
     chunks: new Map(),
     urls: new Set(),
     createdAt: Date.now(),

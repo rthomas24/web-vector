@@ -18,6 +18,8 @@ export interface FetcherOptions {
   maxConcurrentFetches: number;
   perHostConcurrency: number;
   perHostMinIntervalMs: number;
+  /** Cap for robots.txt Crawl-delay (ms); 0 = ignore Crawl-delay. */
+  maxCrawlDelayMs?: number;
   respectRobotsTxt: boolean;
   retries: number;
   allowPrivateNetworks: boolean;
@@ -94,7 +96,9 @@ export class Fetcher {
     });
     if (this.robots) {
       const { allowed, crawlDelayMs } = await this.robots.check(url, signal);
-      if (crawlDelayMs) this.hostQueue.setMinInterval(parsed.hostname.toLowerCase(), crawlDelayMs);
+      const cap = this.opts.maxCrawlDelayMs ?? 10_000;
+      const delay = crawlDelayMs === undefined ? 0 : Math.min(crawlDelayMs, cap);
+      if (delay > 0) this.hostQueue.setMinInterval(parsed.hostname.toLowerCase(), delay);
       if (!allowed) {
         throw new WebVectorError(`robots.txt disallows fetching ${url}`, {
           code: 'FETCH_BLOCKED_ROBOTS',

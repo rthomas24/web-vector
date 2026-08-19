@@ -60,6 +60,26 @@ export async function runRetrieveStage(
   const { session, queries, relatedQueries, searchResults, topK, signal, warnings } = input;
   const query = queries[0] as string;
   const candidateK = Math.max(topK * rc.candidateMultiplier, topK + 10);
+  // A long page can fill every candidate slot of a ranked list on its own (a 150-chunk article vs
+  // a 2-chunk paper), starving other sources before fusion ever sees them. Over-fetch each list and
+  // keep at most `perSourceCandidates` chunks per source, so every source can compete.
+  const perSourceCandidates = Math.max(rc.maxPerSource * 2, 6);
+  const overFetchK = candidateK * 3;
+  const sourceOf = (id: string) =>
+    hitById.get(id)?.metadata.canonicalUrl ?? session.chunks.get(id)?.metadata.canonicalUrl ?? id;
+  const capPerSource = <T extends { id: string }>(hits: T[]): T[] => {
+    const seen = new Map<string, number>();
+    const out: T[] = [];
+    for (const h of hits) {
+      const src = sourceOf(h.id);
+      const n = seen.get(src) ?? 0;
+      if (n >= perSourceCandidates) continue;
+      seen.set(src, n + 1);
+      out.push(h);
+      if (out.length >= candidateK) break;
+    }
+    return out;
+  };
 
   const lists: Ranked[][] = [];
   const weights: number[] = [];
@@ -86,10 +106,12 @@ export async function runRetrieveStage(
 
       const results = await Promise.all(
         vectors.map((qv) =>
-          session.store.query(qv.v, { topK: candidateK, sessionId: session.id, signal }),
+          session.store.query(qv.v, { topK: overFetchK, sessionId: session.id, signal }),
         ),
       );
-      results.forEach((hits, i) => {
+      results.forEach((raw, i) => {
+        for (const h of raw) if (!hitById.has(h.id)) hitById.set(h.id, h);
+        const hits = capPerSource(raw);
         lists.push(hits.map((h) => ({ id: h.id, score: h.score })));
         weights.push(vectors[i]!.w);
         listQuery.push(vectors[i]!.q);
@@ -113,10 +135,12 @@ export async function runRetrieveStage(
   // ── lexical lists (hybrid or lexical-only) ───────────────────────────
   if (rc.hybrid || lexicalOnly) {
     queries.forEach((q, i) => {
-      const hits = session.bm25.search(q, candidateK, (id) => {
-        const ch = session.chunks.get(id);
-        return !ch || ch.metadata.sessionId === session.id;
-      });
+      const hits = capPerSource(
+        session.bm25.search(q, overFetchK, (id) => {
+          const ch = session.chunks.get(id);
+          return !ch || ch.metadata.sessionId === session.id;
+        }),
+      );
       if (hits.length === 0) return;
       lists.push(hits);
       const base = i === 0 ? 1 : 0.7;

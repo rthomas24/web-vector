@@ -167,7 +167,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const c = await this.ensure();
     const t0 = Date.now();
     const doc = await this.fetch(url, { signal: opts.signal });
-    const session = ephemeralSession();
+    const session = ephemeralSession(undefined, c.bm25Options);
     if (c.embedder) await session.store.init?.(c.dimensions, c.embedder.model);
     const { chunks, stats } = await ingestDocument(c, this.embeddingCache, {
       doc,
@@ -582,7 +582,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     if (sessionId) return c.sessions.getOrCreate(sessionId);
     if (mode === 'persistent' && c.sharedStore) return c.sessions.getOrCreate('persistent');
     if (mode === 'session') return c.sessions.getOrCreate('default');
-    return ephemeralSession(c.sharedStore);
+    return ephemeralSession(c.sharedStore, c.bm25Options);
   }
 
   private defaultSearchOptions(): SearchOptions {

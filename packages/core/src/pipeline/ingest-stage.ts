@@ -100,7 +100,7 @@ export async function ingestDocument(
   }
 
   for (const ch of chunks) {
-    if (!session.bm25.has(ch.id)) session.bm25.add(ch.id, `${ch.metadata.title}\n${ch.text}`);
+    if (!session.bm25.has(ch.id)) session.bm25.add(ch.id, bm25FieldsFor(ch));
     if (!session.chunks.has(ch.id)) {
       // Keep the vector handy for MMR (memory store returns it; external stores don't).
       const vector = ch.vector ?? (session.store as MemoryVectorStore).get?.(ch.id)?.vector;
@@ -158,4 +158,13 @@ export function failureFrom(err: unknown, url: string): Failure {
     stage: e.stage ?? 'ingest',
     provider: e.provider,
   };
+}
+
+/** BM25F fields for a chunk: page title, heading breadcrumb (without the title), body text. */
+export function bm25FieldsFor(ch: Chunk): Record<string, string> {
+  const title = ch.metadata.title ?? '';
+  let crumbs = ch.metadata.breadcrumb ?? '';
+  if (title && crumbs.startsWith(title))
+    crumbs = crumbs.slice(title.length).replace(/^\s*›\s*/, '');
+  return { title, breadcrumb: crumbs, body: ch.text };
 }

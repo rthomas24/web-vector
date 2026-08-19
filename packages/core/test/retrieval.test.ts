@@ -439,3 +439,75 @@ describe('rerankers', () => {
     expect(r.id).toBe('local');
   });
 });
+
+describe('BM25 fields, variants, tokenizer', () => {
+  it('keeps compound identifiers as whole tokens plus their parts', async () => {
+    const { tokenize } = await import('../src/retrieval/bm25.js');
+    const t = tokenize(
+      'Use AbortSignal.any with text-embedding-3-small on 2025-11-25 in snake_case',
+    );
+    expect(t).toContain('abortsignal.any');
+    expect(t).toContain('text-embedding-3-small');
+    expect(t).toContain('2025-11-25');
+    expect(t).toContain('snake_case');
+    expect(t).toContain('abortsignal'); // parts still present
+    expect(t).not.toContain('1.5'); // short decimals are dropped as compounds
+  });
+
+  it('BM25F: a title match outranks a body-only match when title is weighted', async () => {
+    const { BM25Index } = await import('../src/retrieval/bm25.js');
+    const mk = (w: number) => {
+      const ix = new BM25Index({ fieldWeights: { title: w, body: 1 } });
+      ix.add('a', {
+        title: 'Streamable HTTP transport',
+        body: 'The transport sends frames over a connection and buffers them.',
+      });
+      ix.add('b', {
+        title: 'Overview',
+        body: 'Streamable HTTP is discussed briefly. The transport is fast.',
+      });
+      return ix.search('streamable http');
+    };
+    expect(mk(1)[0]!.id).toBe('b'); // body has both terms; equal weights → body wins
+    expect(mk(3)[0]!.id).toBe('a'); // weighted title wins
+  });
+
+  it('proximity bonus prefers adjacent query terms; quoted phrases must match exactly', async () => {
+    const { BM25Index } = await import('../src/retrieval/bm25.js');
+    const ix = new BM25Index({ proximityWeight: 1 });
+    ix.add('near', 'the reciprocal rank fusion algorithm merges lists');
+    ix.add(
+      'far',
+      'reciprocal values appear here while rank and fusion are mentioned much later in the text',
+    );
+    const hits = ix.search('reciprocal rank fusion');
+    expect(hits[0]!.id).toBe('near');
+    const phrase = ix.search('"rank fusion"');
+    expect(phrase.map((h) => h.id)).toEqual(['near']);
+  });
+
+  it('bmx variant and coverage bonus rank a doc covering all terms above a repetitive one', async () => {
+    const { BM25Index } = await import('../src/retrieval/bm25.js');
+    for (const opts of [{ variant: 'bmx' as const }, { coverageWeight: 1 }]) {
+      const ix = new BM25Index(opts);
+      ix.add('cover', 'alpha beta gamma appear together once each in this passage of text');
+      ix.add(
+        'repeat',
+        'alpha alpha alpha alpha alpha alpha alpha alpha is repeated in this passage of text',
+      );
+      ix.add('noise', 'unrelated words about weather and bananas fill this passage of text');
+      const hits = ix.search('alpha beta gamma');
+      expect(hits[0]!.id).toBe('cover');
+    }
+  });
+
+  it('remove() keeps postings consistent', async () => {
+    const { BM25Index } = await import('../src/retrieval/bm25.js');
+    const ix = new BM25Index();
+    ix.add('a', 'kiwi fruit');
+    ix.add('b', 'kiwi bird');
+    ix.remove('a');
+    expect(ix.search('kiwi').map((h) => h.id)).toEqual(['b']);
+    expect(ix.search('fruit')).toEqual([]);
+  });
+});
