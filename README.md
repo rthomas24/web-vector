@@ -169,11 +169,12 @@ Runnable versions of each are in [`examples/`](examples).
 ```bash
 npm i -g webvector-cli          # or keep using npx -y webvector-cli …
 
-webvector search "query" [-k 8] [-p 12] [--provider brave] [--embeddings openai] [--rerank local] [--json|--md] [--stats]
-webvector fetch <url> [--query "…"]     # one page as Markdown, or just the passages relevant to --query
+webvector search "query" [-k 8] [-p 12] [--provider brave] [--embeddings openai] [--rerank local] [--json|--md] [--stats] [--max-age 2h|--no-cache|--cache-only]
+webvector fetch <url> [--query "…"]     # one page as Markdown, or just the passages relevant to --query (same cache flags)
 webvector serp "query"                  # search results only
-webvector doctor [--live]               # config, dependencies, provider connectivity, active tier
-webvector init                          # writes webvector.config.yaml + .env.example
+webvector doctor [--live] [--fix] [--json]   # config, dependencies, runtime (node:sqlite / SSRF guard), cache + store paths, local model presence
+webvector cache stats|ls|clear|prune --older-than 7d   # the persistent page/embedding cache (~/.cache/webvector/pages.sqlite)
+webvector init [--yes]                  # writes webvector.config.yaml (+ .env.example); interactive on a TTY
 webvector config                        # print resolved config (secrets redacted)
 webvector providers                     # every provider and the env var it reads
 webvector mcp [--http]                  # run the MCP server
@@ -279,7 +280,7 @@ WebVector fetches URLs chosen by a search engine — i.e. content an attacker ca
 - **Caps** on redirects (5), response size (5 MB), per-request time (15 s) and whole-run deadline (45 s); bounded concurrency globally and per host.
 - **Etiquette**: robots.txt honoured (incl. `Crawl-delay`), identifiable User-Agent, per-host minimum interval, `Retry-After` respected.
 - **Parsing without execution**: HTML is parsed with linkedom (no scripts, no sub-resource loading), PDFs with pdf.js in no-eval mode; callers only ever receive Markdown/plain text with control characters stripped.
-- **Secrets**: read from env/config, never logged; redacted in errors, in `webvector config`, and in the MCP `webvector_status` tool. Nothing is written to disk unless you enable the page cache directory.
+- **Secrets**: read from env/config, never logged; redacted in errors, in `webvector config`, and in the MCP `webvector_status` tool. The only files written are the page/embedding cache (`~/.cache/webvector/pages.sqlite`, set `ingestion.cache.dir: false` to keep everything in memory) and, if you choose `store.provider: sqlite`, the vector store (`~/.local/share/webvector/store.sqlite`).
 - **No telemetry, ever.**
 - **MCP over HTTP** binds to `127.0.0.1` only, validates `Host`/`Origin` (DNS-rebinding protection), supports a bearer token, and refuses to bind elsewhere without `--allow-remote` **and** a token.
 - **DNS rebinding is closed at connect time**: the SSRF check runs inside the DNS lookup used to open the socket, so the address checked is the address dialled.

@@ -1,28 +1,46 @@
 #!/usr/bin/env node
-import { existsSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import {
   autoEmbeddingProviderName,
   CONFIG_FILENAMES,
   createEmbeddingProvider,
   createSearchProvider,
+  defaultDataDir,
   envKeyFor,
   envUrlFor,
+  expandHome,
   findConfigFile,
   hasLocalRuntime,
   listEmbeddingProviders,
   listSearchProviders,
   listVectorStores,
   loadConfig,
+  openCacheDb,
   PROVIDER_KEY_ENV,
   PROVIDER_URL_ENV,
+  probeRuntime,
   redactConfig,
+  resolveCacheDir,
   SEMANTIC_UPGRADE_HINT,
   WebVector,
   type WebVectorConfig,
   WebVectorError,
 } from 'webvector';
+import {
+  DEFAULT_LOCAL_MODEL,
+  defaultModelCacheDir,
+  LOCAL_MODEL_ALIASES,
+} from 'webvector/embeddings';
 
 const VERSION = '0.1.0';
 const program = new Command();
@@ -67,6 +85,54 @@ function cacheOptions(opts: { maxAge?: string; cache?: boolean; cacheOnly?: bool
         ? ('bypass' as const)
         : undefined,
   };
+}
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MiB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GiB`;
+}
+function fmtAge(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 86_400_000) return `${(ms / 3_600_000).toFixed(1)}h`;
+  return `${(ms / 86_400_000).toFixed(1)}d`;
+}
+/** Writable check for a directory that may not exist yet (walks up to the nearest ancestor). */
+function isWritableDir(dir: string): boolean {
+  let d = dir;
+  for (let i = 0; i < 32; i++) {
+    if (existsSync(d)) {
+      try {
+        accessSync(d, constants.W_OK);
+        return statSync(d).isDirectory();
+      } catch {
+        return false;
+      }
+    }
+    const parent = dirname(d);
+    if (parent === d) return false;
+    d = parent;
+  }
+  return false;
+}
+/** Local model files present in the Transformers.js cache (offline readiness). */
+function localModelPresent(model: string, cacheDir: string): { present: boolean; dir: string } {
+  const resolvedModel = LOCAL_MODEL_ALIASES[model.toLowerCase()] ?? model;
+  const dir = join(cacheDir, resolvedModel);
+  try {
+    const walk = (d: string, depth: number): boolean => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        if (e.isFile() && /\.onnx$/.test(e.name)) return true;
+        if (e.isDirectory() && depth < 3 && walk(join(d, e.name), depth + 1)) return true;
+      }
+      return false;
+    };
+    return { present: existsSync(dir) && walk(dir, 0), dir };
+  } catch {
+    return { present: false, dir };
+  }
 }
 
 function fail(err: unknown): never {
@@ -264,31 +330,79 @@ program
 
 program
   .command('doctor')
-  .description('Diagnose configuration, dependencies and provider connectivity')
+  .description('Diagnose configuration, dependencies, caches and provider connectivity')
   .option('--live', 'also run a live search + embedding probe')
+  .option('--fix', 'create missing cache/store directories and download the local model')
+  .option('--json', 'machine-readable output ({ ok, checks: [{status, check, message}] })')
   .action(async (opts) => {
     const { overrides, configFile } = globalOverrides();
     let ok = true;
-    const line = (status: 'ok' | 'warn' | 'fail' | 'info', msg: string) => {
+    const report: { status: string; check: string; message: string }[] = [];
+    const line = (status: 'ok' | 'warn' | 'fail' | 'info', msg: string, check?: string) => {
       const icon = { ok: '✔', warn: '⚠', fail: '✖', info: '·' }[status];
       if (status === 'fail') ok = false;
-      console.log(`${icon} ${msg}`);
+      report.push({ status, check: check ?? msg.split(':')[0]?.trim() ?? '', message: msg });
+      if (!opts.json) console.log(`${icon} ${msg}`);
     };
-    // Node
+    const finish = (): never => {
+      if (opts.json) console.log(JSON.stringify({ ok, checks: report }, null, 2));
+      else console.log(ok ? '\nAll checks passed.' : '\nSome checks failed — see above.');
+      process.exit(ok ? 0 : 1);
+    };
+    // Node + runtime capabilities
     const [maj, min] = process.versions.node.split('.').map(Number);
     if ((maj as number) > 22 || ((maj as number) === 22 && (min as number) >= 12))
-      line('ok', `Node ${process.versions.node}`);
-    else line('fail', `Node ${process.versions.node} — WebVector requires Node ≥ 22.12`);
+      line('ok', `Node ${process.versions.node}`, 'node');
+    else line('fail', `Node ${process.versions.node} — WebVector requires Node ≥ 22.12`, 'node');
+    const rt = await probeRuntime();
+    line(
+      rt.sqlite ? 'ok' : 'warn',
+      `runtime: ${rt.runtime} · node:sqlite ${rt.sqlite ? 'available' : 'unavailable (caches memory-only, sqlite store → memory)'} · SSRF guard ${rt.ssrfMode}${rt.sqliteExperimentalWarning ? ' · Node 22 prints an ExperimentalWarning for node:sqlite (filtered by WebVector; MCP stdout stays clean)' : ''}`,
+      'runtime',
+    );
+    if (rt.ssrfMode !== 'connect-time')
+      line(
+        'warn',
+        `SSRF: connect-time guard unavailable on this runtime — ${rt.ssrfMode} checks only (DNS-rebinding window). Prefer Node ≥ 22.12 for untrusted URLs.`,
+        'ssrf',
+      );
     // Config
     let resolved: Awaited<ReturnType<typeof loadConfig>> | undefined;
     try {
       resolved = await loadConfig({ configFile, overrides });
-      line('ok', `config: ${resolved.configPath ?? 'no config file (defaults + env)'}`);
+      line('ok', `config: ${resolved.configPath ?? 'no config file (defaults + env)'}`, 'config');
     } catch (err) {
-      line('fail', `config invalid: ${(err as Error).message}`);
-      return process.exit(1);
+      line('fail', `config invalid: ${(err as Error).message}`, 'config');
+      return finish();
     }
     const cfg = resolved.file;
+    // Page / embedding cache
+    const cacheDir = resolveCacheDir(cfg.ingestion.cache.dir);
+    if (!cfg.ingestion.cache.enabled)
+      line('info', 'cache: disabled (ingestion.cache.enabled: false)', 'cache');
+    else if (!cacheDir) line('info', 'cache: memory only (ingestion.cache.dir: false)', 'cache');
+    else if (!rt.sqlite)
+      line('warn', `cache: ${cacheDir} — node:sqlite unavailable, memory only`, 'cache');
+    else {
+      if (opts.fix && !existsSync(cacheDir)) {
+        try {
+          mkdirSync(cacheDir, { recursive: true });
+          line('ok', `cache: created ${cacheDir}`, 'cache');
+        } catch (err) {
+          line('fail', `cache: cannot create ${cacheDir}: ${(err as Error).message}`, 'cache');
+        }
+      }
+      const exists = existsSync(join(cacheDir, 'pages.sqlite'));
+      const writable = isWritableDir(cacheDir);
+      const db = exists ? await openCacheDb({ dir: cacheDir, readOnly: true }) : undefined;
+      const st = db?.stats();
+      db?.close();
+      line(
+        writable ? 'ok' : 'warn',
+        `cache: ${join(cacheDir, 'pages.sqlite')} — ${exists ? `${st?.pages.count ?? 0} pages, ${st?.embeddings.count ?? 0} embeddings, ${fmtBytes(st?.fileBytes ?? 0)}` : 'not created yet'}${writable ? '' : ` — NOT writable${opts.fix ? '' : ' (run with --fix or set ingestion.cache.dir)'}`}${cfg.embeddings.cache ? '' : ' · embedding cache off'}`,
+        'cache',
+      );
+    }
     // Search
     const sp = cfg.search.provider;
     line('info', `search provider: ${sp}  (available: ${listSearchProviders().join(', ')})`);
@@ -334,9 +448,36 @@ program
       line('info', SEMANTIC_UPGRADE_HINT);
     } else if (ep === 'local' || ep === 'transformers') {
       if (await hasLocalRuntime()) {
+        const model = cfg.embeddings.model ?? DEFAULT_LOCAL_MODEL;
+        const modelCache = cfg.embeddings.cacheDir ?? defaultModelCacheDir();
         line(
           'ok',
-          `@huggingface/transformers installed; model ${cfg.embeddings.model ?? 'Xenova/all-MiniLM-L6-v2'} (cache: ${cfg.embeddings.cacheDir ?? process.env.WEBVECTOR_MODEL_CACHE ?? '~/.cache/webvector/models'})`,
+          `@huggingface/transformers installed; model ${model} (cache: ${modelCache})`,
+          'embeddings',
+        );
+        let m = localModelPresent(model, modelCache);
+        if (!m.present && opts.fix) {
+          try {
+            const t0 = Date.now();
+            const e = createEmbeddingProvider('local', {
+              model: cfg.embeddings.model,
+              cacheDir: cfg.embeddings.cacheDir,
+              dtype: cfg.embeddings.dtype,
+            });
+            await e.init?.();
+            await e.embed(['warm-up'], { kind: 'query' });
+            m = localModelPresent(model, modelCache);
+            line('ok', `local model downloaded in ${Date.now() - t0}ms`, 'model');
+          } catch (err) {
+            line('fail', `local model download failed: ${(err as Error).message}`, 'model');
+          }
+        }
+        line(
+          m.present ? 'ok' : 'warn',
+          m.present
+            ? `local model files present (${m.dir}) — offline ready`
+            : `local model not downloaded yet (${m.dir}) — first run downloads it${opts.fix ? '' : '; `webvector doctor --fix` downloads now'}`,
+          'model',
         );
       } else {
         line(
@@ -361,7 +502,45 @@ program
       'info',
       `store: ${cfg.store.provider} (${cfg.store.mode})  (available: ${listVectorStores().join(', ')})`,
     );
-    if (cfg.store.provider !== 'memory') {
+    if (cfg.store.provider === 'sqlite') {
+      const raw = cfg.store.url ?? envUrlFor('sqlite');
+      const path = raw ? expandHome(raw) : join(defaultDataDir(), 'store.sqlite');
+      if (!rt.sqlite) line('warn', 'sqlite store: node:sqlite unavailable → memory store', 'store');
+      else {
+        const dir = dirname(path);
+        if (opts.fix && !existsSync(dir)) {
+          try {
+            mkdirSync(dir, { recursive: true });
+          } catch {
+            /* reported below */
+          }
+        }
+        const writable = isWritableDir(dir);
+        let size = 0;
+        try {
+          size = statSync(path).size;
+        } catch {
+          /* not created yet */
+        }
+        line(
+          writable ? 'ok' : 'warn',
+          `sqlite store: ${path} — ${size ? fmtBytes(size) : 'not created yet'}${writable ? '' : ' — NOT writable'}${cfg.store.options?.vec ? ' · sqlite-vec requested' : ''}`,
+          'store',
+        );
+        if (cfg.store.options?.vec) {
+          try {
+            await import('sqlite-vec' as string);
+            line('ok', 'sqlite-vec installed', 'store');
+          } catch {
+            line(
+              'warn',
+              'sqlite-vec not installed (npm i sqlite-vec) — JS cosine will be used',
+              'store',
+            );
+          }
+        }
+      }
+    } else if (cfg.store.provider !== 'memory') {
       const url = cfg.store.url ?? envUrlFor(cfg.store.provider);
       line(
         url ? 'ok' : 'warn',
@@ -455,8 +634,151 @@ program
         line('warn', `fetch example.com failed: ${(err as Error).message}`);
       }
     }
-    console.log(ok ? '\nAll checks passed.' : '\nSome checks failed — see above.');
-    process.exit(ok ? 0 : 1);
+    finish();
+  });
+
+// ─── cache management ────────────────────────────────────────────────────────
+
+const cache = program
+  .command('cache')
+  .description('Inspect and manage the persistent page/embedding cache (pages.sqlite)');
+
+async function openCacheForCli(readOnly: boolean) {
+  const { overrides, configFile } = globalOverrides();
+  const resolved = await loadConfig({ configFile, overrides });
+  const dir = resolveCacheDir(resolved.file.ingestion.cache.dir);
+  if (!dir) return { dir: undefined, db: undefined, cfg: resolved.file };
+  const exists = existsSync(join(dir, 'pages.sqlite'));
+  if (readOnly && !exists) return { dir, db: undefined, cfg: resolved.file };
+  const db = await openCacheDb({ dir, readOnly: readOnly && exists });
+  return { dir, db, cfg: resolved.file };
+}
+
+cache
+  .command('stats')
+  .description('Show cache location, size, page/embedding counts and top hosts')
+  .option('--json', 'print JSON')
+  .action(async (opts) => {
+    try {
+      const { dir, db, cfg } = await openCacheForCli(true);
+      if (!dir) {
+        console.log('cache: memory only (ingestion.cache.dir is false)');
+        return;
+      }
+      if (!db) {
+        const rt = await probeRuntime();
+        console.log(
+          opts.json
+            ? JSON.stringify({ path: join(dir, 'pages.sqlite'), exists: false, sqlite: rt.sqlite })
+            : `cache: ${join(dir, 'pages.sqlite')} — not created yet${rt.sqlite ? '' : ' (node:sqlite unavailable on this runtime)'}`,
+        );
+        return;
+      }
+      const st = db.stats();
+      db.close();
+      if (opts.json) {
+        console.log(
+          JSON.stringify(
+            { ...st, ttlMs: cfg.ingestion.cache.ttlMs, embeddingCache: cfg.embeddings.cache },
+            null,
+            2,
+          ),
+        );
+        return;
+      }
+      console.log(`path        ${st.path}`);
+      console.log(`file size   ${fmtBytes(st.fileBytes)}`);
+      console.log(
+        `pages       ${st.pages.count} (${fmtBytes(st.pages.markdownBytes)} markdown)${st.pages.oldestFetchedAt ? ` · oldest ${fmtAge(Date.now() - Date.parse(st.pages.oldestFetchedAt))} · newest ${fmtAge(Date.now() - Date.parse(st.pages.newestFetchedAt as string))}` : ''} · ttl ${fmtAge(cfg.ingestion.cache.ttlMs)}`,
+      );
+      console.log(
+        `embeddings  ${st.embeddings.count} (${fmtBytes(st.embeddings.vectorBytes)})${st.embeddings.models.length ? ` — ${st.embeddings.models.map((m) => `${m.model}@${m.dims}/${m.dtype}: ${m.count}`).join(', ')}` : ''}${cfg.embeddings.cache ? '' : ' · embedding cache off'}`,
+      );
+      if (st.hosts.length)
+        console.log(
+          `hosts       ${st.hosts
+            .slice(0, 10)
+            .map((h) => `${h.host} (${h.count})`)
+            .join(', ')}`,
+        );
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+cache
+  .command('ls')
+  .description('List cached pages (most recently used first)')
+  .option('-n, --limit <n>', 'rows', (v) => Number(v), 50)
+  .option('--json', 'print JSON')
+  .action(async (opts) => {
+    try {
+      const { db } = await openCacheForCli(true);
+      if (!db) {
+        console.log('(no cache database)');
+        return;
+      }
+      const rows = db.listPages(opts.limit);
+      db.close();
+      if (opts.json) {
+        console.log(JSON.stringify(rows, null, 2));
+        return;
+      }
+      for (const r of rows)
+        console.log(
+          `${fmtAge(Date.now() - r.fetched_at).padStart(6)}  ${fmtBytes(r.md_bytes).padStart(9)}  ${r.etag || r.last_modified ? 'v' : ' '}  ${r.url}`,
+        );
+      if (!rows.length) console.log('(empty)');
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+cache
+  .command('clear')
+  .description('Delete cached pages and embeddings')
+  .option('--pages-only', 'keep the embedding cache')
+  .option('--embeddings-only', 'keep the page cache')
+  .action(async (opts) => {
+    try {
+      const { db } = await openCacheForCli(false);
+      if (!db) {
+        console.log('(no cache database)');
+        return;
+      }
+      const pages = opts.embeddingsOnly ? 0 : db.clearPages();
+      const embeddings = opts.pagesOnly ? 0 : db.clearEmbeddings();
+      db.vacuum();
+      db.close();
+      console.log(`✔ removed ${pages} page(s) and ${embeddings} embedding(s)`);
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+cache
+  .command('prune')
+  .description('Delete cached pages older than a duration (e.g. --older-than 7d)')
+  .requiredOption('--older-than <duration>', 'e.g. 12h, 7d, 4w')
+  .option('--embeddings', 'also prune embeddings older than the duration')
+  .action(async (opts) => {
+    try {
+      const ms = parseDuration(opts.olderThan);
+      const { db } = await openCacheForCli(false);
+      if (!db) {
+        console.log('(no cache database)');
+        return;
+      }
+      const pages = db.prunePages(ms);
+      const embeddings = opts.embeddings ? db.pruneEmbeddings(ms) : 0;
+      db.vacuum();
+      db.close();
+      console.log(
+        `✔ pruned ${pages} page(s)${opts.embeddings ? ` and ${embeddings} embedding(s)` : ''} older than ${opts.olderThan}`,
+      );
+    } catch (err) {
+      fail(err);
+    }
   });
 
 program
