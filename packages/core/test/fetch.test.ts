@@ -184,3 +184,105 @@ describe('markdown-first content negotiation', () => {
     expect(out.page?.doc.metadata?.markdownTokens).toBe(12);
   });
 });
+
+// ─── C2 bot-block classifier ─────────────────────────────────────────────────
+
+describe('bot-block classifier', () => {
+  it('classifies vendors from headers/body and never retries', async () => {
+    let hits = 0;
+    server.use(
+      http.get('https://cf.example/challenge', () => {
+        hits++;
+        return new HttpResponse('<html><title>Just a moment...</title></html>', {
+          status: 403,
+          headers: { 'cf-mitigated': 'challenge', server: 'cloudflare' },
+        });
+      }),
+      http.get(
+        'https://cf.example/blocked',
+        () =>
+          new HttpResponse(
+            '<html><head><title>Attention Required! | Cloudflare</title></head><body>Sorry, you have been blocked</body></html>',
+            { status: 403, headers: { server: 'cloudflare' } },
+          ),
+      ),
+      http.get(
+        'https://ak.example/',
+        () =>
+          new HttpResponse(
+            '<HTML><HEAD><TITLE>Access Denied</TITLE></HEAD><BODY>You don\'t have permission to access "http://ak.example/" on this server.<P>Reference&#32;#18.4d1d1002.1700000000.1a2b3c</BODY></HTML>',
+            { status: 403, headers: { server: 'AkamaiGHost' } },
+          ),
+      ),
+      http.get(
+        'https://dd.example/',
+        () =>
+          new HttpResponse('<html><body>blocked</body></html>', {
+            status: 403,
+            headers: { 'x-datadome': 'protected' },
+          }),
+      ),
+      http.get(
+        'https://px.example/',
+        () =>
+          new HttpResponse('<html><script>window._pxAppId="PX1234";</script></html>', {
+            status: 403,
+          }),
+      ),
+      http.get(
+        'https://imp.example/',
+        () =>
+          new HttpResponse('<html><iframe src="/_Incapsula_Resource?x=1"></iframe></html>', {
+            status: 200,
+            headers: { 'content-type': 'text/html' },
+          }),
+      ),
+      http.get(
+        'https://pay.example/',
+        () =>
+          new HttpResponse('payment required', {
+            status: 402,
+            headers: { 'crawler-price': 'USD 0.01' },
+          }),
+      ),
+      http.get('https://plain.example/', () => new HttpResponse('nope', { status: 403 })),
+    );
+    const f = fetcher({ retries: 3 });
+    await expect(f.fetch('https://cf.example/challenge')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_BOT',
+      retryable: false,
+      details: { vendor: 'cloudflare', status: 403 },
+    });
+    expect(hits).toBe(1); // no retries for a challenge
+    await expect(f.fetch('https://cf.example/blocked')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_BOT',
+      details: { vendor: 'cloudflare' },
+    });
+    await expect(f.fetch('https://ak.example/')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_BOT',
+      details: { vendor: 'akamai' },
+    });
+    await expect(f.fetch('https://dd.example/')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_BOT',
+      details: { vendor: 'datadome' },
+    });
+    await expect(f.fetch('https://px.example/')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_BOT',
+      details: { vendor: 'perimeterx' },
+    });
+    // 200 with a tiny interstitial body is still a block
+    await expect(f.fetch('https://imp.example/')).rejects.toMatchObject({
+      code: 'FETCH_BLOCKED_BOT',
+      details: { vendor: 'imperva', status: 200 },
+    });
+    await expect(f.fetch('https://pay.example/')).rejects.toMatchObject({
+      code: 'FETCH_PAYMENT_REQUIRED',
+      retryable: false,
+      details: { vendor: 'cloudflare-pay-per-crawl', price: 'USD 0.01' },
+    });
+    // an ordinary 403 stays FETCH_HTTP_ERROR
+    await expect(f.fetch('https://plain.example/')).rejects.toMatchObject({
+      code: 'FETCH_HTTP_ERROR',
+    });
+  });
+});

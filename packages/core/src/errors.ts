@@ -15,6 +15,10 @@ export type ErrorCode =
   | 'FETCH_TOO_LARGE'
   | 'FETCH_BLOCKED_ROBOTS'
   | 'FETCH_BLOCKED_SSRF'
+  /** Anti-bot challenge / access-denied wall (Cloudflare, Akamai, DataDome, PerimeterX, Imperva…); `details.vendor`. Never retried. */
+  | 'FETCH_BLOCKED_BOT'
+  /** HTTP 402 pay-per-crawl (`details.vendor`, `details.price`). WebVector never pays. Never retried. */
+  | 'FETCH_PAYMENT_REQUIRED'
   | 'FETCH_HTTP_ERROR'
   | 'TOO_MANY_REDIRECTS'
   | 'UNSUPPORTED_CONTENT_TYPE'

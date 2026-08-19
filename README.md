@@ -268,7 +268,7 @@ interface ResearchResult {
 
 Two kinds, deliberately separate:
 
-- **Failures** are per-page and never abort a run: `FETCH_TIMEOUT`, `FETCH_HTTP_ERROR`, `FETCH_BLOCKED_ROBOTS`, `FETCH_BLOCKED_SSRF`, `FETCH_TOO_LARGE`, `TOO_MANY_REDIRECTS`, `UNSUPPORTED_CONTENT_TYPE`, `PARSE_EMPTY`, `PARSE_FAILED`. They land in `result.failures[]` and `sources[].failure`. If *every* page fails you still get the search snippets (`degraded: 'search_only'`, `ALL_FETCHES_FAILED`).
+- **Failures** are per-page and never abort a run: `FETCH_TIMEOUT`, `FETCH_HTTP_ERROR`, `FETCH_BLOCKED_ROBOTS`, `FETCH_BLOCKED_SSRF`, `FETCH_BLOCKED_BOT` (anti-bot wall — Cloudflare/Akamai/DataDome/PerimeterX/Imperva, `details.vendor`, never retried), `FETCH_PAYMENT_REQUIRED` (HTTP 402 pay-per-crawl), `FETCH_TOO_LARGE`, `TOO_MANY_REDIRECTS`, `UNSUPPORTED_CONTENT_TYPE`, `PARSE_EMPTY`, `PARSE_FAILED`. They land in `result.failures[]` and `sources[].failure`. If *every* page fails you still get the search snippets (`degraded: 'search_only'`, `ALL_FETCHES_FAILED`).
 - **Errors** are thrown as `WebVectorError` with `code`, `message`, `remediation`, `retryable`, `provider`, `stage` and `toJSON()`; secrets are redacted. Examples: `MISSING_API_KEY` ("Set BRAVE_API_KEY … or use a keyless provider: duckduckgo"), `MISSING_DEPENDENCY` ("npm i @huggingface/transformers — or embeddings.provider: 'none'"), `SEARCH_BLOCKED`, `PROVIDER_RATE_LIMITED` (with `retryAfterMs`), `EMBEDDING_DIMENSION_MISMATCH` (names both models; suggests `store.clear()` or a new collection), `INVALID_CONFIG`.
 
 ## 10. Security and etiquette

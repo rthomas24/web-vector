@@ -230,7 +230,11 @@ export class Fetcher {
 
       if (!res.ok) {
         const retryAfter = res.headers.get('retry-after');
+        // Bot walls / paywalls: classify from headers + a small body excerpt, never retry.
+        const excerpt = BLOCK_SNIFF_STATUS.has(res.status) ? await peekText(res) : '';
         await drain(res);
+        const blocked = blockedError(res.status, res.headers, excerpt, current);
+        if (blocked) throw blocked;
         const retryable = RETRY_STATUS.has(res.status);
         throw new WebVectorError(`HTTP ${res.status} fetching ${current}`, {
           code: res.status === 429 ? 'PROVIDER_RATE_LIMITED' : 'FETCH_HTTP_ERROR',
@@ -249,6 +253,19 @@ export class Fetcher {
         throw tooLarge(current, len, this.opts.maxBytes);
       }
       const bytes = await readCapped(res, this.opts.maxBytes, current);
+      // A 202 or a tiny 200 HTML page can still be an interstitial challenge (DataDome, Imperva…).
+      if (
+        (res.status === 202 || bytes.byteLength < BLOCK_SNIFF_BYTES) &&
+        /^(text\/html|application\/xhtml\+xml|)$/.test(contentType)
+      ) {
+        const blocked = blockedError(
+          res.status,
+          res.headers,
+          new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(0, BLOCK_SNIFF_BYTES)),
+          current,
+        );
+        if (blocked) throw blocked;
+      }
       return {
         url: startUrl,
         finalUrl: current,
@@ -262,6 +279,140 @@ export class Fetcher {
       };
     }
   }
+}
+
+// ─── Bot-wall / paywall classification ──────────────────────────────────────
+
+/** Statuses whose body excerpt is worth sniffing for anti-bot vendors. */
+const BLOCK_SNIFF_STATUS = new Set([401, 402, 403, 405, 406, 429, 503]);
+const BLOCK_SNIFF_BYTES = 8192;
+
+export interface BotBlock {
+  /** `cloudflare` | `akamai` | `datadome` | `perimeterx` | `imperva` | `cloudflare-pay-per-crawl` | `unknown` */
+  vendor: string;
+  /** What matched (header name or body marker). */
+  reason: string;
+  /** Payment walls: the advertised price (e.g. `USD 0.01`). */
+  price?: string;
+}
+
+/**
+ * Classify a response as an anti-bot challenge / access-denied wall or a pay-per-crawl 402.
+ * Sources: Cloudflare challenge detection (`cf-mitigated: challenge`, "Just a moment…",
+ * challenges.cloudflare.com), Cloudflare error pages ("Sorry, you have been blocked", 1020),
+ * Akamai ("Access Denied … Reference #"), DataDome (`x-datadome*`, captcha-delivery.com),
+ * PerimeterX/HUMAN (`_pxAppId`, px-captcha), Imperva/Incapsula (`x-iinfo`, `_Incapsula_Resource`),
+ * Cloudflare pay-per-crawl (402 + `crawler-price`). Returns undefined for ordinary errors.
+ */
+export function classifyBotBlock(
+  status: number,
+  headers: Headers,
+  body: string,
+): BotBlock | undefined {
+  const h = (name: string) => headers.get(name) ?? '';
+  const server = h('server').toLowerCase();
+  const excerpt = body.slice(0, BLOCK_SNIFF_BYTES);
+  if (status === 402) {
+    const price = h('crawler-price');
+    return price
+      ? { vendor: 'cloudflare-pay-per-crawl', reason: 'crawler-price', price }
+      : { vendor: 'unknown', reason: 'HTTP 402' };
+  }
+  if (h('cf-mitigated').toLowerCase() === 'challenge')
+    return { vendor: 'cloudflare', reason: 'cf-mitigated: challenge' };
+  if (h('x-datadome') || h('x-datadome-cid') || h('x-dd-b'))
+    return { vendor: 'datadome', reason: 'x-datadome' };
+  if (/captcha-delivery\.com|datadome/i.test(excerpt))
+    return { vendor: 'datadome', reason: 'captcha-delivery.com' };
+  if (/_pxAppId|_pxUuid|px-captcha|PerimeterX|human-challenge/i.test(excerpt))
+    return { vendor: 'perimeterx', reason: 'px challenge markup' };
+  if (
+    h('x-iinfo') ||
+    /imperva/i.test(h('x-cdn')) ||
+    /_Incapsula_Resource|Incapsula incident|Imperva/i.test(excerpt)
+  )
+    return { vendor: 'imperva', reason: 'incapsula markup' };
+  if (
+    /Access Denied[\s\S]{0,600}Reference(?:&#32;|\s)#/i.test(excerpt) ||
+    (status === 403 && /akamai/i.test(server))
+  )
+    return { vendor: 'akamai', reason: 'Access Denied … Reference #' };
+  if (/Just a moment\.\.\.|challenges\.cloudflare\.com|cf-chl-|_cf_chl_opt|cf_chl_/i.test(excerpt))
+    return { vendor: 'cloudflare', reason: 'challenge page' };
+  if (
+    server.includes('cloudflare') &&
+    status === 403 &&
+    /Attention Required!|Sorry, you have been blocked|cf-error-details|error code: 10[0-9]{2}|<title>Access denied<\/title>/i.test(
+      excerpt,
+    )
+  )
+    return { vendor: 'cloudflare', reason: 'blocked page (1xxx)' };
+  if (
+    (status === 403 || status === 429 || status === 503 || status === 202 || status === 200) &&
+    /Enable JavaScript and cookies to continue|Checking your browser before accessing|Verify you are human|Please verify you are a human|Are you a robot\?|Pardon Our Interruption/i.test(
+      excerpt,
+    )
+  )
+    return { vendor: 'unknown', reason: 'challenge text' };
+  return undefined;
+}
+
+function blockedError(
+  status: number,
+  headers: Headers,
+  excerpt: string,
+  url: string,
+): WebVectorError | undefined {
+  const b = classifyBotBlock(status, headers, excerpt);
+  if (!b) return undefined;
+  if (status === 402) {
+    return new WebVectorError(
+      `Payment required for ${url} (${b.vendor}${b.price ? `, ${b.price}` : ''})`,
+      {
+        code: 'FETCH_PAYMENT_REQUIRED',
+        stage: 'ingest',
+        retryable: false,
+        remediation:
+          'The site charges crawlers for access (HTTP 402). WebVector never pays; use a search provider that returns page content, or an archive fallback (`ingestion.archiveFallback`).',
+        details: { status, vendor: b.vendor, price: b.price },
+      },
+    );
+  }
+  return new WebVectorError(`Blocked by anti-bot protection (${b.vendor}) fetching ${url}`, {
+    code: 'FETCH_BLOCKED_BOT',
+    stage: 'ingest',
+    retryable: false,
+    remediation:
+      'The host serves a bot challenge to non-browser clients; retrying will not help. Use a search provider that returns page content, enable `ingestion.archiveFallback`, or fetch the page in a browser.',
+    details: { status, vendor: b.vendor, reason: b.reason },
+  });
+}
+
+/** Read up to BLOCK_SNIFF_BYTES of a body as text without throwing (for classification only). */
+async function peekText(res: Response): Promise<string> {
+  if (!res.body) return '';
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < BLOCK_SNIFF_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } catch {
+    /* ignore */
+  } finally {
+    void reader.cancel().catch(() => {});
+  }
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    buf.set(c, off);
+    off += c.byteLength;
+  }
+  return new TextDecoder('utf-8', { fatal: false }).decode(buf.subarray(0, BLOCK_SNIFF_BYTES));
 }
 
 function stripCredentialHeaders(
