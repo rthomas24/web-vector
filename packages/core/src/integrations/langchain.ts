@@ -52,7 +52,7 @@ export async function langchainTools(
             input.query,
             toResearchOptions(input, {
               signal: runtime?.signal,
-              maxOutputTokens: opts.maxOutputTokens ?? 3000,
+              maxOutputTokens: opts.maxOutputTokens ?? input.max_tokens ?? 3000,
             }),
           );
           return [res.markdown ?? renderMarkdown(res), res];

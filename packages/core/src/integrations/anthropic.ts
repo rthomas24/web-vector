@@ -97,15 +97,13 @@ export async function runTool(
     name = canonicalToolName(name);
     if (name === WEB_RESEARCH_TOOL_NAME) {
       const parsed = webResearchInputSchema.parse(input);
+      const maxTokens = opts.maxOutputTokens ?? parsed.max_tokens ?? 3000;
       const res = await wv.research(
         parsed.query,
-        toResearchOptions(parsed, {
-          signal: opts.signal,
-          maxOutputTokens: opts.maxOutputTokens ?? 3000,
-        }),
+        toResearchOptions(parsed, { signal: opts.signal, maxOutputTokens: maxTokens }),
       );
       return {
-        content: res.markdown ?? renderMarkdown(res, { maxTokens: opts.maxOutputTokens ?? 3000 }),
+        content: res.markdown ?? renderMarkdown(res, { maxTokens }),
         data: res,
       };
     }

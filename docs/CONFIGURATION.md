@@ -100,6 +100,9 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `output.markdown` | `true` | `WEBVECTOR_OUTPUT_MARKDOWN` | include `result.markdown` |
 | `output.maxPassageChars` | `1500` | — | per passage in the markdown |
 | `output.includeSnippetsOnFailure` | `true` | — | return search snippets when no page could be fetched (`degraded: 'search_only'`) |
+| `output.format` | `detailed` | — | `concise` (passages + sources) or `detailed` (adds score/date, failures, stats). The MCP server defaults to `concise` (`--default-response-format`, per-call `response_format`) |
+| `output.links` | `strip` | — | links inside rendered passages: `strip` (`[text](url)` → `text`, images → `[image: alt]`), `footnote` (`text[^k]` + per-passage footnotes), `inline`. Stored chunks never change |
+| `output.deepLinks` | `false` | — | cite passages with text-fragment deep links `url#:~:text=start,end` (PDFs skipped) |
 | `logging.level` | `warn` | `WEBVECTOR_LOG_LEVEL` | `silent` `error` `warn` `info` `debug` (stderr) |
 
 Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation).

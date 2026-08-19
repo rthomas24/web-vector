@@ -105,7 +105,7 @@ That's the lexical tier. For on-device semantic search, install the model runtim
 
 **Over HTTP** (for agent frameworks): `npx -y webvector-mcp --http --port 3333` → `http://127.0.0.1:3333/mcp` (Streamable HTTP, localhost only). Add `--token <secret>` (or `WEBVECTOR_MCP_TOKEN`) to require `Authorization: Bearer <secret>`; binding to any other address needs `--host 0.0.0.0 --allow-remote --token …` and belongs behind TLS/your own auth. `GET /health` for liveness.
 
-Every `webvector_research` result comes back both as compact Markdown (for the model) and as `structuredContent` (for your app), with progress notifications during the run.
+Every `webvector_research` result comes back both as compact Markdown (for the model — `response_format: concise|detailed`, trimmed to `max_tokens` with an explicit "N omitted" footer) and as slim `structuredContent` (for your app; `--structured full|off`), with progress notifications during the run. See [`packages/mcp/README.md`](packages/mcp/README.md) for every flag and argument.
 
 ## 3. Use it as a library
 

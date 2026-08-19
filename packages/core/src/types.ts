@@ -309,6 +309,8 @@ export interface ResearchStats {
   retrieve: { candidates: number; queries: number; reranked: boolean; ms: number };
   totalMs: number;
   warnings: string[];
+  /** Size of `result.markdown` when rendered (chars and approximate tokens). */
+  output?: { chars: number; approxTokens: number };
 }
 
 export interface ResearchResult {
@@ -348,6 +350,8 @@ export interface ResearchOptions {
   maxOutputTokens?: number;
   /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
   explain?: boolean;
+  /** Markdown shape for `result.markdown` (default `output.format`): `concise` or `detailed`. */
+  responseFormat?: 'concise' | 'detailed';
 }
 
 // ─── Logging ────────────────────────────────────────────────────────────────

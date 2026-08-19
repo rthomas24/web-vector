@@ -19,9 +19,13 @@ import {
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import {
   LEGACY_TOOL_NAMES,
+  type ResearchResult,
+  type ResponseFormat,
   redactConfig,
-  renderMarkdown,
+  renderResearch,
+  suggestedQueriesFor,
   toResearchOptions,
+  toSlimOutput,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_TOOL_NAME,
   WEB_RESEARCH_DESCRIPTION,
@@ -36,6 +40,7 @@ import {
   webFetchInputSchema,
   webResearchInputSchema,
   webResearchOutputSchema,
+  webResearchSlimOutputSchema,
   webSearchInputSchema,
 } from 'webvector';
 import { z } from 'zod';
@@ -50,12 +55,50 @@ export {
 
 export const VERSION = '0.1.0';
 
+export type StructuredMode = 'off' | 'slim' | 'full';
+export const DEFAULT_MAX_TOKENS = 4000;
+export const MIN_MAX_TOKENS = 500;
+export const MAX_MAX_TOKENS = 20_000;
+
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+function researchOutputSchema(mode: StructuredMode): StandardSchemaWithJSON | undefined {
+  if (mode === 'full') return webResearchOutputSchema;
+  if (mode === 'slim') return webResearchSlimOutputSchema;
+  return undefined;
+}
+
+/** structuredContent for a research-shaped result according to the server's `--structured` mode. */
+function structuredResearch(
+  mode: StructuredMode,
+  res: ResearchResult,
+  extra: Parameters<typeof toSlimOutput>[1] = {},
+): { structuredContent?: Record<string, unknown> } {
+  if (mode === 'off') return {};
+  if (mode === 'slim') return { structuredContent: toSlimOutput(res, extra) };
+  const { markdown: _md, ...rest } = res;
+  return {
+    structuredContent: JSON.parse(JSON.stringify({ ...rest, session_id: extra.session_id })),
+  };
+}
+
 export interface CreateServerOptions {
   /** Shared WebVector instance (recommended: one per process so caches/sessions persist across requests). */
   webvector?: WebVector;
   config?: WebVectorConfig;
-  /** Approx token budget for markdown returned to the model (default 4000). */
+  /**
+   * Default approx token budget for markdown returned to the model (default 4000, env
+   * `WEBVECTOR_MCP_MAX_TOKENS`); per-call `max_tokens` (500–20000) overrides. Stays under Claude
+   * Code's 10k-token output warning by default.
+   */
   maxOutputTokens?: number;
+  /** Default `response_format` for research/fetch results (default `concise`). */
+  defaultResponseFormat?: ResponseFormat;
+  /**
+   * How much `structuredContent` to return next to the text: `slim` (default — query, passages,
+   * sources, degraded, session_id, suggested_queries), `full` (the whole ResearchResult) or `off`.
+   */
+  structured?: StructuredMode;
   /** Which tools to expose (default all). Legacy names (`web_research`, …) are accepted here too. */
   tools?: (
     | 'webvector_research'
@@ -162,7 +205,13 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
   };
   const wvp = () =>
     opts.webvector ? Promise.resolve(opts.webvector) : getSharedWebVector(opts.config);
-  const maxTokens = opts.maxOutputTokens ?? 4000;
+  const defaultMaxTokens = clamp(
+    opts.maxOutputTokens ?? DEFAULT_MAX_TOKENS,
+    MIN_MAX_TOKENS,
+    MAX_MAX_TOKENS,
+  );
+  const defaultFormat: ResponseFormat = opts.defaultResponseFormat ?? 'concise';
+  const structured: StructuredMode = opts.structured ?? 'slim';
 
   if (tools.has(WEB_RESEARCH_TOOL_NAME)) {
     register(
@@ -171,7 +220,7 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
         title: 'Web research (search → read pages → cited passages)',
         description: WEB_RESEARCH_DESCRIPTION,
         inputSchema: webResearchInputSchema,
-        outputSchema: webResearchOutputSchema,
+        outputSchema: researchOutputSchema(structured),
         annotations: {
           readOnlyHint: true,
           openWorldHint: true,
@@ -197,21 +246,37 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
                   }
                 };
           let step = 0;
+          const maxTokens = clamp(
+            args.max_tokens ?? defaultMaxTokens,
+            MIN_MAX_TOKENS,
+            MAX_MAX_TOKENS,
+          );
+          const format = args.response_format ?? defaultFormat;
           const res = await wv.research(
             args.query,
             toResearchOptions(args, {
               signal: ctx.mcpReq.signal,
               maxOutputTokens: maxTokens,
+              responseFormat: format,
               onProgress: notify
                 ? (p) => void notify(++step, 100, `${p.stage}: ${p.message}`)
                 : undefined,
             }),
           );
-          const text = renderMarkdown(res, { maxTokens, untrustedNotice: true });
-          const { markdown: _md, ...structured } = res;
+          const suggested = suggestedQueriesFor(res);
+          const rendered = renderResearch(res, {
+            ...wv.renderOptions(),
+            maxTokens,
+            format,
+            untrustedNotice: true,
+            suggestedQueries: suggested,
+          });
           return {
-            content: [{ type: 'text', text }],
-            structuredContent: JSON.parse(JSON.stringify(structured)),
+            content: [{ type: 'text', text: rendered.markdown }],
+            ...structuredResearch(structured, res, {
+              suggested_queries: suggested,
+              omitted: rendered.omitted,
+            }),
           };
         } catch (err) {
           return errorResult(err);
@@ -242,10 +307,14 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
               topK: args.top_k,
               signal: ctx.mcpReq.signal,
             });
-            const { markdown: _md, ...structured } = res;
+            const rendered = renderResearch(res, {
+              ...wv.renderOptions(),
+              maxTokens: defaultMaxTokens,
+              format: args.response_format ?? defaultFormat,
+            });
             return {
-              content: [{ type: 'text', text: res.markdown ?? renderMarkdown(res) }],
-              structuredContent: JSON.parse(JSON.stringify(structured)),
+              content: [{ type: 'text', text: rendered.markdown }],
+              ...structuredResearch(structured, res, { omitted: rendered.omitted }),
             };
           }
           const doc = await wv.fetch(args.url, { signal: ctx.mcpReq.signal });

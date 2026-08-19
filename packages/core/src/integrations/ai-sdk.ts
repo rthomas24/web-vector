@@ -77,7 +77,7 @@ export async function webResearchTool(
         input.query,
         toResearchOptions(input, {
           signal: abortSignal,
-          maxOutputTokens: opts.maxOutputTokens ?? 3000,
+          maxOutputTokens: opts.maxOutputTokens ?? input.max_tokens ?? 3000,
           ...opts.defaults,
         }),
       ),

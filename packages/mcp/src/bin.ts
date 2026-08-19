@@ -24,6 +24,9 @@ Usage:
   --legacy-tool-names           also expose web_research / web_fetch / web_search as aliases (one release)
   --instructions-file <path>    replace the built-in server instructions (≤ 2 KB; Claude Code truncates there)
   --no-instructions             send no server instructions
+  --default-response-format concise|detailed   markdown shape unless the call passes response_format (default concise)
+  --structured off|slim|full    how much structuredContent to return next to the text (default slim)
+  --max-tokens N                default token budget per result, 500–20000 (default 4000; env WEBVECTOR_MCP_MAX_TOKENS)
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …
@@ -37,8 +40,36 @@ Run \`npx webvector-cli doctor\` to diagnose configuration.`);
 }
 
 const instructionsFile = flag('--instructions-file');
+const enumFlag = <T extends string>(
+  name: string,
+  allowed: readonly T[],
+  env?: string,
+): T | undefined => {
+  const v = flag(name) ?? (env ? process.env[env] : undefined);
+  if (v === undefined || v === 'true') return undefined;
+  if (!allowed.includes(v as T)) {
+    console.error(`[webvector-mcp] ${name} must be one of ${allowed.join('|')} (got "${v}")`);
+    process.exit(2);
+  }
+  return v as T;
+};
+const maxTokensRaw = flag('--max-tokens') ?? process.env.WEBVECTOR_MCP_MAX_TOKENS;
 const serverOptions: CreateServerOptions = {
   legacyToolNames: args.includes('--legacy-tool-names'),
+  defaultResponseFormat: enumFlag(
+    '--default-response-format',
+    ['concise', 'detailed'] as const,
+    'WEBVECTOR_MCP_RESPONSE_FORMAT',
+  ),
+  structured: enumFlag(
+    '--structured',
+    ['off', 'slim', 'full'] as const,
+    'WEBVECTOR_MCP_STRUCTURED',
+  ),
+  maxOutputTokens:
+    maxTokensRaw && maxTokensRaw !== 'true' && Number.isFinite(Number(maxTokensRaw))
+      ? Number(maxTokensRaw)
+      : undefined,
   instructions: args.includes('--no-instructions')
     ? false
     : instructionsFile && instructionsFile !== 'true'

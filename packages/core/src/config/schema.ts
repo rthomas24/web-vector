@@ -243,6 +243,15 @@ export const outputConfigSchema = z.object({
   markdown: z.boolean().default(true),
   maxPassageChars: z.number().int().min(100).default(1500),
   includeSnippetsOnFailure: z.boolean().default(true),
+  /** `detailed` (score/date per passage, failures, stats) or `concise` (passages + sources only). */
+  format: z.enum(['concise', 'detailed']).default('detailed'),
+  /**
+   * Links inside rendered passages: `strip` (`[text](url)` → `text`, images → `[image: alt]`),
+   * `footnote` (`text[^k]` + per-passage footnotes) or `inline` (unchanged). Stored chunks never change.
+   */
+  links: z.enum(['strip', 'footnote', 'inline']).default('strip'),
+  /** Cite passages with text-fragment deep links (`url#:~:text=start,end`; PDFs skipped). */
+  deepLinks: z.boolean().default(false),
 });
 
 export const loggingConfigSchema = z.object({

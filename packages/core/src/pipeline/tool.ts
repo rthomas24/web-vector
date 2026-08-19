@@ -112,7 +112,24 @@ export const webResearchInputSchema = z.object({
     .min(1)
     .max(100)
     .optional()
-    .describe('Reuse pages already ingested in this conversation; pass the same id across calls.'),
+    .describe(
+      'Pages already read are reused automatically; pass a session_id only to isolate parallel investigations (same id across their calls).',
+    ),
+  response_format: z
+    .enum(['concise', 'detailed'])
+    .optional()
+    .describe(
+      'concise (default): passages + sources only. detailed: adds per-passage score/date, failed fetches and timings.',
+    ),
+  max_tokens: z
+    .number()
+    .int()
+    .min(500)
+    .max(20_000)
+    .optional()
+    .describe(
+      'Approximate token budget for the returned text (default 4000). Passages that do not fit are omitted with an explicit footer naming their indices.',
+    ),
 });
 export type WebResearchInput = z.infer<typeof webResearchInputSchema>;
 
@@ -137,6 +154,10 @@ export const webFetchInputSchema = z.object({
     .max(200_000)
     .optional()
     .describe('Truncate the returned Markdown to this many characters (default 40000).'),
+  response_format: z
+    .enum(['concise', 'detailed'])
+    .optional()
+    .describe('Shape of the passages output when query is given (default concise).'),
 });
 export type WebFetchInput = z.infer<typeof webFetchInputSchema>;
 
@@ -238,11 +259,83 @@ export const webResearchOutputSchema = z.object({
     }),
     totalMs: z.number(),
     warnings: z.array(z.string()),
+    output: z.object({ chars: z.number(), approxTokens: z.number() }).optional(),
   }),
   markdown: z.string().optional(),
   degraded: z.enum(['search_only', 'partial']).optional(),
   sessionId: z.string().optional(),
 });
+
+/**
+ * Slim structured output (the MCP server's default `--structured slim`): what a model or app needs
+ * to cite and follow up, without stats/offsets. Some clients serialise structuredContent into the
+ * prompt next to the text content, so it must stay small.
+ */
+export const webResearchSlimOutputSchema = z.object({
+  query: z.string(),
+  passages: z.array(
+    z.object({
+      index: z.number().int(),
+      url: z.string(),
+      title: z.string(),
+      text: z.string(),
+      score: z.number(),
+      publishedAt: z.string().optional(),
+    }),
+  ),
+  sources: z.array(
+    z.object({
+      url: z.string(),
+      title: z.string(),
+      status: z.enum(['ok', 'failed', 'skipped', 'cached']),
+      chunks: z.number().int(),
+    }),
+  ),
+  degraded: z.enum(['search_only', 'partial']).optional(),
+  session_id: z.string().optional(),
+  suggested_queries: z.array(z.string()).optional(),
+  /** Passage indices dropped to fit max_tokens. */
+  omitted: z.array(z.number().int()).optional(),
+  /** What to try next when the result is empty or degraded. */
+  hint: z.string().optional(),
+  retryable: z.boolean().optional(),
+});
+export type WebResearchSlimOutput = z.infer<typeof webResearchSlimOutputSchema>;
+
+/** Project a ResearchResult onto the slim structured shape. */
+export function toSlimOutput(
+  r: import('../types.js').ResearchResult,
+  extra: Partial<
+    Pick<
+      WebResearchSlimOutput,
+      'session_id' | 'suggested_queries' | 'omitted' | 'hint' | 'retryable'
+    >
+  > = {},
+): WebResearchSlimOutput {
+  return {
+    query: r.query,
+    passages: r.passages.map((p) => ({
+      index: p.index,
+      url: p.url,
+      title: p.title,
+      text: p.text,
+      score: p.score,
+      ...(p.publishedAt ? { publishedAt: p.publishedAt } : {}),
+    })),
+    sources: r.sources.map((s) => ({
+      url: s.url,
+      title: s.title,
+      status: s.status,
+      chunks: s.chunks,
+    })),
+    ...(r.degraded ? { degraded: r.degraded } : {}),
+    ...(extra.session_id ? { session_id: extra.session_id } : {}),
+    ...(extra.suggested_queries?.length ? { suggested_queries: extra.suggested_queries } : {}),
+    ...(extra.omitted?.length ? { omitted: extra.omitted } : {}),
+    ...(extra.hint ? { hint: extra.hint } : {}),
+    ...(extra.retryable !== undefined ? { retryable: extra.retryable } : {}),
+  };
+}
 
 /** Convert tool input (snake_case) to ResearchOptions. */
 export function toResearchOptions(
@@ -257,7 +350,9 @@ export function toResearchOptions(
     domainsAllow: input.domains_allow,
     domainsBlock: input.domains_block,
     sessionId: input.session_id,
-    ...extra,
+    responseFormat: input.response_format,
+    maxOutputTokens: input.max_tokens,
+    ...Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined)),
   };
 }
 

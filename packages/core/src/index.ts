@@ -50,8 +50,21 @@ export {
   requireApiKey,
   WebVectorError,
 } from './errors.js';
-export type { MarkdownRenderOptions } from './pipeline/format.js';
-export { citationFor, renderMarkdown, renderPassage } from './pipeline/format.js';
+export type {
+  LinkMode,
+  MarkdownRenderOptions,
+  RenderedMarkdown,
+  ResponseFormat,
+} from './pipeline/format.js';
+export {
+  citationFor,
+  renderMarkdown,
+  renderPassage,
+  renderResearch,
+  suggestedQueriesFor,
+  textFragmentUrl,
+  transformLinks,
+} from './pipeline/format.js';
 export type { Session } from './pipeline/session.js';
 export { ephemeralSession, SessionRegistry } from './pipeline/session.js';
 export type {
@@ -59,6 +72,7 @@ export type {
   ToolDefinition,
   WebFetchInput,
   WebResearchInput,
+  WebResearchSlimOutput,
   WebSearchInput,
   WebVectorToolName,
 } from './pipeline/tool.js';
@@ -68,6 +82,7 @@ export {
   MAX_DESCRIPTION_BYTES,
   TOOL_NAMES,
   toResearchOptions,
+  toSlimOutput,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_TOOL_NAME,
   WEB_RESEARCH_DESCRIPTION,
@@ -80,6 +95,7 @@ export {
   webFetchToolDefinition,
   webResearchInputSchema,
   webResearchOutputSchema,
+  webResearchSlimOutputSchema,
   webResearchToolDefinition,
   webSearchInputSchema,
   webSearchToolDefinition,

@@ -25,7 +25,12 @@ import {
 } from '../config/index.js';
 import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
-import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
+import {
+  approxTokens,
+  type CachedPage,
+  documentFromProviderContent,
+  ingestUrl,
+} from '../ingest/index.js';
 import type {
   Failure,
   Logger,
@@ -45,7 +50,7 @@ import { sha256 } from '../util/hash.js';
 import { createLogger } from '../util/logger.js';
 import { canonicalizeUrl } from '../util/url.js';
 import { buildComponents, type Components } from './components.js';
-import { citationFor, renderMarkdown } from './format.js';
+import { citationFor, type MarkdownRenderOptions, renderMarkdown } from './format.js';
 import {
   type EmbedStats,
   failureFrom,
@@ -213,9 +218,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         warnings,
       },
     };
-    result.markdown = renderMarkdown(result, {
-      maxPassageChars: this.config.output.maxPassageChars,
-    });
+    result.markdown = renderMarkdown(result, this.renderOptions());
     return result;
   }
 
@@ -536,9 +539,14 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     };
     if (opts.markdown ?? cfg.output.markdown) {
       result.markdown = renderMarkdown(result, {
-        maxPassageChars: cfg.output.maxPassageChars,
+        ...this.renderOptions(),
         maxTokens: opts.maxOutputTokens,
+        format: opts.responseFormat ?? cfg.output.format,
       });
+      result.stats.output = {
+        chars: result.markdown.length,
+        approxTokens: approxTokens(result.markdown),
+      };
     }
     stageDone('format', Date.now() - t0 - result.stats.totalMs);
     return result;
@@ -593,6 +601,17 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       country: s.country,
       language: s.language,
       freshness: s.freshness,
+    };
+  }
+
+  /** Render options derived from `output.*` config (format, link policy, deep links). */
+  renderOptions(): MarkdownRenderOptions {
+    const o = this.config.output;
+    return {
+      maxPassageChars: o.maxPassageChars,
+      format: o.format,
+      links: o.links,
+      deepLinks: o.deepLinks,
     };
   }
 
