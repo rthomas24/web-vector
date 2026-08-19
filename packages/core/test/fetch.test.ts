@@ -1174,3 +1174,23 @@ describe('agent identity', () => {
     expect(from).toBe('ops@example.com');
   });
 });
+
+describe('served markdown: custom element scaffolding', () => {
+  it('drops standalone custom-element lines but keeps HTML and prose', async () => {
+    const { cleanServedMarkdown } = await import('../src/ingest/markdown-clean.js');
+    const raw = [
+      '# T',
+      '<definitions>',
+      '<definition>',
+      'Some prose stays. <b>bold</b>',
+      '</definition>',
+      '</definitions>',
+      '<br>',
+      'End.',
+    ].join('\n');
+    const c = cleanServedMarkdown(raw);
+    expect(c.markdown).not.toContain('<definition');
+    expect(c.markdown).toContain('Some prose stays. <b>bold</b>');
+    expect(c.markdown).toContain('<br>');
+  });
+});

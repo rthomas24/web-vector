@@ -68,6 +68,10 @@ const SKIP_LINK_RE = /^\s*\[\s*Skip to (?:main )?content\s*\]\(#[^)]*\)\s*$/i;
  * Remove MDX/JSX scaffolding from a non-code segment of markdown. Operates line-wise so multi-line
  * `export const X = (…) => {…};` blocks and multi-line component tags are removed as units.
  */
+/** A line that is only an opening/closing lowercase custom element (not a known HTML inline tag). */
+const CUSTOM_TAG_LINE_RE =
+  /^\s*<\/?(?!(?:a|b|i|p|br|hr|em|ul|ol|li|td|th|tr|table|thead|tbody|div|span|img|pre|code|sup|sub|kbd|strong|details|summary|blockquote|h[1-6])\b)[a-z][a-z0-9-]*\s*\/?>\s*$/;
+
 function stripMdx(segment: string): string {
   const lines = segment.split('\n');
   const out: string[] = [];
@@ -76,6 +80,8 @@ function stripMdx(segment: string): string {
     if (isMdxImportLine(line)) continue;
     if (JSX_COMMENT_RE.test(line)) continue;
     if (SKIP_LINK_RE.test(line)) continue;
+    // Standalone custom-element scaffolding lines (Elastic docs: `<definitions>`, `</definition>`).
+    if (CUSTOM_TAG_LINE_RE.test(line)) continue;
     // export const/function/default … — consume until brackets balance and the statement ends.
     if (/^export\s+(?:const|let|var|function|default|async)\b/.test(line)) {
       let depth = 0;
