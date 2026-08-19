@@ -28,6 +28,7 @@ import { WebVectorError } from '../errors.js';
 import { approxTokens } from '../ingest/chunker.js';
 import { type CachedPage, documentFromProviderContent, ingestUrl } from '../ingest/index.js';
 import { assessEvidence } from '../retrieval/evidence.js';
+import { sourcesFromPassages, type VerifyResult, verifyCitations } from '../retrieval/verify.js';
 import type {
   Failure,
   Logger,
@@ -74,6 +75,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   readonly logger: Logger;
   private components?: Promise<Components>;
   private readonly embeddingCache = new EmbeddingCache();
+  /** Passages of the latest research() per session key, for verifyCitations(). Small LRU. */
+  private readonly recentPassages = new Map<string, Passage[]>();
   private closed = false;
 
   constructor(
@@ -231,7 +234,54 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return (await this.ensure()).sessions.list();
   }
   async clearSession(sessionId: string): Promise<boolean> {
+    this.recentPassages.delete(sessionId);
     return (await this.ensure()).sessions.delete(sessionId);
+  }
+
+  /**
+   * Quote-grounding check: classify each sentence of `answer` as verbatim / paraphrase /
+   * unsupported / uncited against the passages its [n] markers cite — the passages of the latest
+   * research() call in `sessionId` (or an explicit `passages` array), plus the whole pages when the
+   * session still holds them. Numbers and dates absent from the sources are flagged. No LLM.
+   */
+  async verifyCitations(
+    answer: string,
+    opts: {
+      sessionId?: string;
+      passages?: Passage[];
+      jaccardThreshold?: number;
+      rougeThreshold?: number;
+    } = {},
+  ): Promise<VerifyResult> {
+    const key = opts.sessionId ?? (this.config.store.mode === 'session' ? 'default' : undefined);
+    const passages = opts.passages ?? (key ? this.recentPassages.get(key) : undefined);
+    if (!passages?.length)
+      throw new WebVectorError(
+        'Nothing to verify against: pass `passages` from a research() result, or the `sessionId` of a prior research() call.',
+        { code: 'INVALID_CONFIG' },
+      );
+    const pageText = new Map<string, string>();
+    const session = key ? (await this.ensure()).sessions.get(key) : undefined;
+    if (session) {
+      const byUrl = new Map<string, { i: number; t: string }[]>();
+      for (const ch of session.chunks.values()) {
+        const arr = byUrl.get(ch.metadata.url) ?? [];
+        arr.push({ i: ch.metadata.chunkIndex, t: ch.text });
+        byUrl.set(ch.metadata.url, arr);
+      }
+      for (const [url, arr] of byUrl)
+        pageText.set(
+          url,
+          arr
+            .sort((a, b) => a.i - b.i)
+            .map((x) => x.t)
+            .join('\n'),
+        );
+    }
+    return verifyCitations(answer, sourcesFromPassages(passages, pageText), {
+      jaccardThreshold: opts.jaccardThreshold,
+      rougeThreshold: opts.rougeThreshold,
+    });
   }
 
   // ─── the main entry point ──────────────────────────────────────────────
@@ -640,6 +690,13 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     result.stats.retrieve.tokensReturned = approxTokens(
       result.markdown ?? passages.map((p) => p.text).join('\n\n'),
     );
+    const sessionKey = opts.sessionId ?? (cfg.store.mode === 'session' ? 'default' : undefined);
+    if (sessionKey) {
+      this.recentPassages.delete(sessionKey);
+      this.recentPassages.set(sessionKey, passages);
+      if (this.recentPassages.size > 100)
+        this.recentPassages.delete(this.recentPassages.keys().next().value as string);
+    }
     stageDone('format', Date.now() - t0 - result.stats.totalMs);
     return result;
   }

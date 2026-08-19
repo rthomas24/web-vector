@@ -403,6 +403,25 @@ describe('WebVector pipeline (mocked)', () => {
     expect(py?.explain?.multipliers?.sourcePrior).toBeUndefined();
     await wv.close();
   });
+  it('verifyCitations checks an answer against a session passages and pages', async () => {
+    mockSites();
+    const wv = make({ store: { mode: 'session' } });
+    const res = await wv.research('reciprocal rank fusion formula', { topK: 3, sessionId: 's1' });
+    const top = res.passages[0]!;
+    const quote = top.text.split(/(?<=\.)\s+/)[0]!; // first sentence of the top passage
+    const answer = `${quote} [1] Bananas were invented in 1877 [1].`;
+    const v = await wv.verifyCitations(answer, { sessionId: 's1' });
+    expect(v.sentences[0]!.status).toBe('verbatim');
+    expect(v.sentences[1]!.status).toBe('unsupported');
+    expect(v.sentences[1]!.unsupportedNumbers).toEqual(['1877']);
+    // Explicit passages work without a session; missing both is an error.
+    const v2 = await wv.verifyCitations(answer, { passages: res.passages });
+    expect(v2.summary.verbatim).toBe(1);
+    await expect(wv.verifyCitations(answer, { sessionId: 'nope' })).rejects.toBeInstanceOf(
+      WebVectorError,
+    );
+    await wv.close();
+  });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
     await expect(wv.research('   ')).rejects.toMatchObject({ code: 'INVALID_CONFIG' });

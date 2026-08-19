@@ -172,6 +172,7 @@ npm i -g webvector-cli          # or keep using npx -y webvector-cli …
 webvector search "query" [-k 8] [-p 12] [--provider brave] [--embeddings openai] [--rerank local] [--json|--md] [--stats]
 webvector fetch <url> [--query "…"]     # one page as Markdown, or just the passages relevant to --query
 webvector serp "query"                  # search results only
+webvector verify "answer with [1] markers" --result r.json   # quote-grounding check against a `search --json` result
 webvector doctor [--live]               # config, dependencies, provider connectivity, active tier
 webvector init                          # writes webvector.config.yaml + .env.example
 webvector config                        # print resolved config (secrets redacted)

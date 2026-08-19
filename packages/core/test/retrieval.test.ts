@@ -836,3 +836,56 @@ describe('source priors + preferPrimary', () => {
     );
   });
 });
+
+describe('quote-grounding verifier', () => {
+  it('classifies verbatim / paraphrase / unsupported / uncited and flags unsupported numbers', async () => {
+    const { verifyCitations, rougeL, lcsLength, extractNumbers } = await import(
+      '../src/retrieval/verify.js'
+    );
+    const sources = [
+      {
+        index: 1,
+        text: 'Reciprocal rank fusion (RRF) combines several ranked lists by summing 1/(k + rank) for each document. The constant k is typically set to 60. It requires no tuning.',
+      },
+      {
+        index: 2,
+        text: 'SQLite WAL mode lets readers proceed while a writer is active; the WAL file is checkpointed periodically.',
+        pageText:
+          'Full page. SQLite WAL mode lets readers proceed while a writer is active; the WAL file is checkpointed periodically. Checkpoints run automatically after 1000 pages by default.',
+      },
+    ];
+    const answer = [
+      'The constant k is typically set to 60 [1].', // verbatim
+      'RRF combines several ranked lists by summing 1/(k + rank) for every document [1].', // paraphrase
+      'RRF was invented in 1998 by a team at Google [1].', // unsupported + bad number
+      'Checkpoints run automatically after 1000 pages by default [2].', // verbatim via page text
+      'SQLite WAL mode lets readers proceed while a writer is active.', // uncited but supported → suggests [2]
+      'Bananas are a popular fruit worldwide.', // uncited, unsupported
+      'The default is 60 according to [7].', // unknown citation
+    ].join(' ');
+    const r = verifyCitations(answer, sources);
+    const st = r.sentences.map((s) => s.status);
+    expect(st[0]).toBe('verbatim');
+    expect(st[1]).toBe('paraphrase');
+    expect(st[2]).toBe('unsupported');
+    expect(r.sentences[2]!.unsupportedNumbers).toEqual(['1998']);
+    expect(st[3]).toBe('verbatim');
+    expect(r.sentences[3]!.unsupportedNumbers).toEqual([]);
+    expect(['verbatim', 'paraphrase']).toContain(st[4]);
+    expect(r.sentences[4]!.bestIndex).toBe(2);
+    expect(st[5]).toBe('uncited');
+    expect(r.unknownCitations).toEqual([7]);
+    expect(r.summary.total).toBe(7);
+    expect(r.summary.supportRate).toBeGreaterThan(0.5);
+    // Helpers.
+    expect(lcsLength(['a', 'b', 'c', 'd'], ['a', 'x', 'c', 'd'])).toBe(3);
+    expect(rougeL(['a', 'b', 'c'], ['a', 'b', 'c'])).toBe(1);
+    expect(rougeL(['a', 'b'], ['x', 'y'])).toBe(0);
+    expect(extractNumbers('grew 12.5% to 1,200 units on 2024-05-01 in 2023')).toEqual([
+      '12.5%',
+      '1200',
+      '2024-05-01',
+      '2023',
+    ]);
+  });
+});

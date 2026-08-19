@@ -115,6 +115,10 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 
 Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation).
 
+## Verifying citations (`wv.verifyCitations(answer, { sessionId | passages })` / `webvector verify`)
+
+Deterministic quote-grounding check, no LLM: each sentence of an answer is classified against the passages its `[n]` markers cite (the latest `research()` result of a session, or an explicit `passages` array; whole pages are searched too while the session holds them) as `verbatim` (normalised substring), `paraphrase` (word-3-gram Jaccard ≥ 0.6 or ROUGE-L F1 ≥ 0.7 against the best 1–2 sentence window), `unsupported`, or `uncited` (no marker and no supporting passage). Numbers and dates absent from the sources are listed per sentence. Options: `jaccardThreshold`, `rougeThreshold`.
+
 ## Per-call options (`research(query, opts)` / tool arguments)
 
 `relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `autoRetry` (0/1), `maxOutputTokens` (packs passages into the budget and appends an "N more passages omitted" footer; `stats.retrieve.tokensReturned` reports the approximate size). Numeric limits are capped by the configured values above.

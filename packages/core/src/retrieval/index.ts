@@ -26,3 +26,19 @@ export {
   isPrimaryFor,
   sourcePriorFor,
 } from './priors.js';
+export type {
+  CitationStatus,
+  SentenceCheck,
+  VerifyOptions,
+  VerifyResult,
+  VerifySource,
+} from './verify.js';
+export {
+  answerSentences,
+  extractNumbers,
+  lcsLength,
+  normalizeForMatch,
+  rougeL,
+  sourcesFromPassages,
+  verifyCitations,
+} from './verify.js';

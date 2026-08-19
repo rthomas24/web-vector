@@ -50,8 +50,8 @@ export {
   requireApiKey,
   WebVectorError,
 } from './errors.js';
-export type { MarkdownRenderOptions } from './pipeline/format.js';
-export { citationFor, renderMarkdown, renderPassage } from './pipeline/format.js';
+export type { MarkdownRenderOptions, PackedPassages } from './pipeline/format.js';
+export { citationFor, packPassages, renderMarkdown, renderPassage } from './pipeline/format.js';
 export type { Session } from './pipeline/session.js';
 export { ephemeralSession, SessionRegistry } from './pipeline/session.js';
 export type {
@@ -86,7 +86,20 @@ export {
   listRerankers,
   registerReranker,
 } from './rerankers/index.js';
+export type { Evidence as EvidenceVerdict } from './retrieval/evidence.js';
+export { assessEvidence } from './retrieval/evidence.js';
 export { HeuristicExpander, LlmExpander } from './retrieval/expansion.js';
+export type { Highlight } from './retrieval/highlight.js';
+export { bestHighlight, segmentText } from './retrieval/highlight.js';
+export { BUILTIN_SOURCE_PRIORS } from './retrieval/priors.js';
+export type {
+  CitationStatus,
+  SentenceCheck,
+  VerifyOptions,
+  VerifyResult,
+  VerifySource,
+} from './retrieval/verify.js';
+export { sourcesFromPassages, verifyCitations } from './retrieval/verify.js';
 // Convenience re-exports of factories (full adapter sets live in subpath exports)
 export {
   buildSearchStack,
