@@ -128,6 +128,7 @@ describe('WebVector pipeline (mocked)', () => {
     expect(res.queries[0]).toBe('reciprocal rank fusion formula');
     expect(res.markdown).toContain('# Web research: reciprocal rank fusion formula');
     expect(res.markdown).toContain('## Sources');
+    expect(res.stats.retrieve.tokensReturned).toBeGreaterThan(0);
     expect(events).toEqual(['search', 'ingest', 'retrieve', 'format']);
     await wv.close();
   });
@@ -139,11 +140,20 @@ describe('WebVector pipeline (mocked)', () => {
       domainsAllow: ['fruit.example'],
       relatedQueries: ['banana crops weather'],
     });
-    expect(res.passages).toHaveLength(2);
+    // The two banana chunks are neighbours on one page → merged into a single passage.
+    expect(res.passages).toHaveLength(1);
+    expect(res.passages[0]!.chunkCount).toBe(2);
     expect(res.passages.every((p) => p.url.includes('fruit.example'))).toBe(true);
     expect(res.stats.ingest.requested).toBe(1);
     expect(res.queries).toContain('banana crops weather');
+    // Related queries are aspects: coverage counts passages matching each one.
+    expect(res.coverage).toEqual({ 'banana crops weather': expect.any(Number) });
+    expect(res.coverage!['banana crops weather']).toBeGreaterThan(0);
     await wv.close();
+    const plain = make({ retrieval: { mergeAdjacent: false, mmr: false, relativeCutoff: 0 } });
+    const res2 = await plain.research('banana', { topK: 2, domainsAllow: ['fruit.example'] });
+    expect(res2.passages).toHaveLength(2);
+    await plain.close();
   });
   it('degrades to search snippets when all fetches fail', async () => {
     server.use(
@@ -234,6 +244,225 @@ describe('WebVector pipeline (mocked)', () => {
     expect(s).toHaveLength(4);
     await expect(wv.fetch('https://down.example/x')).rejects.toBeInstanceOf(WebVectorError);
     await wv.close();
+  });
+  it('attaches query-focused highlights and can render highlight-only markdown', async () => {
+    mockSites();
+    const wv = make({ output: { passageMode: 'highlight' } });
+    const res = await wv.research('reciprocal rank fusion formula', { topK: 3 });
+    const top = res.passages[0]!;
+    expect(top.highlight).toBeDefined();
+    expect(top.highlight!.text.length).toBeLessThanOrEqual(top.text.length);
+    expect(top.text).toContain(top.highlight!.text);
+    // Highlight offsets are page offsets: passage-relative slice reproduces the highlight.
+    const local = top.highlight!.startOffset - top.startOffset;
+    expect(top.text.slice(local, local + top.highlight!.text.length)).toBe(top.highlight!.text);
+    expect(top.highlight!.text).toMatch(/fusion|rank/i);
+    // highlight mode renders the window, not the whole passage
+    expect(res.markdown).toContain(top.highlight!.text.split('\n')[0]);
+    await wv.close();
+    const off = make({ output: { highlights: false } });
+    const r2 = await off.research('reciprocal rank fusion formula', { topK: 2 });
+    expect(r2.passages[0]!.highlight).toBeUndefined();
+    await off.close();
+  });
+  it('reports corroboration across domains, boosts it only when enabled, and orders by date', async () => {
+    const shared =
+      'Reciprocal rank fusion sums one over k plus rank across lists; the constant k is usually sixty and it dampens the effect of high ranks.';
+    server.use(
+      http.get('https://rrf.example/intro', () =>
+        HttpResponse.html(
+          `<!doctype html><html><head><title>RRF intro</title><meta property="article:published_time" content="2020-01-15"></head><body><article><h1>RRF intro</h1><p>${shared} ${'More rrf filler text about fusion. '.repeat(8)}</p></article></body></html>`,
+        ),
+      ),
+      http.get('https://fruit.example/banana', () =>
+        HttpResponse.html(
+          `<!doctype html><html><head><title>Mirror</title><meta property="article:published_time" content="2025-06-01"></head><body><article><h1>Mirror</h1><p>As the docs put it: ${shared} ${'Different mirror filler words here. '.repeat(8)}</p></article></body></html>`,
+        ),
+      ),
+      http.get('https://py.example/doc', () =>
+        HttpResponse.html(
+          page('Python docs', [
+            'Python rank fusion is different, it merges rank lists by formula.',
+          ]),
+        ),
+      ),
+      http.get('https://down.example/x', () => new HttpResponse('nope', { status: 500 })),
+      http.get('*/robots.txt', () => new HttpResponse('', { status: 404 })),
+    );
+    const wv = make({ retrieval: { nearDuplicateThreshold: 1, mmr: false, relativeCutoff: 0 } });
+    const res = await wv.research('reciprocal rank fusion constant k', { topK: 4 });
+    const rrf = res.passages.find((p) => p.url.includes('rrf.example'));
+    const mirror = res.passages.find((p) => p.url.includes('fruit.example'));
+    expect(rrf?.corroboration).toBe(2);
+    expect(mirror?.corroboration).toBe(2);
+    expect(res.passages.find((p) => p.url.includes('py.example'))?.corroboration).toBe(1);
+    // Dates always show in citations when known.
+    expect(rrf?.citation).toMatch(/\(2020-01-15\)$/);
+    expect(res.passages[0]!.explain).toBeUndefined();
+    await wv.close();
+
+    // Recency: only with a freshness request; the 2025 mirror gets a multiplier, the 2020 page ~1.
+    const wv2 = make({ retrieval: { nearDuplicateThreshold: 1, mmr: false, relativeCutoff: 0 } });
+    const r2 = await wv2.research('reciprocal rank fusion constant k', {
+      topK: 4,
+      freshness: 'year',
+      explain: true,
+    });
+    const m2 = r2.passages.find((p) => p.url.includes('fruit.example'))!;
+    const o2 = r2.passages.find((p) => p.url.includes('rrf.example'))!;
+    expect(m2.explain?.multipliers?.recency).toBeGreaterThan(1.05);
+    expect(o2.explain?.multipliers?.recency ?? 1).toBeLessThan(1.02);
+    await wv2.close();
+
+    // Corroboration boost (opt-in) multiplies corroborated passages; date-asc ordering renumbers.
+    const wv3 = make({
+      retrieval: {
+        nearDuplicateThreshold: 1,
+        mmr: false,
+        relativeCutoff: 0,
+        corroborationBoost: true,
+      },
+      output: { order: 'date-asc' },
+    });
+    const r3 = await wv3.research('reciprocal rank fusion constant k', { topK: 4, explain: true });
+    expect(
+      r3.passages.find((p) => p.url.includes('rrf.example'))?.explain?.multipliers?.corroboration,
+    ).toBeCloseTo(1.1, 5);
+    const dates = r3.passages.map((p) => p.publishedAt ?? '');
+    const sorted = [...dates].sort();
+    expect(dates).toEqual(sorted);
+    expect(r3.passages.map((p) => p.index)).toEqual(r3.passages.map((_, i) => i + 1));
+    await wv3.close();
+  });
+  it('reports an evidence verdict with suggested queries and can auto-retry once', async () => {
+    mockSites();
+    server.use(
+      http.get('https://zebra.example/stripes', () =>
+        HttpResponse.html(
+          page('Zebra stripes', [
+            'Zebra stripes purpose: the stripes deter biting flies and may help with thermoregulation.',
+            'Stripes also confuse predators through motion dazzle.',
+          ]),
+        ),
+      ),
+    );
+    let calls: string[] = [];
+    const provider = customSearchProvider('mock2', async (q: string) => {
+      calls.push(q);
+      const base = await search.search('x');
+      // Only a follow-up query surfaces the answering page.
+      return q === 'zebra stripes purpose'
+        ? base
+        : [{ url: 'https://zebra.example/stripes', title: 'Zebra', rank: 1 }, ...base];
+    });
+    // Strong evidence on an answerable query.
+    const wv = make();
+    const ok = await wv.research('reciprocal rank fusion formula', { topK: 4 });
+    expect(ok.evidence?.level).toBe('strong');
+    expect(ok.evidence?.coverage).toBeGreaterThan(0.6);
+    expect(Array.isArray(ok.evidence?.suggestedQueries)).toBe(true);
+    await wv.close();
+
+    // Nothing relevant → 'none', suggestions still produced (from snippets), no retry by default.
+    const wv2 = make({ search: { instance: provider, fallbackProviders: [] } });
+    const none = await wv2.research('zebra stripes purpose', { topK: 4 });
+    expect(none.evidence?.level).toBe('none');
+    expect(none.evidence?.coverage).toBe(0);
+    expect(none.stats.retrieve.autoRetry).toBeUndefined();
+    await wv2.close();
+
+    // autoRetry: one more search round with the suggestions, new pages ingested, verdict updated.
+    calls = [];
+    const wv3 = make({ search: { instance: provider, fallbackProviders: [] } });
+    const retried = await wv3.research('zebra stripes purpose', { topK: 4, autoRetry: 1 });
+    expect(retried.stats.retrieve.autoRetry).toBeDefined();
+    expect(retried.stats.retrieve.autoRetry!.levelBefore).toBe('none');
+    expect(retried.stats.retrieve.autoRetry!.newPages).toBe(1);
+    expect(retried.stats.retrieve.autoRetry!.queries.length).toBeGreaterThan(0);
+    expect(calls.length).toBeGreaterThan(1);
+    expect(retried.passages.some((p) => p.url.includes('zebra.example'))).toBe(true);
+    expect(retried.evidence?.level).not.toBe('none');
+    expect(retried.sources.some((s) => s.url.includes('zebra.example'))).toBe(true);
+    await wv3.close();
+  });
+  it('applies configured source priors as explained multipliers', async () => {
+    mockSites();
+    const wv = make({
+      retrieval: {
+        sourcePriors: { '*.rrf.example': 0.8 },
+        preferPrimary: true,
+        mmr: false,
+        relativeCutoff: 0,
+      },
+    });
+    const res = await wv.research('rrf rank fusion formula', { topK: 4, explain: true });
+    const rrf = res.passages.find((p) => p.url.includes('rrf.example'))!;
+    expect(rrf.explain?.multipliers?.sourcePrior).toBeCloseTo(0.8, 6);
+    // "rrf" in the query names the rrf.example domain → preferPrimary applies too.
+    expect(rrf.explain?.multipliers?.preferPrimary).toBeCloseTo(1.15, 6);
+    const py = res.passages.find((p) => p.url.includes('py.example'));
+    expect(py?.explain?.multipliers?.sourcePrior).toBeUndefined();
+    await wv.close();
+  });
+  it('verifyCitations checks an answer against a session passages and pages', async () => {
+    mockSites();
+    const wv = make({ store: { mode: 'session' } });
+    const res = await wv.research('reciprocal rank fusion formula', { topK: 3, sessionId: 's1' });
+    const top = res.passages[0]!;
+    const quote = top.text.split(/(?<=\.)\s+/)[0]!; // first sentence of the top passage
+    const answer = `${quote} [1] Bananas were invented in 1877 [1].`;
+    const v = await wv.verifyCitations(answer, { sessionId: 's1' });
+    expect(v.sentences[0]!.status).toBe('verbatim');
+    expect(v.sentences[1]!.status).toBe('unsupported');
+    expect(v.sentences[1]!.unsupportedNumbers).toEqual(['1877']);
+    // Explicit passages work without a session; missing both is an error.
+    const v2 = await wv.verifyCitations(answer, { passages: res.passages });
+    expect(v2.summary.verbatim).toBe(1);
+    await expect(wv.verifyCitations(answer, { sessionId: 'nope' })).rejects.toBeInstanceOf(
+      WebVectorError,
+    );
+    await wv.close();
+  });
+  it('renders evidence-card headers and honours mmrSimilarity', async () => {
+    mockSites();
+    const wv = make({
+      output: { evidenceCards: true },
+      retrieval: { mmr: true, mmrSimilarity: 'jaccard' },
+    });
+    const res = await wv.research('reciprocal rank fusion formula', {
+      topK: 3,
+      relatedQueries: ['rank fusion formula k'],
+    });
+    const header = res.markdown!.split('\n').find((l) => l.startsWith('**[1]**'))!;
+    expect(header).toContain(' · rrf.example · ');
+    expect(header).toMatch(/· score \d\.\d\d/);
+    expect(header).toContain('matched: "rank fusion formula k"');
+    expect(res.passages.length).toBeGreaterThan(0);
+    await wv.close();
+    // Card header shows corroboration when > 1 and the published date when known.
+    const { renderPassage } = await import('../src/pipeline/format.js');
+    const line = renderPassage(
+      {
+        index: 2,
+        text: 'body',
+        url: 'https://www.example.org/a',
+        title: 'T',
+        score: 0.5,
+        chunkIndex: 0,
+        startOffset: 0,
+        endOffset: 4,
+        fetchedAt: '',
+        publishedAt: '2024-03-01T00:00:00Z',
+        corroboration: 3,
+        matchedQueries: ['q'],
+        citation: '',
+      },
+      1500,
+      { evidenceCards: true },
+    );
+    expect(line.split('\n')[0]).toBe(
+      '**[2]** T — <https://www.example.org/a> · example.org · published 2024-03-01 · corroborated by 2 other sites · score 0.50',
+    );
   });
   it('rejects empty query and reports abort', async () => {
     const wv = make();
@@ -395,6 +624,38 @@ describe('tool schemas + bindings', () => {
     const md = renderMarkdown(res, { maxTokens: 500 });
     expect(md.length).toBeLessThan(500 * 4 + 1500);
     expect((md.match(/\*\*\[\d+\]\*\*/g) ?? []).length).toBeLessThan(20);
+    expect(md).toMatch(
+      /_\d+ more passages omitted \((index \d+|indices [\d–, ]+)\)\. Call again with max_tokens ≥ \d+ or webvector_fetch\(url, query\) for \[\d+\]\._/,
+    );
+  });
+  it('packPassages keeps the top passage and one per source before filling by score/token', async () => {
+    const { packPassages } = await import('../src/pipeline/format.js');
+    const mk = (index: number, url: string, score: number, len: number): any => ({
+      index,
+      url,
+      score,
+      text: 'x'.repeat(len),
+      title: 't',
+    });
+    const passages = [
+      mk(1, 'https://a', 1, 4000), // top-1: big
+      mk(2, 'https://a', 0.9, 400),
+      mk(3, 'https://b', 0.5, 400), // best of source b
+      mk(4, 'https://a', 0.8, 400),
+      mk(5, 'https://c', 0.2, 400), // best of source c
+    ];
+    const rendered = passages.map((p) => p.text as string);
+    // 1000 tokens of budget = 4000 chars: top-1 alone fills it → nothing else fits.
+    let packed = packPassages(passages, rendered, 1001);
+    expect(packed.included.map((p) => p.index)).toEqual([1]);
+    expect(packed.omitted).toEqual([2, 3, 4, 5]);
+    // 1300 tokens: top-1 + best-of-b + best-of-c (guarantees) before the higher-scored [2]/[4].
+    packed = packPassages(passages, rendered, 1303);
+    expect(packed.included.map((p) => p.index)).toEqual([1, 3, 5]);
+    // Enough budget: everything, in original order.
+    packed = packPassages(passages, rendered, 10_000);
+    expect(packed.included.map((p) => p.index)).toEqual([1, 2, 3, 4, 5]);
+    expect(packed.omitted).toEqual([]);
   });
 });
 

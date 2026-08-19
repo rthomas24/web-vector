@@ -261,11 +261,26 @@
         "serpPriorWeight": 0,
         "mmr": true,
         "mmrLambda": 0.7,
+        "mmrSimilarity": "auto",
+        "aspectCoverage": "auto",
+        "aspectLambda": 0.5,
+        "recency": {
+          "weight": 0.3,
+          "halfLifeDays": 180
+        },
+        "corroborationBoost": false,
+        "corroborationJaccard": 0.25,
+        "autoRetry": 0,
+        "sourcePriors": {},
+        "builtinSourcePriors": true,
+        "preferPrimary": true,
+        "preferPrimaryBoost": 1.15,
         "minScore": null,
         "relativeCutoff": 0.6,
         "lexicalRelativeCutoff": 0.3,
         "autocut": 0,
         "nearDuplicateThreshold": 0.9,
+        "mergeAdjacent": true,
         "rerank": false,
         "rerankTopN": 50,
         "fallbackToLexical": true,
@@ -366,6 +381,90 @@
           "minimum": 0,
           "maximum": 1
         },
+        "mmrSimilarity": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "vector",
+            "jaccard"
+          ]
+        },
+        "aspectCoverage": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "off"
+          ]
+        },
+        "aspectLambda": {
+          "default": 0.5,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "recency": {
+          "default": {
+            "weight": 0.3,
+            "halfLifeDays": 180
+          },
+          "type": "object",
+          "properties": {
+            "weight": {
+              "default": 0.3,
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.3
+            },
+            "halfLifeDays": {
+              "default": 180,
+              "type": "number",
+              "minimum": 1
+            }
+          }
+        },
+        "corroborationBoost": {
+          "default": false,
+          "type": "boolean"
+        },
+        "corroborationJaccard": {
+          "default": 0.25,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "autoRetry": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sourcePriors": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "builtinSourcePriors": {
+          "default": true,
+          "type": "boolean"
+        },
+        "preferPrimary": {
+          "default": true,
+          "type": "boolean"
+        },
+        "preferPrimaryBoost": {
+          "default": 1.15,
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1.3
+        },
         "minScore": {
           "default": null,
           "anyOf": [
@@ -402,6 +501,10 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "mergeAdjacent": {
+          "default": true,
+          "type": "boolean"
         },
         "rerank": {
           "default": false,
@@ -816,6 +919,11 @@
       "default": {
         "markdown": true,
         "maxPassageChars": 1500,
+        "maxTokens": 0,
+        "highlights": true,
+        "passageMode": "full",
+        "evidenceCards": false,
+        "order": "score",
         "includeSnippetsOnFailure": true,
         "format": "detailed",
         "links": "strip",
@@ -832,6 +940,36 @@
           "type": "integer",
           "minimum": 100,
           "maximum": 9007199254740991
+        },
+        "maxTokens": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "highlights": {
+          "default": true,
+          "type": "boolean"
+        },
+        "passageMode": {
+          "default": "full",
+          "type": "string",
+          "enum": [
+            "full",
+            "highlight"
+          ]
+        },
+        "evidenceCards": {
+          "default": false,
+          "type": "boolean"
+        },
+        "order": {
+          "default": "score",
+          "type": "string",
+          "enum": [
+            "score",
+            "date-asc"
+          ]
         },
         "includeSnippetsOnFailure": {
           "default": true,

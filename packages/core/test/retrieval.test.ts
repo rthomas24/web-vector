@@ -566,3 +566,326 @@ describe('registrableDomain', () => {
     expect(registrableDomain('https://example.com')).toBe('example.com');
   });
 });
+
+describe('adjacent-chunk merge', () => {
+  it('groupAdjacent groups consecutive chunks of one page, preserving score order', async () => {
+    const { groupAdjacent } = await import('../src/retrieval/fusion.js');
+    const mk = (id: string, url: string, ci: number) => {
+      const c = chunk(id, `text ${id}`, url);
+      c.metadata.chunkIndex = ci;
+      return c;
+    };
+    const items = [
+      mk('a4', 'https://a', 4),
+      mk('b1', 'https://b', 1),
+      mk('a3', 'https://a', 3),
+      mk('a9', 'https://a', 9),
+      mk('b2', 'https://b', 2),
+    ];
+    const groups = groupAdjacent(items).map((g) => g.map((x) => x.id));
+    expect(groups).toEqual([['a3', 'a4'], ['b1', 'b2'], ['a9']]);
+  });
+  it('joinAdjacentText removes chunker overlap via offsets, by scan, or joins with a break', async () => {
+    const { joinAdjacentText } = await import('../src/retrieval/fusion.js');
+    const page = 'The quick brown fox jumps over the lazy dog. Then it ran away into the forest.';
+    const meta = (start: number, end: number, ci: number) => ({
+      canonicalUrl: 'https://p',
+      chunkIndex: ci,
+      startOffset: start,
+      endOffset: end,
+    });
+    const a = { text: page.slice(0, 44), metadata: meta(0, 44, 0) };
+    const b = { text: page.slice(20), metadata: meta(20, page.length, 1) }; // overlaps a by 24 chars
+    expect(joinAdjacentText(a, b)).toBe(page);
+    // Offsets slightly off (chunker gap): the suffix/prefix scan still finds the overlap.
+    const bOff = { ...b, metadata: meta(22, page.length + 2, 1) };
+    expect(joinAdjacentText(a, bOff)).toBe(page);
+    // No textual overlap at all: paragraph break.
+    const c = { text: 'Unrelated continuation text here.', metadata: meta(60, 90, 1) };
+    expect(joinAdjacentText(a, c)).toBe(`${a.text}\n\nUnrelated continuation text here.`);
+  });
+});
+
+describe('highlights', () => {
+  it('segmentText splits sentences but keeps code fences, tables and list lines whole', async () => {
+    const { segmentText } = await import('../src/retrieval/highlight.js');
+    const text = [
+      'Intro sentence one. Second sentence, e.g. with an abbreviation. Third one!',
+      '```js',
+      'const x = 1. Not a sentence break.',
+      '```',
+      '| a | b |',
+      '|---|---|',
+      '| 1 | 2 |',
+      '- a list item. With a period.',
+    ].join('\n');
+    const segs = segmentText(text);
+    expect(segs.map((s) => s.kind)).toEqual([
+      'sentence',
+      'sentence',
+      'sentence',
+      'block',
+      'block',
+      'line',
+    ]);
+    expect(segs[1]!.text).toBe('Second sentence, e.g. with an abbreviation.');
+    expect(segs[3]!.text.startsWith('```js')).toBe(true);
+    expect(segs[3]!.text.endsWith('```')).toBe(true);
+    // Offsets are exact slices of the input.
+    for (const s of segs) expect(text.slice(s.start, s.end)).toBe(s.text);
+  });
+  it('bestHighlight picks the sentence window covering the query terms with page offsets', async () => {
+    const { bestHighlight, rankHighlightWindows } = await import('../src/retrieval/highlight.js');
+    const text =
+      '# Fusion\nBananas are yellow. Reciprocal rank fusion combines ranked lists using a constant k. It needs no tuning. Weather is nice today.';
+    const terms = new Map([
+      ['reciprocal', 2],
+      ['rank', 1],
+      ['fusion', 1],
+      ['constant', 1.5],
+    ]);
+    const hl = bestHighlight(text, 1000, { terms });
+    expect(hl?.text).toBe('Reciprocal rank fusion combines ranked lists using a constant k.');
+    expect(text.slice(hl!.startOffset - 1000, hl!.endOffset - 1000)).toBe(hl!.text);
+    // Heading-only windows are penalised even when they match every term.
+    const wins = rankHighlightWindows(
+      '# Reciprocal rank fusion constant\nSome prose about reciprocal rank fusion and its constant.',
+      { terms, top: 1 },
+    );
+    expect(wins[0]!.text).toMatch(/^Some prose/);
+    // No matching term: lead window instead of the shortest fragment.
+    const lead = bestHighlight('Alpha beta gamma delta. Second sentence here.', 0, {
+      terms: new Map([['zzz', 1]]),
+    });
+    expect(lead?.text).toBe('Alpha beta gamma delta. Second sentence here.');
+    // A code fence never gets cut in the middle.
+    const code = 'Text before.\n```\nline one rank fusion\nline two\n```\nAfter.';
+    const h2 = bestHighlight(code, 0, { terms });
+    expect(h2?.text).toBe('```\nline one rank fusion\nline two\n```');
+  });
+});
+
+describe('xQuAD aspect coverage', () => {
+  it('covers every aspect before any aspect gets a third passage', async () => {
+    const { xquad } = await import('../src/retrieval/fusion.js');
+    // 6 candidates: a1..a3 relevant to aspect A (and slightly more relevant overall), b1..b3 to B.
+    const ids = ['a1', 'a2', 'a3', 'b1', 'b2', 'b3'];
+    const relevance = [1, 0.95, 0.9, 0.85, 0.8, 0.75];
+    const A = { weight: 1, rel: [1, 0.9, 0.8, 0, 0, 0] };
+    const B = { weight: 1, rel: [0, 0, 0, 1, 0.9, 0.8] };
+    const { items, scores } = xquad(ids, relevance, [A, B], 4, 0.5);
+    expect(items[0]).toBe('a1');
+    expect(items[1]).toBe('b1'); // aspect B gets covered before A gets its 2nd
+    // Both aspects are fully covered by their top hits (rel = 1) → the rest is relevance order.
+    expect(items.slice(2)).toEqual(['a2', 'a3']);
+    // With partial coverage and λ = 1 the selection alternates between aspects.
+    const A2 = { weight: 1, rel: [0.6, 0.5, 0.4, 0, 0, 0] };
+    const B2 = { weight: 1, rel: [0, 0, 0, 0.6, 0.5, 0.4] };
+    expect(xquad(ids, relevance, [A2, B2], 4, 1).items).toEqual(['a1', 'b1', 'a2', 'b2']);
+    for (let i = 1; i < scores.length; i++) expect(scores[i]).toBeLessThanOrEqual(scores[i - 1]!);
+    // λ = 0 → pure relevance order.
+    expect(xquad(ids, relevance, [A, B], 3, 0).items).toEqual(['a1', 'a2', 'a3']);
+  });
+});
+
+describe('recency boost', () => {
+  it('decays with a half-life, never penalises undated pages, caps at +30 %', async () => {
+    const { recencyBoost, recencyHalfLifeDays } = await import('../src/pipeline/retrieve-stage.js');
+    const now = Date.parse('2026-08-19T00:00:00Z');
+    const day = 86_400_000;
+    expect(recencyBoost(undefined, 30, 0.3, now)).toBe(1);
+    expect(recencyBoost('not a date', 30, 0.3, now)).toBe(1);
+    expect(recencyBoost(new Date(now).toISOString(), 30, 0.3, now)).toBeCloseTo(1.3, 6);
+    expect(recencyBoost(new Date(now - 30 * day).toISOString(), 30, 0.3, now)).toBeCloseTo(1.15, 6);
+    expect(recencyBoost(new Date(now - 300 * day).toISOString(), 30, 0.3, now)).toBeLessThan(1.001);
+    expect(recencyBoost(new Date(now + 10 * day).toISOString(), 30, 0.3, now)).toBeCloseTo(1.3, 6);
+    expect(recencyBoost(new Date(now).toISOString(), 30, 0.9, now)).toBe(1.3); // hard cap
+    expect(recencyHalfLifeDays('day', 180)).toBe(2);
+    expect(recencyHalfLifeDays('week', 180)).toBe(7);
+    expect(recencyHalfLifeDays('month', 180)).toBe(30);
+    expect(recencyHalfLifeDays('year', 180)).toBe(180);
+    expect(recencyHalfLifeDays({ after: '2024-01-01' }, 99)).toBe(99);
+  });
+});
+
+describe('evidence gate', () => {
+  const passage = (text: string, url: string): any => ({
+    index: 1,
+    text,
+    url,
+    title: 't',
+    score: 1,
+    chunkIndex: 0,
+    startOffset: 0,
+    endOffset: text.length,
+    fetchedAt: '',
+    matchedQueries: [],
+    citation: '',
+  });
+  it('levels: strong / weak / none from coverage, domains, score shape', async () => {
+    const { assessEvidence } = await import('../src/retrieval/evidence.js');
+    const domainOf = (u: string) => new URL(u).hostname;
+    const strong = assessEvidence(
+      'reciprocal rank fusion constant',
+      [
+        passage('Reciprocal rank fusion uses a constant k of 60.', 'https://a.com/x'),
+        passage('The rank fusion constant dampens top ranks.', 'https://b.com/y'),
+      ],
+      { topK: 4, domainOf, signals: { topScoreRatio: 3, cutoffPosition: 0.5 } },
+    );
+    expect(strong.level).toBe('strong');
+    expect(strong.coverage).toBe(1);
+    expect(strong.distinctDomains).toBe(2);
+    const weak = assessEvidence(
+      'reciprocal rank fusion constant',
+      [passage('Fusion of ranked lists is common.', 'https://a.com/x')],
+      { topK: 4, domainOf, signals: { topScoreRatio: 1.1, cutoffPosition: 0.25 } },
+    );
+    expect(weak.level).toBe('weak');
+    // Missing query words are suggested on their own (surface forms, not stems).
+    expect(weak.suggestedQueries.some((q) => q.startsWith('reciprocal constant'))).toBe(true);
+    const none = assessEvidence(
+      'zebra stripes',
+      [passage('Bananas are yellow.', 'https://a.com')],
+      {
+        topK: 4,
+        domainOf,
+      },
+    );
+    expect(none.level).toBe('none');
+    expect(assessEvidence('zebra', [], { topK: 4, domainOf }).level).toBe('none');
+  });
+  it('suggests PRF terms and bridge entities that the query does not name', async () => {
+    const { bridgeEntities, prfTerms, assessEvidence } = await import(
+      '../src/retrieval/evidence.js'
+    );
+    const texts = [
+      'AbortSignal.any() composes signals. See also AbortSignal.timeout for deadlines. Node Streams use it.',
+      'With AbortSignal.timeout you get a deadline; Node Streams and fetch accept the signal. [Ref](https://x.org/y) <sup>[1]</sup>',
+    ];
+    const ents = bridgeEntities(texts, 'AbortSignal.any usage');
+    expect(ents).toContain('AbortSignal.timeout');
+    expect(ents).toContain('Node Streams'); // capitalised bigram seen twice
+    expect(ents.some((e) => e.includes('x.org'))).toBe(false); // link targets never leak
+    const terms = prfTerms(texts, 'AbortSignal.any usage', 4);
+    expect(terms).toContain('abortsignal.timeout');
+    expect(terms).not.toContain('sup');
+    const ev = assessEvidence(
+      'AbortSignal.any usage',
+      [passage(texts[0]!, 'https://nodejs.org/api')],
+      {
+        topK: 4,
+        domainOf: () => 'nodejs.org',
+      },
+    );
+    expect(ev.suggestedQueries.some((q) => q.includes('AbortSignal.timeout'))).toBe(true);
+    expect(ev.suggestedQueries.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('source priors + preferPrimary', () => {
+  it('matches hostname and host/path globs, merges user overrides, clamps', async () => {
+    const { compileSourcePriors, sourcePriorFor, isPrimaryFor, BUILTIN_SOURCE_PRIORS } =
+      await import('../src/retrieval/priors.js');
+    const { registrableDomain } = await import('../src/pipeline/retrieve-stage.js');
+    const priors = compileSourcePriors();
+    expect(sourcePriorFor('https://www.nist.gov/x', priors).multiplier).toBeCloseTo(1.1);
+    expect(sourcePriorFor('https://arxiv.org/abs/1', priors).multiplier).toBeCloseTo(1.1);
+    expect(sourcePriorFor('https://en.wikipedia.org/wiki/X', priors).matched).toEqual([
+      '*.wikipedia.org',
+    ]);
+    expect(
+      sourcePriorFor('https://github.com/o/r/blob/main/README.md', priors).multiplier,
+    ).toBeCloseTo(1.1);
+    expect(sourcePriorFor('https://github.com/o/r/issues/1', priors).multiplier).toBe(1);
+    expect(sourcePriorFor('https://www.pinterest.com/pin/1', priors).multiplier).toBeCloseTo(0.85);
+    expect(sourcePriorFor('https://example.com/', priors).multiplier).toBe(1);
+    // User overrides win and can neutralise a built-in; extreme values are clamped.
+    const custom = compileSourcePriors({
+      '*.pinterest.com': 1,
+      'blog.example': 5,
+      '*.spam.test': 0.1,
+    });
+    expect(sourcePriorFor('https://www.pinterest.com/pin/1', custom).multiplier).toBe(1);
+    expect(sourcePriorFor('https://blog.example/post', custom).multiplier).toBe(1.3);
+    expect(sourcePriorFor('https://a.spam.test/x', custom).multiplier).toBe(0.7);
+    expect(Object.values(BUILTIN_SOURCE_PRIORS).every((m) => m <= 1.3 && m >= 0.7)).toBe(true);
+    // preferPrimary: the domain names something in the query.
+    expect(
+      isPrimaryFor(
+        'https://nodejs.org/api/globals.html',
+        'node AbortSignal.any',
+        registrableDomain,
+      ),
+    ).toBe(true);
+    expect(
+      isPrimaryFor(
+        'https://docs.python.org/3/library/',
+        'python dataclasses frozen',
+        registrableDomain,
+      ),
+    ).toBe(true);
+    expect(
+      isPrimaryFor('https://www.sqlite.org/wal.html', 'SQLite WAL mode', registrableDomain),
+    ).toBe(true);
+    expect(
+      isPrimaryFor('https://en.wikipedia.org/wiki/SQLite', 'SQLite WAL mode', registrableDomain),
+    ).toBe(false);
+    expect(isPrimaryFor('https://theverge.com/x', 'the best laptops', registrableDomain)).toBe(
+      false,
+    );
+  });
+});
+
+describe('quote-grounding verifier', () => {
+  it('classifies verbatim / paraphrase / unsupported / uncited and flags unsupported numbers', async () => {
+    const { verifyCitations, rougeL, lcsLength, extractNumbers } = await import(
+      '../src/retrieval/verify.js'
+    );
+    const sources = [
+      {
+        index: 1,
+        text: 'Reciprocal rank fusion (RRF) combines several ranked lists by summing 1/(k + rank) for each document. The constant k is typically set to 60. It requires no tuning.',
+      },
+      {
+        index: 2,
+        text: 'SQLite WAL mode lets readers proceed while a writer is active; the WAL file is checkpointed periodically.',
+        pageText:
+          'Full page. SQLite WAL mode lets readers proceed while a writer is active; the WAL file is checkpointed periodically. Checkpoints run automatically after 1000 pages by default.',
+      },
+    ];
+    const answer = [
+      'The constant k is typically set to 60 [1].', // verbatim
+      'RRF combines several ranked lists by summing 1/(k + rank) for every document [1].', // paraphrase
+      'RRF was invented in 1998 by a team at Google [1].', // unsupported + bad number
+      'Checkpoints run automatically after 1000 pages by default [2].', // verbatim via page text
+      'SQLite WAL mode lets readers proceed while a writer is active.', // uncited but supported → suggests [2]
+      'Bananas are a popular fruit worldwide.', // uncited, unsupported
+      'The default is 60 according to [7].', // unknown citation
+    ].join(' ');
+    const r = verifyCitations(answer, sources);
+    const st = r.sentences.map((s) => s.status);
+    expect(st[0]).toBe('verbatim');
+    expect(st[1]).toBe('paraphrase');
+    expect(st[2]).toBe('unsupported');
+    expect(r.sentences[2]!.unsupportedNumbers).toEqual(['1998']);
+    expect(st[3]).toBe('verbatim');
+    expect(r.sentences[3]!.unsupportedNumbers).toEqual([]);
+    expect(['verbatim', 'paraphrase']).toContain(st[4]);
+    expect(r.sentences[4]!.bestIndex).toBe(2);
+    expect(st[5]).toBe('uncited');
+    expect(r.unknownCitations).toEqual([7]);
+    expect(r.summary.total).toBe(7);
+    expect(r.summary.supportRate).toBeGreaterThan(0.5);
+    // Helpers.
+    expect(lcsLength(['a', 'b', 'c', 'd'], ['a', 'x', 'c', 'd'])).toBe(3);
+    expect(rougeL(['a', 'b', 'c'], ['a', 'b', 'c'])).toBe(1);
+    expect(rougeL(['a', 'b'], ['x', 'y'])).toBe(0);
+    expect(extractNumbers('grew 12.5% to 1,200 units on 2024-05-01 in 2023')).toEqual([
+      '12.5%',
+      '1200',
+      '2024-05-01',
+      '2023',
+    ]);
+  });
+});

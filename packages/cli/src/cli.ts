@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   readdirSync,
+  readFileSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
@@ -29,12 +30,15 @@ import {
   listVectorStores,
   loadConfig,
   openCacheDb,
+  type Passage,
   PROVIDER_KEY_ENV,
   PROVIDER_URL_ENV,
   probeRuntime,
   redactConfig,
   resolveCacheDir,
   SEMANTIC_UPGRADE_HINT,
+  sourcesFromPassages,
+  verifyCitations,
   WebVector,
   type WebVectorConfig,
   WebVectorError,
@@ -285,6 +289,66 @@ program
       else
         for (const r of results)
           console.log(`${r.rank}. ${r.title}\n   ${r.url}${r.snippet ? `\n   ${r.snippet}` : ''}`);
+    } catch (err) {
+      fail(err);
+    }
+  });
+
+program
+  .command('verify [answer]')
+  .description(
+    "Check an answer's [n] citations against the passages of a `webvector search --json` result (quote grounding, no LLM)",
+  )
+  .requiredOption('-r, --result <path>', 'JSON file written by `webvector search --json`')
+  .option('-a, --answer-file <path>', 'read the answer from a file instead of the argument')
+  .option('--json', 'print JSON')
+  .action(async (answerArg: string | undefined, opts) => {
+    try {
+      const answer = opts.answerFile
+        ? readFileSync(resolve(opts.answerFile), 'utf8')
+        : (answerArg ?? '');
+      if (!answer.trim())
+        throw new WebVectorError('Provide the answer text as an argument or via --answer-file.', {
+          code: 'INVALID_CONFIG',
+        });
+      const result = JSON.parse(readFileSync(resolve(opts.result), 'utf8')) as {
+        passages?: Passage[];
+      };
+      if (!Array.isArray(result.passages) || result.passages.length === 0)
+        throw new WebVectorError(`No passages found in ${opts.result}.`, {
+          code: 'INVALID_CONFIG',
+        });
+      const v = verifyCitations(answer, sourcesFromPassages(result.passages));
+      if (opts.json) {
+        console.log(JSON.stringify(v, null, 2));
+        return;
+      }
+      const mark: Record<string, string> = {
+        verbatim: '✔',
+        paraphrase: '≈',
+        unsupported: '✖',
+        uncited: '?',
+      };
+      for (const s of v.sentences) {
+        const cite = s.citations.length ? `[${s.citations.join(',')}]` : '   ';
+        const nums = s.unsupportedNumbers.length
+          ? `  numbers not in source: ${s.unsupportedNumbers.join(', ')}`
+          : '';
+        const hint =
+          s.status === 'uncited' || (s.status !== 'unsupported' && !s.citations.length)
+            ? s.bestIndex
+              ? `  (supported by [${s.bestIndex}])`
+              : ''
+            : '';
+        console.log(
+          `${mark[s.status]} ${s.status.padEnd(11)} ${cite.padEnd(6)} ${s.score.toFixed(2)}  ${s.sentence.slice(0, 100)}${s.sentence.length > 100 ? '…' : ''}${nums}${hint}`,
+        );
+      }
+      const m = v.summary;
+      console.log(
+        `\n${m.verbatim} verbatim · ${m.paraphrase} paraphrase · ${m.unsupported} unsupported · ${m.uncited} uncited → support rate ${(m.supportRate * 100).toFixed(0)}%${v.unknownCitations.length ? ` · unknown citations: ${v.unknownCitations.join(', ')}` : ''}`,
+      );
+      if (m.unsupported > 0) process.exitCode = 2;
     } catch (err) {
       fail(err);
     }

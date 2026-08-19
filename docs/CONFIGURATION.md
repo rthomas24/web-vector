@@ -70,9 +70,17 @@ Code-only: `store.instance` (a `VectorStore`).
 | `rrfK` / `lexicalWeight` / `expansionWeight` | `60` / `0.5` / `0.7` | — | fusion weights |
 | `maxPerSource` | `3` | `WEBVECTOR_MAX_PER_SOURCE` | passages per page |
 | `mmr` / `mmrLambda` | `true` / `0.7` | `WEBVECTOR_MMR` | diversity re-ranking |
+| `mmrSimilarity` | `auto` | — | MMR redundancy measure: `auto` = cosine over chunk vectors when available, else word-3-gram Jaccard; `jaccard` forces text similarity; `vector` = cosine when available |
+| `recency.weight` / `recency.halfLifeDays` | `0.3` / `180` | — | only when the caller sets `freshness`: score × (1 + w·0.5^(age/halfLife)), capped +30 %, undated pages never penalised; half-life follows the request (day 2 · week 7 · month 30 · year 180), `halfLifeDays` for `{after, before}` |
+| `corroborationBoost` / `corroborationJaccard` | `false` / `0.25` | — | `Passage.corroboration` (distinct domains whose chunks say the same thing: word-3-gram Jaccard ≥ threshold or cosine ≥ 0.85) is always reported; the boost × (1 + 0.1·min(n−1, 3)) is opt-in |
+| `sourcePriors` / `builtinSourcePriors` | `{}` / `true` | — | glob → score multiplier (hostname globs like `*.gov`, or host/path globs like `github.com/*/*/blob/*/readme*`), merged over tiny built-ins (`*.gov` `*.edu` `*.arxiv.org` `*.wikipedia.org` GitHub READMEs ×1.1; a short aggregator list ×0.85 — set a pattern to `1` to neutralise); combined multiplier clamped to [0.7, 1.3]; shown in `explain.multipliers.sourcePrior` |
+| `preferPrimary` / `preferPrimaryBoost` | `true` / `1.15` | — | boost passages whose registrable domain names something in the query (`nodejs.org` ↔ "node", `docs.python.org` ↔ "python"); shown in `explain.multipliers.preferPrimary` |
+| `autoRetry` | `0` | — | when `result.evidence.level` is `weak`/`none`, run one more search round with the top suggested queries inside the same call (same run deadline); max `1`; per-call `autoRetry` overrides |
+| `aspectCoverage` / `aspectLambda` | `auto` / `0.5` | — | xQuAD-lite: caller-supplied `relatedQueries` are aspects; the top-k is re-selected so every aspect is covered before any gets a third passage; `result.coverage` reports passages per aspect. `off` disables |
 | `minScore` | `null` | — | absolute cosine floor |
 | `relativeCutoff` | `0.6` | — | drop candidates below 0.6 × the best cosine (0 disables) |
 | `nearDuplicateThreshold` | `0.9` | — | shingle-Jaccard dedupe |
+| `mergeAdjacent` | `true` | — | neighbouring chunks of one page that both make the cut are returned as one passage (`chunkCount` ≥ 2); counts once toward `maxPerSource`, freed slots are backfilled |
 | `rerank` | `false` | `WEBVECTOR_RERANK` | `local` `cohere` `voyage` `jina` `llm` (or `true` = local) |
 | `rerankModel` / `rerankApiKey` / `rerankTopN` | provider default / — / `50` | `WEBVECTOR_RERANK_MODEL` / `WEBVECTOR_RERANK_API_KEY` | |
 | `fallbackToLexical` | `true` | — | if embedding fails mid-run, return BM25 results (`degraded: 'partial'`) instead of throwing |
@@ -111,7 +119,12 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | key | default | env | notes |
 |---|---|---|---|
 | `output.markdown` | `true` | `WEBVECTOR_OUTPUT_MARKDOWN` | include `result.markdown` |
-| `output.maxPassageChars` | `1500` | — | per passage in the markdown |
+| `output.maxPassageChars` | `1500` | — | per passage in the markdown (merged passages may use 2×) |
+| `output.maxTokens` | `0` (off) | — | token budget for the rendered markdown; passages are packed by score per token (top passage and one per source first), omitted indices are listed in a footer; `maxOutputTokens` per call can only tighten it |
+| `output.highlights` | `true` | — | compute `Passage.highlight` — the best 1–3 sentence window for the query (idf-weighted term coverage, + cosine when an embedder exists); code fences/tables are never cut |
+| `output.evidenceCards` | `false` | — | one-line evidence-card header per passage: `**[n]** Title — <url> · domain · published … · corroborated by k other sites · matched: "sub-question" · score` (< 40 tokens) |
+| `output.order` | `score` | — | `date-asc` orders passages oldest → newest (undated first; indices renumbered) so the freshest evidence sits closest to the answer |
+| `output.passageMode` | `full` | — | `full` renders whole passages in the markdown; `highlight` renders only each passage's highlight window (~65 % fewer tokens on the eval) |
 | `output.includeSnippetsOnFailure` | `true` | — | return search snippets when no page could be fetched (`degraded: 'search_only'`) |
 | `output.format` | `detailed` | — | `concise` (passages + sources) or `detailed` (adds score/date, failures, stats). The MCP server defaults to `concise` (`--default-response-format`, per-call `response_format`) |
 | `output.links` | `strip` | — | links inside rendered passages: `strip` (`[text](url)` → `text`, images → `[image: alt]`), `footnote` (`text[^k]` + per-passage footnotes), `inline`. Stored chunks never change |
@@ -139,10 +152,13 @@ Every `research()` / `fetchAndRetrieve()` result carries `stats.usage` (also emi
 `http: { requests, bytes, cacheHits, notModified, coalesced, negativeHits }` (also available as `stats.http`), and `estimatedCostUsd` / `pricingNote` when pricing is on.
 `sources[].fromCache` / `sources[].revalidated` say where each page came from. `webvector search --stats` prints a one-line summary.
 
+## Verifying citations (`wv.verifyCitations(answer, { sessionId | passages })` / `webvector verify`)
+
+Deterministic quote-grounding check, no LLM: each sentence of an answer is classified against the passages its `[n]` markers cite (the latest `research()` result of a session, or an explicit `passages` array; whole pages are searched too while the session holds them) as `verbatim` (normalised substring), `paraphrase` (word-3-gram Jaccard ≥ 0.6 or ROUGE-L F1 ≥ 0.7 against the best 1–2 sentence window), `unsupported`, or `uncited` (no marker and no supporting passage). Numbers and dates absent from the sources are listed per sentence. Options: `jaccardThreshold`, `rougeThreshold`.
+
 ## Per-call options (`research(query, opts)` / tool arguments)
 
-`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens`, `explain`. Numeric limits are capped by the configured values above.
-
+`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `explain`, `autoRetry` (0/1), `maxOutputTokens` (packs passages into the budget and appends an "N more passages omitted" footer; `stats.retrieve.tokensReturned` reports the approximate size), `responseFormat`, `objective`, `category`, `deadlineMs`, `country`/`language`, `maxAgeMs`, `cacheMode`. Numeric limits are capped by the configured values above.
 Cache policy per call (`research()`, `fetch()`, `fetchAndRetrieve()`; CLI `--max-age 2d`, `--no-cache`, `--cache-only`):
 
 | option | effect |

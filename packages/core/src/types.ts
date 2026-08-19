@@ -270,6 +270,8 @@ export interface Passage {
   bm25?: number;
   rerankScore?: number;
   chunkIndex: number;
+  /** Number of neighbouring chunks merged into this passage (≥ 2 when merged; absent otherwise). */
+  chunkCount?: number;
   startOffset: number;
   endOffset: number;
   siteName?: string;
@@ -280,6 +282,13 @@ export interface Passage {
   citation: string;
   /** True when this passage is a raw search snippet (degraded mode). */
   fromSnippet?: boolean;
+  /** Best 1–3 sentence window for the query (`output.highlights`); offsets are into the page markdown. */
+  highlight?: { text: string; startOffset: number; endOffset: number };
+  /**
+   * Distinct registrable domains (including this passage's own) whose retrieved chunks say the
+   * same thing (word-3-gram Jaccard ≥ 0.25 or cosine ≥ 0.85). 1 = uncorroborated.
+   */
+  corroboration?: number;
   /** Ranking breakdown; present only when `explain: true` was requested. */
   explain?: PassageExplain;
 }
@@ -296,6 +305,12 @@ export interface PassageExplain {
   poolRank: number;
   /** Every ranked list this chunk appeared in. */
   lists: { kind: 'bm25' | 'vector'; query: string; rank: number; score: number; weight: number }[];
+  /** Chunk indices merged into this passage (`retrieval.mergeAdjacent`). */
+  mergedChunks?: number[];
+  /** xQuAD objective value when aspect coverage re-selected the top-k (`retrieval.aspectCoverage`). */
+  aspectScore?: number;
+  /** Multipliers applied to the fused score (`recency`, `corroboration`, `sourcePrior`, `preferPrimary`). */
+  multipliers?: Record<string, number>;
 }
 
 export interface SourceSummary {
@@ -386,7 +401,22 @@ export interface ResearchStats {
     batches: number;
     ms: number;
   };
-  retrieve: { candidates: number; queries: number; reranked: boolean; ms: number };
+  retrieve: {
+    candidates: number;
+    queries: number;
+    reranked: boolean;
+    ms: number;
+    /** Approximate tokens of the returned markdown (or passage texts when markdown is off). */
+    tokensReturned?: number;
+    /** Present when `autoRetry` ran a second search round inside this call. */
+    autoRetry?: {
+      queries: string[];
+      newPages: number;
+      levelBefore: 'strong' | 'weak' | 'none';
+      levelAfter: 'strong' | 'weak' | 'none';
+      ms: number;
+    };
+  };
   totalMs: number;
   warnings: string[];
   /** Size of `result.markdown` when rendered (chars and approximate tokens). */
@@ -409,6 +439,30 @@ export interface ResearchResult {
   /** Why the result is degraded (e.g. the deadline was reached before every page was fetched). */
   degradedReason?: string;
   sessionId?: string;
+  /**
+   * How many returned passages matched each caller-supplied related query (aspect coverage,
+   * `retrieval.aspectCoverage`). Only present when related queries were given.
+   */
+  coverage?: Record<string, number>;
+  /**
+   * LLM-free evidence-sufficiency verdict: is this enough to answer, and if not, what to search
+   * next. `strong` | `weak` | `none`, with the signals behind it and `suggestedQueries`.
+   */
+  evidence?: Evidence;
+}
+
+/** Evidence-sufficiency gate output (see retrieval/evidence.ts). */
+export interface Evidence {
+  level: 'strong' | 'weak' | 'none';
+  /** Fraction of distinct query terms present in the top-3 passages. */
+  coverage: number;
+  distinctDomains: number;
+  /** Top passage's fused score over the mean candidate score (peaked = confident). */
+  topScoreRatio: number;
+  /** Returned passages / requested topK. */
+  cutoffPosition: number;
+  /** Follow-up queries (pseudo-relevance-feedback terms, bridge entities, missing query terms). */
+  suggestedQueries: string[];
 }
 
 export interface ProgressEvent {
@@ -437,7 +491,11 @@ export interface ResearchOptions {
   rerank?: boolean;
   /** Include pre-rendered markdown (default from config). */
   markdown?: boolean;
-  /** Trim passages so the rendered markdown stays under this many (approximate) tokens. */
+  /**
+   * Token budget for the rendered markdown (approximate). Passages are packed by score per token,
+   * keeping the top passage and one per source; omitted indices are listed in a footer. Can only
+   * tighten `output.maxTokens`.
+   */
   maxOutputTokens?: number;
   /** Attach a per-passage ranking breakdown (`Passage.explain`). Off by default (payload size). */
   explain?: boolean;
@@ -470,6 +528,12 @@ export interface ResearchOptions {
    * `readOnly` (serve only from cache, never touch the network — stale copies allowed).
    */
   cacheMode?: CacheMode;
+  /**
+   * When the evidence gate says `weak`/`none`, run one more search round with the suggested
+   * queries inside this call (bounded by the same run deadline). 0 or 1; overrides
+   * `retrieval.autoRetry`.
+   */
+  autoRetry?: number;
 }
 
 export type CacheMode = 'default' | 'bypass' | 'readOnly';

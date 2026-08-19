@@ -147,6 +147,59 @@ export const retrievalConfigSchema = z.object({
   serpPriorWeight: z.number().min(0).default(0),
   mmr: z.boolean().default(true),
   mmrLambda: z.number().min(0).max(1).default(0.7),
+  /**
+   * Redundancy measure for MMR: `auto` = cosine over chunk vectors when every candidate has one,
+   * else word-3-gram Jaccard over text; `jaccard` forces text similarity even in semantic mode;
+   * `vector` = cosine when available (falls back to Jaccard in lexical mode).
+   */
+  mmrSimilarity: z.enum(['auto', 'vector', 'jaccard']).default('auto'),
+  /**
+   * Aspect coverage (xQuAD-lite): treat caller-supplied related queries as aspects and re-select
+   * the top-k so every aspect is covered before any aspect gets a third passage. `auto` = on
+   * whenever related queries are given (there is nothing to do without them); `off` disables.
+   */
+  aspectCoverage: z.enum(['auto', 'off']).default('auto'),
+  /** xQuAD λ: 0 = pure relevance, 1 = pure aspect coverage. */
+  aspectLambda: z.number().min(0).max(1).default(0.5),
+  /**
+   * Recency boost, applied only when the caller asks for `freshness`:
+   * score × (1 + weight · 0.5^(ageDays / halfLife)), capped at +30 %; undated pages are never
+   * penalised. Half-life follows the freshness request (day 2 · week 7 · month 30 · year 180 days);
+   * `halfLifeDays` is used for `{ after, before }` ranges.
+   */
+  recency: z
+    .object({
+      weight: z.number().min(0).max(0.3).default(0.3),
+      halfLifeDays: z.number().min(1).default(180),
+    })
+    .default({ weight: 0.3, halfLifeDays: 180 }),
+  /**
+   * Boost passages corroborated by other domains: × (1 + 0.1·min(n−1, 3)) where n =
+   * `Passage.corroboration`. Off by default (the count is always reported).
+   */
+  corroborationBoost: z.boolean().default(false),
+  /** Word-3-gram Jaccard threshold for two chunks to count as corroborating each other. */
+  corroborationJaccard: z.number().min(0).max(1).default(0.25),
+  /**
+   * When `result.evidence.level` is `weak`/`none`, run one more search round with the top
+   * suggested queries inside the same call (same run deadline). 0 = off (default), max 1.
+   */
+  autoRetry: z.number().int().min(0).max(1).default(0),
+  /**
+   * Source-authority priors: glob → score multiplier, merged over the built-in defaults (user
+   * wins; set a pattern to 1 to neutralise a built-in). Hostname globs (`*.gov`) or host/path globs
+   * (`github.com/*\/*\/blob/*\/README*`). Combined multipliers are clamped to [0.7, 1.3] and shown
+   * in `explain.multipliers.sourcePrior`.
+   */
+  sourcePriors: z.record(z.string(), z.number().positive()).default({}),
+  /** Apply the small built-in prior list (*.gov/*.edu/arxiv/wikipedia/GitHub READMEs up; a few aggregators down). */
+  builtinSourcePriors: z.boolean().default(true),
+  /**
+   * Boost passages whose registrable domain names something in the query (nodejs.org ↔ "node",
+   * docs.python.org ↔ "python") — usually the primary source. Shown in `explain.multipliers.preferPrimary`.
+   */
+  preferPrimary: z.boolean().default(true),
+  preferPrimaryBoost: z.number().min(1).max(1.3).default(1.15),
   minScore: z.number().min(-1).max(1).nullable().default(null),
   relativeCutoff: z.number().min(0).max(1).default(0.6),
   /**
@@ -157,6 +210,12 @@ export const retrievalConfigSchema = z.object({
   /** Cut the final list after this many score "jumps" (gap > 3× mean gap); 0 = off. */
   autocut: z.number().int().min(0).default(0),
   nearDuplicateThreshold: z.number().min(0).max(1).default(0.9),
+  /**
+   * Return neighbouring chunks of one page (chunkIndex ±1) that both made the cut as a single
+   * passage, so an answer straddling a chunk boundary comes back whole. Counts once toward
+   * `maxPerSource`; freed slots are backfilled.
+   */
+  mergeAdjacent: z.boolean().default(true),
   rerank: z.union([z.boolean(), z.string()]).default(false),
   rerankModel: z.string().optional(),
   rerankApiKey: z.string().optional(),
@@ -321,6 +380,27 @@ export const ingestionConfigSchema = z.object({
 export const outputConfigSchema = z.object({
   markdown: z.boolean().default(true),
   maxPassageChars: z.number().int().min(100).default(1500),
+  /**
+   * Token budget for the rendered markdown (0 = unlimited). Passages are packed by score per token;
+   * the top passage and one per source are kept first; a footer lists omitted indices.
+   */
+  maxTokens: z.number().int().min(0).default(0),
+  /** Compute `Passage.highlight` (best 1–3 sentence window for the query). Cheap; no model needed. */
+  highlights: z.boolean().default(true),
+  /** `full` renders whole passages in the markdown; `highlight` renders only the highlight window. */
+  passageMode: z.enum(['full', 'highlight']).default('full'),
+  /**
+   * Evidence-card header per passage: `**[n]** Title — <url> · domain · published … ·
+   * corroborated by k sites · matched: "q1", "q2" · score` — lets the model weigh recency,
+   * corroboration and which sub-question a passage answers without extra tool calls (< 40 tokens).
+   */
+  evidenceCards: z.boolean().default(false),
+  /**
+   * `score` (default) or `date-asc`: passages ordered oldest → newest (undated first) so the most
+   * recent evidence sits closest to the model's answer (FreshPrompt: up to +2.2 % accuracy).
+   * Passage indices are renumbered after ordering.
+   */
+  order: z.enum(['score', 'date-asc']).default('score'),
   includeSnippetsOnFailure: z.boolean().default(true),
   /** `detailed` (score/date per passage, failures, stats) or `concise` (passages + sources only). */
   format: z.enum(['concise', 'detailed']).default('detailed'),

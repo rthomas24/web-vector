@@ -178,6 +178,7 @@ npm i -g webvector-cli          # or keep using npx -y webvector-cli …
 webvector search "query" [-k 8] [-p 12] [--provider brave] [--embeddings openai] [--rerank local] [--json|--md] [--stats] [--max-age 2h|--no-cache|--cache-only]
 webvector fetch <url> [--query "…"]     # one page as Markdown, or just the passages relevant to --query (same cache flags)
 webvector serp "query"                  # search results only
+webvector verify "answer with [1] markers" --result r.json   # quote-grounding check against a `search --json` result
 webvector doctor [--live] [--fix] [--json]   # config, dependencies, runtime (node:sqlite / SSRF guard), cache + store paths, local model presence
 webvector cache stats|ls|clear|prune --older-than 7d   # the persistent page/embedding cache (~/.cache/webvector/pages.sqlite)
 webvector init [--yes]                  # writes webvector.config.yaml (+ .env.example); interactive on a TTY
@@ -261,14 +262,20 @@ If the primary search provider fails or is rate-limited, the `fallbackProviders`
 interface ResearchResult {
   query: string; queries: string[];        // the query + expansions actually used
   passages: Passage[];                     // ranked; each: text, url, title, score (0–1), cosine?, bm25?,
-                                           //   rerankScore?, chunkIndex, startOffset, endOffset, publishedAt?,
-                                           //   fetchedAt, matchedQueries, citation "[n] Title — url"
+                                           //   rerankScore?, chunkIndex, chunkCount? (merged neighbours),
+                                           //   startOffset, endOffset, publishedAt?, fetchedAt, matchedQueries,
+                                           //   highlight? { text, startOffset, endOffset } (best sentence window),
+                                           //   corroboration? (distinct domains saying the same thing),
+                                           //   citation "[n] Title — url (YYYY-MM-DD)"
   sources: SourceSummary[];                // one per page: status ok|failed|cached, chunks, bestScore, passageIndices, approxTokens, failure?
   failures: Failure[];                     // per-URL / per-stage problems with machine codes (never thrown)
   stats: { search, ingest, embed, retrieve, totalMs, warnings };   // timings + counts per stage
   markdown?: string;                       // the pre-rendered version above
   degraded?: 'search_only' | 'partial';    // e.g. every fetch failed → search snippets returned instead
   degradedReason?: string;                 // why (deadline reached, embeddings unavailable, …)
+  coverage?: Record<string, number>;       // with relatedQueries: passages covering each sub-question
+  evidence?: { level: 'strong'|'weak'|'none'; coverage; distinctDomains; topScoreRatio; cutoffPosition;
+               suggestedQueries: string[] }; // LLM-free "is this enough?" verdict + what to search next
 }
 // stats.output = { chars, approxTokens } of the rendered markdown
 ```

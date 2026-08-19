@@ -78,11 +78,13 @@ export {
 export type {
   LinkMode,
   MarkdownRenderOptions,
+  PackedPassages,
   RenderedMarkdown,
   ResponseFormat,
 } from './pipeline/format.js';
 export {
   citationFor,
+  packPassages,
   renderMarkdown,
   renderPassage,
   renderResearch,
@@ -147,7 +149,20 @@ export {
   listRerankers,
   registerReranker,
 } from './rerankers/index.js';
+export type { Evidence as EvidenceVerdict } from './retrieval/evidence.js';
+export { assessEvidence } from './retrieval/evidence.js';
 export { HeuristicExpander, LlmExpander } from './retrieval/expansion.js';
+export type { Highlight } from './retrieval/highlight.js';
+export { bestHighlight, segmentText } from './retrieval/highlight.js';
+export { BUILTIN_SOURCE_PRIORS } from './retrieval/priors.js';
+export type {
+  CitationStatus,
+  SentenceCheck,
+  VerifyOptions,
+  VerifyResult,
+  VerifySource,
+} from './retrieval/verify.js';
+export { sourcesFromPassages, verifyCitations } from './retrieval/verify.js';
 export type { RuntimeCapabilities } from './runtime.js';
 export {
   defaultCacheDir,

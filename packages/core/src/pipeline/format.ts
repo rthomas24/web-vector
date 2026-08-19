@@ -1,3 +1,4 @@
+import { approxTokens } from '../ingest/chunker.js';
 import type { Passage, ResearchResult, SourceSummary } from '../types.js';
 
 export type ResponseFormat = 'concise' | 'detailed';
@@ -8,8 +9,18 @@ export interface MarkdownRenderOptions {
   includeSources?: boolean;
   includeFailures?: boolean;
   includeStats?: boolean;
-  /** Approximate token budget (chars/4); trims passages from the bottom. */
+  /**
+   * Approximate token budget for the whole markdown. Passages are packed greedily by score per
+   * token; the top passage and one passage per source are always kept when they fit; a footer names
+   * the omitted passage indices. See `packPassages`.
+   */
   maxTokens?: number;
+  /** `highlight` renders only each passage's best sentence window (falls back to the full text). */
+  passageMode?: 'full' | 'highlight';
+  /** Evidence-card header line per passage (domain · date · corroboration · matched sub-questions). */
+  evidenceCards?: boolean;
+  /** Caller-supplied related queries; evidence cards list which of them a passage matched. */
+  relatedQueries?: string[];
   /** Prepend a one-line reminder that passages are quoted web content (useful for LLM consumers). */
   untrustedNotice?: boolean;
   /**
@@ -122,26 +133,117 @@ export function renderPassage(
     links?: LinkMode;
     deepLink?: boolean;
     contentType?: string;
+    passageMode?: 'full' | 'highlight';
+    evidenceCards?: boolean;
+    relatedQueries?: string[];
   } = {},
 ): string {
   const format = opts.format ?? 'detailed';
   const links = opts.links ?? 'strip';
-  const t = transformLinks(p.text.replace(/\s+\n/g, '\n').trim(), links);
-  const body = trimText(t.text, maxChars)
+  // A passage merged from neighbouring chunks may run to ~2× the single-chunk limit.
+  const limit = p.chunkCount && p.chunkCount > 1 ? maxChars * 2 : maxChars;
+  const highlightOnly = opts.passageMode === 'highlight' && !!p.highlight;
+  const raw = highlightOnly ? (p.highlight as { text: string }).text : p.text;
+  const t = transformLinks(raw.replace(/\s+\n/g, '\n').trim(), links);
+  const body = trimText(t.text, limit)
     .split('\n')
     .map((l) => `> ${l}`)
     .join('\n');
   const url =
     opts.deepLink && !isPdf(p.url, opts.contentType) ? textFragmentUrl(p.url, t.text) : p.url;
   const meta: string[] = [];
+  const foot = t.footnotes.length ? `\n${t.footnotes.join('\n')}` : '';
+  if (opts.evidenceCards) {
+    // Evidence card: everything the model needs to weigh this passage, on one line.
+    meta.push(hostOf(p.url));
+    if (p.publishedAt) meta.push(`published ${p.publishedAt.slice(0, 10)}`);
+    if (p.corroboration && p.corroboration > 1)
+      meta.push(
+        `corroborated by ${p.corroboration - 1} other site${p.corroboration > 2 ? 's' : ''}`,
+      );
+    const aspects = (opts.relatedQueries ?? []).filter((q) => p.matchedQueries.includes(q));
+    if (aspects.length)
+      meta.push(
+        `matched: ${aspects
+          .slice(0, 3)
+          .map((q) => `"${q}"`)
+          .join(', ')}`,
+      );
+    meta.push(`score ${p.score.toFixed(2)}`);
+    if (p.fromSnippet) meta.push('search snippet');
+    if (highlightOnly && p.highlight && p.highlight.text.length < p.text.length)
+      meta.push('highlight');
+    return `**[${p.index}]** ${p.title} — <${url}> · ${meta.join(' · ')}\n${body}${foot}`;
+  }
   if (format === 'detailed') {
     if (p.publishedAt) meta.push(`published ${p.publishedAt.slice(0, 10)}`);
     meta.push(`score ${p.score.toFixed(2)}`);
   }
   if (p.fromSnippet) meta.push('search snippet');
+  if (highlightOnly && p.highlight && p.highlight.text.length < p.text.length)
+    meta.push('highlight');
   const head = `**[${p.index}]** ${p.title} — <${url}>${meta.length ? ` (${meta.join(', ')})` : ''}`;
-  const foot = t.footnotes.length ? `\n${t.footnotes.join('\n')}` : '';
   return `${head}\n${body}${foot}`;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+export interface PackedPassages {
+  /** Passages that fit, in their original order (indices are unchanged, so [n] citations stay valid). */
+  included: Passage[];
+  /** Indices of passages left out. */
+  omitted: number[];
+  /** Approximate tokens of the included rendered passages. */
+  tokens: number;
+}
+
+/**
+ * Fit rendered passages into a token budget. Guarantees (when they fit at all): the top-1 passage,
+ * then the best passage of every other source, then the rest greedily by score per token — so a
+ * tight budget still spans the sources instead of only the first page's chunks.
+ */
+export function packPassages(
+  passages: Passage[],
+  rendered: string[],
+  budgetTokens: number,
+): PackedPassages {
+  const tokens = rendered.map((s) => approxTokens(s) + 1);
+  const total = tokens.reduce((a, b) => a + b, 0);
+  if (total <= budgetTokens || passages.length === 0)
+    return { included: passages, omitted: [], tokens: total };
+  const chosen = new Set<number>();
+  let used = 0;
+  const tryAdd = (i: number) => {
+    if (chosen.has(i) || used + (tokens[i] as number) > budgetTokens) return;
+    chosen.add(i);
+    used += tokens[i] as number;
+  };
+  // 1. top passage
+  tryAdd(0);
+  // 2. best passage per other source (by score)
+  const bestPerSource = new Map<string, number>();
+  passages.forEach((p, i) => {
+    const key = p.url;
+    const cur = bestPerSource.get(key);
+    if (cur === undefined || (passages[cur] as Passage).score < p.score) bestPerSource.set(key, i);
+  });
+  [...bestPerSource.values()]
+    .sort((a, b) => (passages[b] as Passage).score - (passages[a] as Passage).score)
+    .forEach(tryAdd);
+  // 3. everything else by score per token
+  passages
+    .map((p, i) => ({ i, v: p.score / (tokens[i] as number) }))
+    .sort((a, b) => b.v - a.v)
+    .forEach(({ i }) => tryAdd(i));
+  const included = passages.filter((_, i) => chosen.has(i));
+  const omitted = passages.filter((_, i) => !chosen.has(i)).map((p) => p.index);
+  return { included, omitted, tokens: used };
 }
 
 /** 2–4 follow-up queries: the expansions/related queries actually used, minus the primary one. */
@@ -181,7 +283,6 @@ export function renderResearch(
   const links = opts.links ?? 'strip';
   const fetchTool = opts.fetchToolName ?? 'webvector_fetch';
   const maxChars = opts.maxPassageChars ?? 1500;
-  const budgetChars = opts.maxTokens ? opts.maxTokens * 4 : Number.POSITIVE_INFINITY;
   const contentTypes = new Map(result.sources.map((s) => [s.url, s.contentType]));
 
   const head: string[] = [];
@@ -202,6 +303,9 @@ export function renderResearch(
       links,
       deepLink: opts.deepLinks,
       contentType: contentTypes.get(p.url),
+      passageMode: opts.passageMode,
+      evidenceCards: opts.evidenceCards,
+      relatedQueries: opts.relatedQueries,
     }),
   );
   const allChars = rendered.reduce((n, s) => n + s.length + 2, 0);
@@ -249,16 +353,14 @@ export function renderResearch(
   if (opts.footerLine) tail.push(opts.footerLine);
 
   const fixedChars = head.join('\n\n').length + tail.join('\n\n').length + 4;
-  let used = fixedChars;
-  const kept: string[] = [];
-  const omitted: number[] = [];
-  result.passages.forEach((p, i) => {
-    const s = rendered[i] as string;
-    if (omitted.length === 0 && (used + s.length + 2 <= budgetChars || kept.length === 0)) {
-      kept.push(s);
-      used += s.length + 2;
-    } else omitted.push(p.index);
-  });
+  // Pack passages into the remaining budget (top-1 and one per source first, then score/token).
+  const budgetTokens =
+    opts.maxTokens && opts.maxTokens > 0
+      ? Math.max(Math.floor(opts.maxTokens * 0.1), opts.maxTokens - Math.ceil(fixedChars / 4) - 40)
+      : Number.POSITIVE_INFINITY;
+  const packed = packPassages(result.passages, rendered, budgetTokens);
+  const kept: string[] = packed.included.map((p) => rendered[result.passages.indexOf(p)] as string);
+  const omitted: number[] = packed.omitted;
   const requiredTokens = Math.ceil((fixedChars + allChars + 200) / 4 / 500) * 500;
   if (omitted.length && opts.omissionFooter !== false) {
     const first = omitted[0] as number;
@@ -278,6 +380,12 @@ export function renderMarkdown(result: ResearchResult, opts: MarkdownRenderOptio
   return renderResearch(result, opts).markdown;
 }
 
-export function citationFor(index: number, title: string, url: string): string {
-  return `[${index}] ${title} — ${url}`;
+export function citationFor(
+  index: number,
+  title: string,
+  url: string,
+  publishedAt?: string,
+): string {
+  const date = publishedAt ? ` (${publishedAt.slice(0, 10)})` : '';
+  return `[${index}] ${title} — ${url}${date}`;
 }

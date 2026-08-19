@@ -166,6 +166,13 @@ export class BM25Index {
     return this.docs.has(id);
   }
 
+  /** Inverse document frequency of an (already tokenized) term; 0 when unseen. */
+  idf(term: string): number {
+    const N = this.docs.size;
+    const n = this.postings.get(term)?.size ?? 0;
+    return n ? Math.log(1 + (N - n + 0.5) / (n + 0.5)) : 0;
+  }
+
   /** Index a document. A plain string is indexed as the `body` field. */
   add(id: string, text: string | BM25Fields): void {
     if (this.docs.has(id)) return;

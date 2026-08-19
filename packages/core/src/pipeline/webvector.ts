@@ -34,6 +34,8 @@ import {
   ingestUrl,
   parseResource,
 } from '../ingest/index.js';
+import { assessEvidence } from '../retrieval/evidence.js';
+import { sourcesFromPassages, type VerifyResult, verifyCitations } from '../retrieval/verify.js';
 import { hostOf } from '../telemetry/otel.js';
 import type {
   CacheMode,
@@ -44,6 +46,7 @@ import type {
   ProgressEvent,
   ResearchOptions,
   ResearchResult,
+  ResearchStats,
   SearchCapabilities,
   SearchCategory,
   SearchOptions,
@@ -73,7 +76,7 @@ import {
   ingestDocument,
   isFatalIngestError,
 } from './ingest-stage.js';
-import { runRetrieveStage } from './retrieve-stage.js';
+import { type RetrieveOutput, registrableDomain, runRetrieveStage } from './retrieve-stage.js';
 import { runSearchStage } from './search-stage.js';
 import { ephemeralSession, type Session, type SessionRegistry } from './session.js';
 
@@ -91,6 +94,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   readonly codeConfig: WebVectorConfig;
   readonly logger: Logger;
   private components?: Promise<Components>;
+  /** Passages of the latest research() per session key, for verifyCitations(). Small LRU. */
+  private readonly recentPassages = new Map<string, Passage[]>();
   private closed = false;
 
   constructor(
@@ -282,6 +287,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       signal: opts.signal,
       warnings,
       explain: opts.explain,
+      highlights: this.config.output.highlights,
     });
     const result: ResearchResult = {
       query,
@@ -323,6 +329,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       },
     };
     result.markdown = renderMarkdown(result, this.renderOptions());
+    result.stats.retrieve.tokensReturned = approxTokens(result.markdown);
     return result;
   }
 
@@ -349,7 +356,54 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return (await this.ensure()).sessions.list();
   }
   async clearSession(sessionId: string): Promise<boolean> {
+    this.recentPassages.delete(sessionId);
     return (await this.ensure()).sessions.delete(sessionId);
+  }
+
+  /**
+   * Quote-grounding check: classify each sentence of `answer` as verbatim / paraphrase /
+   * unsupported / uncited against the passages its [n] markers cite — the passages of the latest
+   * research() call in `sessionId` (or an explicit `passages` array), plus the whole pages when the
+   * session still holds them. Numbers and dates absent from the sources are flagged. No LLM.
+   */
+  async verifyCitations(
+    answer: string,
+    opts: {
+      sessionId?: string;
+      passages?: Passage[];
+      jaccardThreshold?: number;
+      rougeThreshold?: number;
+    } = {},
+  ): Promise<VerifyResult> {
+    const key = opts.sessionId ?? (this.config.store.mode === 'session' ? 'default' : undefined);
+    const passages = opts.passages ?? (key ? this.recentPassages.get(key) : undefined);
+    if (!passages?.length)
+      throw new WebVectorError(
+        'Nothing to verify against: pass `passages` from a research() result, or the `sessionId` of a prior research() call.',
+        { code: 'INVALID_CONFIG' },
+      );
+    const pageText = new Map<string, string>();
+    const session = key ? (await this.ensure()).sessions.get(key) : undefined;
+    if (session) {
+      const byUrl = new Map<string, { i: number; t: string }[]>();
+      for (const ch of session.chunks.values()) {
+        const arr = byUrl.get(ch.metadata.url) ?? [];
+        arr.push({ i: ch.metadata.chunkIndex, t: ch.text });
+        byUrl.set(ch.metadata.url, arr);
+      }
+      for (const [url, arr] of byUrl)
+        pageText.set(
+          url,
+          arr
+            .sort((a, b) => a.i - b.i)
+            .map((x) => x.t)
+            .join('\n'),
+        );
+    }
+    return verifyCitations(answer, sourcesFromPassages(passages, pageText), {
+      jaccardThreshold: opts.jaccardThreshold,
+      rougeThreshold: opts.rougeThreshold,
+    });
   }
 
   // ─── the main entry point ──────────────────────────────────────────────
@@ -489,6 +543,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     let okPages = 0;
     let cachedPages = 0;
     let done = 0;
+    let batchTotal = targets.length;
     progress({
       stage: 'ingest',
       done: 0,
@@ -590,9 +645,9 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         progress({
           stage: 'ingest',
           done,
-          total: targets.length,
+          total: batchTotal,
           failed: failedSoFar,
-          message: `Fetched ${done}/${targets.length}${failedSoFar ? ` (${failedSoFar} failed)` : ''}`,
+          message: `Fetched ${done}/${batchTotal}${failedSoFar ? ` (${failedSoFar} failed)` : ''}`,
         });
       }
     };
@@ -601,54 +656,61 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       opts.deadlineMs ?? cfg.ingestion.totalDeadlineMs,
       cfg.ingestion.totalDeadlineMs,
     );
-    const settled = await settleWithDeadline(
-      targets.map((r) =>
-        ingestOne(r).then(
-          () => undefined as unknown,
-          (e) => e as unknown,
-        ),
-      ),
-      deadlineMs,
-      () => 'deadline' as const,
-      () => runAbort.abort(new Error('run deadline exceeded')), // stop orphaned work
-    );
-    let fatal: WebVectorError | undefined;
     let deadlineHits = 0;
-    settled.forEach((outcome, i) => {
-      const url = targets[i]?.url ?? '';
-      if (outcome === 'deadline') {
-        deadlineHits++;
-        const s = sources.get(canonicalizeUrl(url));
-        if (s && s.status === 'failed' && !s.failure) {
-          const f: Failure = {
-            url,
-            code: 'FETCH_TIMEOUT',
-            message: `Deadline of ${deadlineMs}ms exceeded`,
-            stage: 'ingest',
-          };
-          s.failure = f;
-          failures.push(f);
+    /** Ingest a batch of results under a deadline; per-URL failures are recorded, fatal ones thrown. */
+    const ingestBatch = async (batch: SearchResult[], batchDeadlineMs: number): Promise<void> => {
+      done = 0;
+      batchTotal = batch.length;
+      const settled = await settleWithDeadline(
+        batch.map((r) =>
+          ingestOne(r).then(
+            () => undefined as unknown,
+            (e) => e as unknown,
+          ),
+        ),
+        batchDeadlineMs,
+        () => 'deadline' as const,
+        () => runAbort.abort(new Error('run deadline exceeded')), // stop orphaned work
+      );
+      let fatal: WebVectorError | undefined;
+      settled.forEach((outcome, i) => {
+        const url = batch[i]?.url ?? '';
+        if (outcome === 'deadline') {
+          deadlineHits++;
+          const s = sources.get(canonicalizeUrl(url));
+          if (s && s.status === 'failed' && !s.failure) {
+            const f: Failure = {
+              url,
+              code: 'FETCH_TIMEOUT',
+              message: `Deadline of ${batchDeadlineMs}ms exceeded`,
+              stage: 'ingest',
+            };
+            s.failure = f;
+            failures.push(f);
+          }
+        } else if (outcome instanceof Error && !fatal) {
+          fatal = WebVectorError.from(outcome, { code: 'INTERNAL', stage: 'ingest' });
         }
-      } else if (outcome instanceof Error && !fatal) {
-        fatal = WebVectorError.from(outcome, { code: 'INTERNAL', stage: 'ingest' });
+      });
+      if (fatal && isFatalIngestError(fatal)) {
+        if (cfg.retrieval.fallbackToLexical && session.chunks.size) {
+          warnings.push(`Embedding failed (${fatal.code}); falling back to lexical retrieval.`);
+        } else throw fatal;
       }
-    });
-    if (fatal && isFatalIngestError(fatal)) {
-      if (cfg.retrieval.fallbackToLexical && session.chunks.size) {
-        warnings.push(`Embedding failed (${fatal.code}); falling back to lexical retrieval.`);
-      } else throw fatal;
-    }
-    const ingestMs = Date.now() - ti;
+    };
+    await ingestBatch(targets, deadlineMs);
+    let ingestMs = Date.now() - ti;
     stageDone('ingest', ingestMs);
     if (opts.signal?.aborted) throw new WebVectorError('Research aborted', { code: 'ABORTED' });
 
     // ── 4. retrieve ──────────────────────────────────────────────────────
     const tr = Date.now();
     progress({ stage: 'retrieve', done: 0, total: 1, message: 'Retrieving relevant passages' });
-    const queries = dedupeStrings([query, ...related, ...expanded]);
+    let queries = dedupeStrings([query, ...related, ...expanded]);
     let passages: Passage[] = [];
     let candidates = 0;
     let reranked = false;
+    let coverage: ResearchResult['coverage'];
     let degraded: ResearchResult['degraded'];
     let degradedReason: string | undefined;
     if (deadlineHits > 0) {
@@ -657,18 +719,20 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       warnings.push(degradedReason);
     }
     const objectiveQuery = opts.objective ? objectiveTerms(opts.objective) : '';
-    const hasChunks =
-      session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
-    if (hasChunks) {
+    let signals: RetrieveOutput['signals'] | undefined;
+    const retrieve = async (qs: string[]): Promise<void> => {
+      const hasChunks =
+        session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
+      if (!hasChunks) return;
       const r = await c.otel.span(
         'retrieval',
-        { 'webvector.retrieve.queries': queries.length, 'webvector.retrieve.top_k': topK },
+        { 'webvector.retrieve.queries': qs.length, 'webvector.retrieve.top_k': topK },
         async (span) => {
           const out = await runRetrieveStage(c, cfg.retrieval, {
             session,
             // The objective's top terms ride along as an extra low-weight list (expansionWeight);
             // it is not searched and not reported in result.queries.
-            queries: objectiveQuery ? [...queries, objectiveQuery] : queries,
+            queries: objectiveQuery ? [...qs, objectiveQuery] : qs,
             relatedQueries: related,
             searchResults: results,
             topK,
@@ -676,6 +740,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
             signal,
             warnings,
             explain: opts.explain,
+            highlights: cfg.output.highlights,
+            freshness: opts.freshness ?? cfg.search.freshness,
           });
           span.set({
             'webvector.retrieve.candidates': out.candidates,
@@ -688,10 +754,74 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       passages = r.passages;
       candidates = r.candidates;
       reranked = r.reranked;
+      coverage = r.coverage;
+      signals = r.signals;
       if (r.lexicalOnly && c.embedder) {
         degraded = 'partial'; // configured lexical mode is not degraded
         degradedReason ??= 'embeddings unavailable; lexical retrieval only';
       }
+    };
+    await retrieve(queries);
+    const assess = () =>
+      assessEvidence(query, passages, {
+        topK,
+        signals,
+        domainOf: registrableDomain,
+        fallbackTexts: results.slice(0, 5).map((r) => `${r.title}. ${r.snippet ?? ''}`),
+      });
+    let evidence = assess();
+
+    // ── 4b. auto-retry: one more search round with the suggested queries (same deadline) ──
+    let autoRetryStats: ResearchStats['retrieve']['autoRetry'];
+    const autoRetry = Math.min(1, opts.autoRetry ?? cfg.retrieval.autoRetry);
+    const remaining = cfg.ingestion.totalDeadlineMs - (Date.now() - ti);
+    if (
+      autoRetry > 0 &&
+      evidence.level !== 'strong' &&
+      evidence.suggestedQueries.length &&
+      remaining > 2000 &&
+      !signal.aborted
+    ) {
+      const t2 = Date.now();
+      const retryQueries = evidence.suggestedQueries.slice(0, 2);
+      const levelBefore = evidence.level;
+      let newPages = 0;
+      try {
+        const again = await runSearchStage(c, {
+          query: retryQueries[0] as string,
+          related: retryQueries.slice(1),
+          maxPages,
+          failures,
+          options: {
+            ...this.defaultSearchOptions(),
+            count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
+            freshness: opts.freshness ?? cfg.search.freshness,
+            domainsAllow: opts.domainsAllow,
+            domainsBlock: opts.domainsBlock,
+            signal,
+          },
+        });
+        searched.attempts.push(...again.attempts);
+        const fresh = again.results
+          .filter((r) => !sources.has(canonicalizeUrl(r.url)))
+          .slice(0, maxPages);
+        newPages = fresh.length;
+        for (const r of fresh) results.push(r);
+        if (fresh.length) await ingestBatch(fresh, remaining - (Date.now() - t2));
+        queries = dedupeStrings([...queries, ...retryQueries]);
+        await retrieve(queries);
+        evidence = assess();
+      } catch (err) {
+        warnings.push(`Auto-retry failed: ${err instanceof Error ? err.message : err}`);
+      }
+      autoRetryStats = {
+        queries: retryQueries,
+        newPages,
+        levelBefore,
+        levelAfter: evidence.level,
+        ms: Date.now() - t2,
+      };
+      ingestMs = Date.now() - ti;
     }
     if (
       passages.length === 0 &&
@@ -708,6 +838,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           stage: 'ingest',
         });
     }
+    if (cfg.output.order === 'date-asc' && passages.length > 1) passages = orderByDate(passages);
     for (const p of passages) {
       const s = sources.get(canonicalizeUrl(p.url));
       if (s) {
@@ -744,7 +875,13 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           ms: ingestMs,
         },
         embed: this.embedStats(c, embedTotals),
-        retrieve: { candidates, queries: queries.length, reranked, ms: retrieveMs },
+        retrieve: {
+          candidates,
+          queries: queries.length,
+          reranked,
+          ms: retrieveMs,
+          ...(autoRetryStats ? { autoRetry: autoRetryStats } : {}),
+        },
         totalMs: Date.now() - t0,
         warnings,
         http: meter.usage.http,
@@ -753,17 +890,34 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       degraded,
       degradedReason,
       sessionId: opts.sessionId,
+      ...(coverage ? { coverage } : {}),
+      evidence,
     };
     if (opts.markdown ?? cfg.output.markdown) {
+      // Callers may tighten the operator's token budget, never loosen it.
+      const budgets = [cfg.output.maxTokens, opts.maxOutputTokens].filter(
+        (n): n is number => !!n && n > 0,
+      );
       result.markdown = renderMarkdown(result, {
         ...this.renderOptions(),
-        maxTokens: opts.maxOutputTokens,
+        maxTokens: budgets.length ? Math.min(...budgets) : undefined,
         format: opts.responseFormat ?? cfg.output.format,
+        relatedQueries: related,
       });
       result.stats.output = {
         chars: result.markdown.length,
         approxTokens: approxTokens(result.markdown),
       };
+    }
+    result.stats.retrieve.tokensReturned = approxTokens(
+      result.markdown ?? passages.map((p) => p.text).join('\n\n'),
+    );
+    const sessionKey = opts.sessionId ?? (cfg.store.mode === 'session' ? 'default' : undefined);
+    if (sessionKey) {
+      this.recentPassages.delete(sessionKey);
+      this.recentPassages.set(sessionKey, passages);
+      if (this.recentPassages.size > 100)
+        this.recentPassages.delete(this.recentPassages.keys().next().value as string);
     }
     stageDone('format', Date.now() - t0 - result.stats.totalMs);
     return result;
@@ -923,6 +1077,9 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       format: o.format,
       links: o.links,
       deepLinks: o.deepLinks,
+      maxTokens: o.maxTokens || undefined,
+      passageMode: o.passageMode,
+      evidenceCards: o.evidenceCards,
     };
   }
 
@@ -1017,6 +1174,22 @@ export function objectiveTerms(objective: string, n = 12): string {
     .sort((a, b) => score(b) - score(a))
     .slice(0, n)
     .join(' ');
+}
+
+/**
+ * Oldest → newest (undated first), renumbering indices/citations so [n] markers stay consistent.
+ * Newest-last keeps the freshest evidence closest to the model's answer.
+ */
+function orderByDate(passages: Passage[]): Passage[] {
+  const key = (p: Passage) => (p.publishedAt ? Date.parse(p.publishedAt) || 0 : 0);
+  return passages
+    .slice()
+    .sort((a, b) => key(a) - key(b) || a.index - b.index)
+    .map((p, i) => ({
+      ...p,
+      index: i + 1,
+      citation: citationFor(i + 1, p.title, p.url, p.publishedAt),
+    }));
 }
 
 function dedupeStrings(arr: string[]): string[] {
