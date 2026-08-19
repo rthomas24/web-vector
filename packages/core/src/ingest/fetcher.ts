@@ -35,6 +35,11 @@ export interface FetcherOptions {
    * advertises it. Served markdown is 10–100× smaller than the HTML and skips Readability.
    */
   acceptMarkdown?: 'prefer' | 'accept' | 'off';
+  /**
+   * Byte cap for textual responses (HTML/XHTML/markdown/plain/XML/JSON), below `maxBytes`
+   * (which still applies to PDFs). Default 2 MiB — a real article never needs more; SSR bundles do.
+   */
+  maxHtmlBytes?: number;
 }
 
 export interface FetchedResource {
@@ -247,12 +252,31 @@ export class Fetcher {
 
       const ctHeader = res.headers.get('content-type') ?? '';
       const { type: contentType, charset } = parseContentType(ctHeader);
-      const len = Number(res.headers.get('content-length') ?? '0');
-      if (len > this.opts.maxBytes) {
+      // Early abort on media/archives/scripts: nothing to extract, so don't download the body.
+      if (isNonContentType(contentType) && !urlSaysDocument(current)) {
         await drain(res);
-        throw tooLarge(current, len, this.opts.maxBytes);
+        throw unsupportedType(contentType, current, 'header');
       }
-      const bytes = await readCapped(res, this.opts.maxBytes, current);
+      const textual = isTextualType(contentType);
+      const cap = textual
+        ? Math.min(this.opts.maxBytes, this.opts.maxHtmlBytes ?? DEFAULT_MAX_HTML_BYTES)
+        : this.opts.maxBytes;
+      const len = Number(res.headers.get('content-length') ?? '0');
+      if (len > cap) {
+        await drain(res);
+        throw tooLarge(current, len, cap, textual);
+      }
+      const bytes = await readCapped(
+        res,
+        cap,
+        current,
+        // Unlabelled bodies: sniff the first chunk and bail out unless it looks like a document.
+        contentType === 'application/octet-stream' || contentType === ''
+          ? (head) =>
+              looksLikeDocument(head) ? undefined : unsupportedType(contentType, current, 'sniff')
+          : undefined,
+        textual,
+      );
       // A 202 or a tiny 200 HTML page can still be an interstitial challenge (DataDome, Imperva…).
       if (
         (res.status === 202 || bytes.byteLength < BLOCK_SNIFF_BYTES) &&
@@ -425,29 +449,119 @@ function stripCredentialHeaders(
   return out;
 }
 
-function tooLarge(url: string, size: number, max: number): WebVectorError {
+function tooLarge(url: string, size: number, max: number, textual = false): WebVectorError {
   return new WebVectorError(`Response too large (${size} > ${max} bytes) for ${url}`, {
     code: 'FETCH_TOO_LARGE',
     stage: 'ingest',
-    remediation: 'Increase `ingestion.maxBytes` if you need larger documents.',
+    remediation: textual
+      ? 'Increase `ingestion.maxHtmlBytes` (text/HTML cap) or `ingestion.maxBytes` if you need larger documents.'
+      : 'Increase `ingestion.maxBytes` if you need larger documents.',
+    details: { size, max, cap: textual ? 'maxHtmlBytes' : 'maxBytes' },
   });
 }
 
-export async function readCapped(res: Response, max: number, url: string): Promise<Uint8Array> {
+// ─── Content-type gate ───────────────────────────────────────────────────────
+
+const DEFAULT_MAX_HTML_BYTES = 2 * 1024 * 1024;
+const NON_CONTENT_TYPE_RE =
+  /^(?:image|video|audio|font)\/|^application\/(?:zip|gzip|x-gzip|x-tar|x-bzip2|x-xz|zstd|x-7z-compressed|x-rar-compressed|vnd\.rar|wasm|x-msdownload|x-apple-diskimage|vnd\.android\.package-archive|java-archive|x-shockwave-flash|(?:x-)?javascript|ecmascript)$|^text\/(?:css|javascript)$/;
+const TEXTUAL_TYPE_RE =
+  /^text\/|^application\/(?:xhtml\+xml|xml|json|ld\+json|rss\+xml|atom\+xml)$/;
+
+/** Media, archives, scripts, styles: never contain extractable prose. */
+export function isNonContentType(contentType: string): boolean {
+  return NON_CONTENT_TYPE_RE.test(contentType);
+}
+
+/** Types capped by `maxHtmlBytes` rather than `maxBytes`. */
+export function isTextualType(contentType: string): boolean {
+  return TEXTUAL_TYPE_RE.test(contentType);
+}
+
+/** URL path extension says the body is a document even if the type header does not. */
+function urlSaysDocument(url: string): boolean {
+  try {
+    return /\.(?:pdf|html?|xhtml|md|markdown|txt)$/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** First-chunk sniff for unlabelled bodies: PDF, HTML/XML, or plain UTF-8 text. */
+export function looksLikeDocument(head: Uint8Array): boolean {
+  if (head.byteLength === 0) return true;
+  const sample = head.subarray(0, 1024);
+  const latin = new TextDecoder('latin1').decode(sample);
+  if (latin.startsWith('%PDF-')) return true;
+  if (/^\s*(?:<!doctype|<html|<head|<body|<\?xml|<rss|<feed)/i.test(latin.slice(0, 256)))
+    return true;
+  // Text-like: no NUL bytes and few control characters in the sample.
+  let controls = 0;
+  for (const b of sample) {
+    if (b === 0) return false;
+    if (b < 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d) controls++;
+  }
+  return controls < sample.byteLength / 64;
+}
+
+function unsupportedType(
+  contentType: string,
+  url: string,
+  via: 'header' | 'sniff',
+): WebVectorError {
+  return new WebVectorError(
+    `Unsupported content type "${contentType || 'unknown'}" for ${url} (${via === 'header' ? 'rejected from headers; body not downloaded' : 'binary body'})`,
+    {
+      code: 'UNSUPPORTED_CONTENT_TYPE',
+      stage: 'ingest',
+      retryable: false,
+      details: { contentType, via },
+    },
+  );
+}
+
+/**
+ * Read a body up to `max` bytes (cancelling the stream past the cap). `sniff` runs once on the
+ * first ~1 KB and may return an error to abort the download early.
+ */
+export async function readCapped(
+  res: Response,
+  max: number,
+  url: string,
+  sniff?: (head: Uint8Array) => WebVectorError | undefined,
+  textual = false,
+): Promise<Uint8Array> {
   if (!res.body) return new Uint8Array();
   const reader = res.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let sniffed = !sniff;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
     if (total > max) {
       void reader.cancel().catch(() => {});
-      throw tooLarge(url, total, max);
+      throw tooLarge(url, total, max, textual);
     }
     chunks.push(value);
+    if (!sniffed && (total >= 1024 || chunks.length >= 4)) {
+      sniffed = true;
+      const err = sniff?.(concat(chunks, total));
+      if (err) {
+        void reader.cancel().catch(() => {});
+        throw err;
+      }
+    }
   }
+  if (!sniffed && total > 0) {
+    const err = sniff?.(concat(chunks, total));
+    if (err) throw err;
+  }
+  return concat(chunks, total);
+}
+
+function concat(chunks: Uint8Array[], total: number): Uint8Array {
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) {

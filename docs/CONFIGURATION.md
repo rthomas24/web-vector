@@ -82,7 +82,8 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `maxPages` | `10` | `WEBVECTOR_MAX_PAGES` | pages fetched per call (1–100); tool calls may request fewer, never more |
 | `maxConcurrentFetches` / `perHostConcurrency` / `perHostMinIntervalMs` | `8` / `2` / `500` | `WEBVECTOR_MAX_CONCURRENT_FETCHES` | politeness |
 | `timeoutMs` / `totalDeadlineMs` | `15000` / `45000` | `WEBVECTOR_FETCH_TIMEOUT_MS` / `WEBVECTOR_TOTAL_DEADLINE_MS` | per request / per run (aborts stragglers) |
-| `maxRedirects` / `maxBytes` | `5` / `5242880` | — | |
+| `maxRedirects` / `maxBytes` | `5` / `5242880` | — | `maxBytes` caps every body (PDFs included) |
+| `maxHtmlBytes` | `2097152` | — | lower cap for textual bodies (HTML/markdown/plain/XML/JSON); `image/*`, `video/*`, `audio/*`, `font/*`, archives (`zip`/`gzip`/`tar`/`7z`…) and scripts are rejected from the response headers (`UNSUPPORTED_CONTENT_TYPE`) without downloading the body; unlabelled `application/octet-stream` bodies are sniffed on the first KB (PDF/HTML/text pass) |
 | `respectRobotsTxt` | `true` | `WEBVECTOR_RESPECT_ROBOTS` | |
 | `userAgent` | `Mozilla/5.0 (compatible; WebVector/0.1; +https://github.com/rthomas24/web-vector)` | `WEBVECTOR_USER_AGENT` | |
 | `retries` | `2` | — | on network errors / 408 / 429 / 5xx |

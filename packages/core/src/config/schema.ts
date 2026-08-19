@@ -212,6 +212,15 @@ export const ingestionConfigSchema = z.object({
     .int()
     .min(10_000)
     .default(5 * 1024 * 1024),
+  /**
+   * Byte cap for textual responses (HTML/markdown/plain/XML/JSON) — below `maxBytes`, which still
+   * governs PDFs. Media, archives and scripts are rejected from the headers without downloading.
+   */
+  maxHtmlBytes: z
+    .number()
+    .int()
+    .min(10_000)
+    .default(2 * 1024 * 1024),
   respectRobotsTxt: z.boolean().default(true),
   userAgent: z
     .string()

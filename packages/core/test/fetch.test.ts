@@ -286,3 +286,108 @@ describe('bot-block classifier', () => {
     });
   });
 });
+
+// ─── C4 early abort on non-content responses + maxHtmlBytes ─────────────────
+
+describe('early abort on non-content responses', () => {
+  it('rejects media/archives from headers without reading the body', async () => {
+    let pulls = 0;
+    let cancelled = false;
+    server.use(
+      http.get('https://bin.example/photo', () => {
+        const stream = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls++;
+            controller.enqueue(new Uint8Array(1024));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        });
+        return new HttpResponse(stream, { headers: { 'content-type': 'image/png' } });
+      }),
+      http.get(
+        'https://bin.example/archive.zip',
+        () => new HttpResponse('PK...', { headers: { 'content-type': 'application/zip' } }),
+      ),
+      http.get(
+        'https://bin.example/app.js',
+        () =>
+          new HttpResponse('console.log(1)', {
+            headers: { 'content-type': 'application/javascript' },
+          }),
+      ),
+      http.get(
+        'https://bin.example/paper.pdf',
+        () =>
+          new HttpResponse('%PDF-1.7 fake', {
+            headers: { 'content-type': 'application/octet-stream' },
+          }),
+      ),
+      http.get(
+        'https://bin.example/blob',
+        () =>
+          new HttpResponse(new Uint8Array([0, 1, 2, 3, 0, 0, 7, 8, 9]), {
+            headers: { 'content-type': 'application/octet-stream' },
+          }),
+      ),
+      http.get(
+        'https://bin.example/unlabelled-html',
+        () =>
+          new HttpResponse('<!doctype html><html><body>hello there world</body></html>', {
+            headers: { 'content-type': 'application/octet-stream' },
+          }),
+      ),
+    );
+    const f = fetcher();
+    await expect(f.fetch('https://bin.example/photo')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_CONTENT_TYPE',
+      details: { contentType: 'image/png', via: 'header' },
+    });
+    // The stream is infinite: reading it would have ended in FETCH_TOO_LARGE, not a header reject.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(pulls).toBeLessThan(8);
+    void cancelled;
+    await expect(f.fetch('https://bin.example/archive.zip')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_CONTENT_TYPE',
+    });
+    await expect(f.fetch('https://bin.example/app.js')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_CONTENT_TYPE',
+    });
+    // octet-stream: sniffed, PDF/HTML pass, binary garbage does not
+    const pdf = await f.fetch('https://bin.example/paper.pdf');
+    expect(new TextDecoder().decode(pdf.bytes)).toContain('%PDF-1.7');
+    const html = await f.fetch('https://bin.example/unlabelled-html');
+    expect(new TextDecoder().decode(html.bytes)).toContain('hello there world');
+    await expect(f.fetch('https://bin.example/blob')).rejects.toMatchObject({
+      code: 'UNSUPPORTED_CONTENT_TYPE',
+      details: { via: 'sniff' },
+    });
+  });
+
+  it('caps textual bodies at maxHtmlBytes but PDFs at maxBytes', async () => {
+    server.use(
+      http.get(
+        'https://big.example/page.html',
+        () =>
+          new HttpResponse(`<html>${'x'.repeat(30_000)}</html>`, {
+            headers: { 'content-type': 'text/html' },
+          }),
+      ),
+      http.get(
+        'https://big.example/doc.pdf',
+        () =>
+          new HttpResponse(`%PDF-1.7 ${'y'.repeat(30_000)}`, {
+            headers: { 'content-type': 'application/pdf' },
+          }),
+      ),
+    );
+    const f = fetcher({ maxBytes: 50_000, maxHtmlBytes: 10_000 });
+    await expect(f.fetch('https://big.example/page.html')).rejects.toMatchObject({
+      code: 'FETCH_TOO_LARGE',
+      details: { cap: 'maxHtmlBytes' },
+    });
+    const pdf = await f.fetch('https://big.example/doc.pdf');
+    expect(pdf.bytes.byteLength).toBeGreaterThan(30_000);
+  });
+});
