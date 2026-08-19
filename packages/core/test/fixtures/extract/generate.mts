@@ -699,7 +699,6 @@ add({
     url: 'https://app.example.com/dashboard',
     type: 'CRA/Vite React shell: empty #root, noscript enable-JS, large bundle reference',
     failure: 'PARSE_NEEDS_JS',
-    expectFail: 'C3 JS-shell detection',
   },
   html: page({
     title: 'Example App',
@@ -713,7 +712,6 @@ add({
     url: 'https://shop.example.com/products/limiter-pro',
     type: 'Next.js App Router shell: header only, empty content, many self.__next_f.push RSC chunks',
     failure: 'PARSE_NEEDS_JS',
-    expectFail: 'C3 JS-shell detection',
   },
   html: page({
     title: 'Limiter Pro',
@@ -731,7 +729,6 @@ add({
     url: 'https://nuxt.example.com/blog',
     type: 'Nuxt 3 SPA shell: empty #__nuxt, __NUXT_DATA__ payload script',
     failure: 'PARSE_NEEDS_JS',
-    expectFail: 'C3 JS-shell detection',
   },
   html: page({
     title: 'Blog · Example',
@@ -744,7 +741,6 @@ add({
     url: 'https://ng.example.com/',
     type: 'Angular shell: <app-root> with ng-version and a Loading… placeholder',
     failure: 'PARSE_NEEDS_JS',
-    expectFail: 'C3 JS-shell detection',
   },
   html: page({
     title: 'ExampleNg',
@@ -1421,9 +1417,8 @@ const REAL: { name: string; file: string; spec: Spec }[] = [
     name: 'real-rfc7235',
     file: 'www.rfc-editor.org__rfc-rfc7235-html__6pFLGo--Com0.json',
     spec: {
-      expectFail: 'C13 extractor ensemble / page-type routing',
       url: 'https://www.rfc-editor.org/rfc/rfc7235.html',
-      type: 'real: rfc-editor legacy <pre>-only page (PARSE_EMPTY before C13)',
+      type: 'real: rfc-editor legacy <pre>-only page without <html>/<body> (was PARSE_EMPTY)',
       minF1: 0.9,
       mustContain: ['WWW-Authenticate', 'Proxy-Authenticate', '401 (Unauthorized)'],
       minChars: 25000,

@@ -4,6 +4,7 @@ import { parseHTML } from 'linkedom';
 import { htmlToMarkdown } from 'mdream';
 import { WebVectorError } from '../errors.js';
 import type { ContentParser, ParseContext, ParsedDocument } from '../types.js';
+import { detectJsShell, type JsShellSignals } from './extract-detect.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -125,6 +126,9 @@ export class HtmlParser implements ContentParser {
   ): Promise<ParsedDocument | null> {
     const minArticle = this.opts.minArticleChars ?? 300;
     const minPage = this.opts.minPageChars ?? 80;
+    // Fragments without <html>/<body> (old rfc-editor pages start with <pre>) lose most nodes in
+    // linkedom unless wrapped.
+    if (!/<(?:html|body)[\s>]/i.test(html)) html = `<html><body>${html}</body></html>`;
     const { document } = parseHTML(html);
     // Meta before mutation
     const meta = extractMeta(document, url);
@@ -141,6 +145,9 @@ export class HtmlParser implements ContentParser {
     }
     // Strip non-content nodes (also fixes linkedom <template> leak)
     for (const el of [...document.querySelectorAll(STRIP_SELECTOR)]) el.remove();
+    // JS-shell signals (empty #root, "enable JavaScript", hydration markers); decided at the end
+    // against the amount of content actually extracted.
+    const js = detectJsShell(html, document);
 
     let markdown = '';
     let parser = 'readability';
@@ -194,6 +201,7 @@ export class HtmlParser implements ContentParser {
     }
     // Drop frontmatter mdream may add in minimal mode
     markdown = markdown.replace(/^---\n[\s\S]*?\n---(?:\n+|$)/, '').trim();
+    if (js.suspected && markdown.length < js.maxMarkdownLength) throw needsJsError(url, js);
     if (markdown.length < minPage) return null;
 
     const title = (article?.title || meta.title || document.title || '').trim() || hostTitle(url);
@@ -211,6 +219,20 @@ export class HtmlParser implements ContentParser {
       parser,
     };
   }
+}
+
+/** PARSE_NEEDS_JS: the page is a client-rendered shell; name the render hook in the remediation. */
+export function needsJsError(url: string, js: JsShellSignals): WebVectorError {
+  return new WebVectorError(
+    `Page requires JavaScript to render${js.framework ? ` (${js.framework})` : ''}; no readable content in the served HTML of ${url}.`,
+    {
+      code: 'PARSE_NEEDS_JS',
+      stage: 'ingest',
+      remediation:
+        "Configure a renderer with `ingestion.render` ({ provider: 'cloudflare' | 'browserless' | 'custom', when: 'needs-js' }) or use a search provider that returns page content.",
+      details: { signals: js.signals, framework: js.framework, bodyTextLength: js.bodyTextLength },
+    },
+  );
 }
 
 function hostTitle(url: string): string {

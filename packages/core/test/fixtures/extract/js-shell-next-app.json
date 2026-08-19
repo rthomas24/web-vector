@@ -1,6 +1,5 @@
 {
   "url": "https://shop.example.com/products/limiter-pro",
   "type": "Next.js App Router shell: header only, empty content, many self.__next_f.push RSC chunks",
-  "failure": "PARSE_NEEDS_JS",
-  "expectFail": "C3 JS-shell detection"
+  "failure": "PARSE_NEEDS_JS"
 }

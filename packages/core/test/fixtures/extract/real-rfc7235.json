@@ -1,7 +1,6 @@
 {
-  "expectFail": "C13 extractor ensemble / page-type routing",
   "url": "https://www.rfc-editor.org/rfc/rfc7235.html",
-  "type": "real: rfc-editor legacy <pre>-only page (PARSE_EMPTY before C13)",
+  "type": "real: rfc-editor legacy <pre>-only page without <html>/<body> (was PARSE_EMPTY)",
   "minF1": 0.9,
   "mustContain": [
     "WWW-Authenticate",

@@ -202,8 +202,8 @@ export async function parseResource(
       ok: false,
       failure: {
         url,
-        code: e.code === 'ABORTED' ? 'ABORTED' : 'PARSE_FAILED',
-        message: e.message,
+        code: e.code === 'ABORTED' || e.code === 'PARSE_NEEDS_JS' ? e.code : 'PARSE_FAILED',
+        message: e.remediation ? `${e.message} ${e.remediation}` : e.message,
         stage: 'ingest',
       },
     };
