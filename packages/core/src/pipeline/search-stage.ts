@@ -26,7 +26,11 @@ export async function runSearchStage(
   const outcomes = await Promise.all(
     [query, ...related].map(async (q, i) => {
       try {
-        const results = await c.search.search(q, i === 0 ? options : perRelated);
+        const o = i === 0 ? options : perRelated;
+        // Identical concurrent searches (agent swarms, repeated related queries) share one request.
+        const results = await c.coordinator.share(searchKey(c.search.id, q, o), () =>
+          c.search.search(q, o),
+        );
         return { results, attempts: [...c.search.attempts] };
       } catch (err) {
         if (i === 0) throw err; // primary query failure is fatal
@@ -48,6 +52,12 @@ export async function runSearchStage(
     return !matchesDomain(host, options.domainsBlock);
   });
   return { results, attempts: outcomes.flatMap((o) => o.attempts) };
+}
+
+/** Single-flight key: provider + query + the options that change the result set. */
+export function searchKey(provider: string, query: string, o: SearchOptions): string {
+  const { count, freshness, safeSearch, country, language, domainsAllow, domainsBlock } = o;
+  return `${provider}|${query.trim().toLowerCase()}|${JSON.stringify({ count, freshness, safeSearch, country, language, domainsAllow, domainsBlock })}`;
 }
 
 /** Merge result lists from several queries: dedupe by canonical URL, rank by best position (RRF-like). */

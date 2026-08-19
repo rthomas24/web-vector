@@ -10,6 +10,12 @@ import {
 } from './schema.js';
 
 export { configFromEnv, envKeyFor, envUrlFor, PROVIDER_KEY_ENV, PROVIDER_URL_ENV } from './env.js';
+export {
+  CONFIG_DESCRIPTIONS,
+  CONFIG_SCHEMA_URL,
+  CONFIG_SCHEMA_YAML_MODELINE,
+  configJsonSchema,
+} from './json-schema.js';
 export * from './schema.js';
 
 /** Keys never copied from config objects (prototype pollution). */
@@ -86,26 +92,35 @@ export function findConfigFile(cwd = process.cwd()): string | undefined {
   }
 }
 
+/** Drop the editor-only `$schema` key (JSON configs may reference the published JSON Schema). */
+function stripSchemaKey<T>(cfg: T): T {
+  if (cfg && typeof cfg === 'object' && !Array.isArray(cfg) && '$schema' in cfg) {
+    const { $schema: _ignored, ...rest } = cfg as Record<string, unknown>;
+    return rest as T;
+  }
+  return cfg;
+}
+
 /** Load and parse a config file (json/yaml/js/ts). Returns the raw (unvalidated) object. */
 export async function readConfigFile(path: string): Promise<WebVectorConfig> {
   const abs = resolve(path);
   if (abs.endsWith('package.json')) {
     const json = JSON.parse(readFileSync(abs, 'utf8'));
-    return json.webvector ?? {};
+    return stripSchemaKey(json.webvector ?? {});
   }
   if (/\.(json|rc)$/.test(abs) || abs.endsWith('.webvectorrc')) {
     const text = readFileSync(abs, 'utf8');
     try {
-      return JSON.parse(text);
+      return stripSchemaKey(JSON.parse(text));
     } catch {
       // .webvectorrc may be YAML
       const yaml = await importOptional<typeof import('yaml')>('yaml', 'YAML config files');
-      return yaml.parse(text) ?? {};
+      return stripSchemaKey(yaml.parse(text) ?? {});
     }
   }
   if (/\.ya?ml$/.test(abs)) {
     const yaml = await importOptional<typeof import('yaml')>('yaml', 'YAML config files');
-    return yaml.parse(readFileSync(abs, 'utf8')) ?? {};
+    return stripSchemaKey(yaml.parse(readFileSync(abs, 'utf8')) ?? {});
   }
   // js / ts / mjs / cjs — dynamic import (Node 22.18+/24 strips types natively for .ts)
   const mod = await import(pathToFileURL(abs).href);

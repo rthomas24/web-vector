@@ -4,6 +4,9 @@
  * search → full-page ingestion → embeddings → hybrid semantic retrieval → cited passages.
  */
 
+export type { CacheDbOptions, CacheStats, PageRow } from './cache/db.js';
+export { CACHE_DB_FILENAME, CacheDb, openCacheDb, resolveCacheDir } from './cache/db.js';
+export { FetchCoordinator, isNegativeCacheable, SingleFlight } from './cache/single-flight.js';
 export type {
   DeepPartial,
   LoadConfigOptions,
@@ -13,8 +16,12 @@ export type {
   WebVectorFileConfigInput,
 } from './config/index.js';
 export {
+  CONFIG_DESCRIPTIONS,
   CONFIG_FILENAMES,
+  CONFIG_SCHEMA_URL,
+  CONFIG_SCHEMA_YAML_MODELINE,
   configFromEnv,
+  configJsonSchema,
   defineConfig,
   embeddingProviderNames,
   envKeyFor,
@@ -141,6 +148,14 @@ export {
   registerReranker,
 } from './rerankers/index.js';
 export { HeuristicExpander, LlmExpander } from './retrieval/expansion.js';
+export type { RuntimeCapabilities } from './runtime.js';
+export {
+  defaultCacheDir,
+  defaultDataDir,
+  expandHome,
+  importNodeSqlite,
+  probeRuntime,
+} from './runtime.js';
 // Convenience re-exports of factories (full adapter sets live in subpath exports)
 export {
   buildSearchStack,
@@ -157,6 +172,14 @@ export {
   registerVectorStore,
 } from './stores/index.js';
 export type * from './types.js';
+export { currentUsage, UsageMeter } from './usage/meter.js';
+export type { PriceTable } from './usage/pricing.js';
+export {
+  DEFAULT_PRICING,
+  estimateCostUsd,
+  PRICING_AS_OF,
+  resolvePricing,
+} from './usage/pricing.js';
 export type { WebVectorEvents } from './util/events.js';
 export { contentHash, sha256, uuidFromString } from './util/hash.js';
 export { createLogger, silentLogger } from './util/logger.js';

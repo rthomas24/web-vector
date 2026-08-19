@@ -3,7 +3,9 @@
  * fetcher, parsers, caches, expander, reranker) from the resolved configuration.
  */
 
+import { FetchCoordinator } from '../cache/single-flight.js';
 import type { WebVectorConfig, WebVectorFileConfig } from '../config/index.js';
+import { EmbeddingCache } from '../embeddings/base.js';
 import { autoEmbeddingProviderName, createEmbeddingProvider } from '../embeddings/index.js';
 import { WebVectorError } from '../errors.js';
 import { loadTokenCounter, type TokenCounter } from '../ingest/chunker.js';
@@ -12,9 +14,11 @@ import { createParsers } from '../ingest/parsers.js';
 import { createReranker, LlmReranker } from '../rerankers/index.js';
 import type { BM25Options } from '../retrieval/bm25.js';
 import { HeuristicExpander, LlmExpander } from '../retrieval/expansion.js';
+import { probeRuntime } from '../runtime.js';
 import { buildSearchStack, type FallbackSearchProvider } from '../search/index.js';
 import { createVectorStore } from '../stores/index.js';
 import { MemoryVectorStore } from '../stores/memory.js';
+import { OtelTracer } from '../telemetry/otel.js';
 import type {
   ContentParser,
   EmbeddingProvider,
@@ -24,6 +28,7 @@ import type {
   Reranker,
   VectorStore,
 } from '../types.js';
+import { meteredEmbedder, meteredReranker } from '../usage/meter.js';
 import { SessionRegistry } from './session.js';
 
 export interface Components {
@@ -36,12 +41,18 @@ export interface Components {
   fetcher: Fetcher;
   parsers: ContentParser[];
   pageCache: PageCache;
+  /** Single-flight coalescing + negative cache for page fetches and searches. */
+  coordinator: FetchCoordinator;
+  /** Chunk-embedding cache (memory LRU + persistent layer in the cache database when enabled). */
+  embeddingCache: EmbeddingCache;
   expander: QueryExpander;
   reranker?: Reranker;
   countTokens: TokenCounter;
   sessions: SessionRegistry;
   /** Lexical index options (shared by registered and ephemeral sessions). */
   bm25Options: BM25Options;
+  /** OpenTelemetry spans (no-op unless telemetry.otel and @opentelemetry/api are present). */
+  otel: OtelTracer;
 }
 
 export function bm25OptionsFrom(b: WebVectorFileConfig['retrieval']['bm25']): BM25Options {
@@ -84,8 +95,14 @@ export async function buildComponents(
     logger,
   });
 
-  const embedder = code.embeddings?.instance ?? (await resolveEmbedder(cfg, code, logger));
-  await embedder?.init?.();
+  const otel = cfg.telemetry.otel
+    ? await OtelTracer.create({ captureContent: cfg.telemetry.captureContent }, logger)
+    : OtelTracer.disabled();
+
+  const rawEmbedder = code.embeddings?.instance ?? (await resolveEmbedder(cfg, code, logger));
+  await rawEmbedder?.init?.();
+  // Metered wrapper: attributes embed() requests to the calling research()/fetch() (stats.usage).
+  const embedder = rawEmbedder ? meteredEmbedder(rawEmbedder, otel) : undefined;
   const dimensions = embedder ? await embedder.dimensions() : 0;
 
   let sharedStore = code.store?.instance;
@@ -94,12 +111,17 @@ export async function buildComponents(
       logger.warn(
         `store.provider "${cfg.store.provider}" is ignored in lexical-only mode (no vectors to store).`,
       );
+    } else if (cfg.store.provider === 'sqlite' && !(await probeRuntime()).sqlite) {
+      logger.warn(
+        'store.provider "sqlite" needs node:sqlite (Node ≥ 22.13); falling back to the in-memory store.',
+      );
     } else {
       sharedStore = createVectorStore(cfg.store.provider, {
         url: cfg.store.url,
         apiKey: cfg.store.apiKey,
         collection: cfg.store.collection,
         options: cfg.store.options,
+        sessionTtlMs: cfg.store.sessionTtlMs,
         logger,
       });
     }
@@ -119,16 +141,27 @@ export async function buildComponents(
     sharedStore: !!sharedStore,
     storeFactory: () => sharedStore ?? new MemoryVectorStore(),
     bm25: bm25Options,
+    // Persistent mode: idle eviction drops in-memory state only; rows stay and are restored later.
+    retainOnEvict: (id) => cfg.store.mode === 'persistent' && id === 'persistent',
   });
 
   const fetcher = new Fetcher({ ...cfg.ingestion, fetch: fetchImpl, logger });
   const parsers = createParsers(cfg.ingestion.parsers);
-  const pageCache = new PageCache(cfg.ingestion.cache);
+  const pageCache = await PageCache.create(cfg.ingestion.cache, logger);
+  if (pageCache.backend === 'sqlite') logger.debug(`page cache: sqlite at ${pageCache.location}`);
+  const coordinator = new FetchCoordinator({ negativeTtlMs: cfg.ingestion.cache.negativeTtlMs });
+  const embeddingCache = new EmbeddingCache({
+    db: cfg.embeddings.cache ? pageCache.database : undefined,
+    dims: dimensions,
+    dtype: embedder?.dtype ?? cfg.embeddings.dtype ?? 'fp32',
+  });
+  if (embeddingCache.persistent) logger.debug('embedding cache: persistent (pages.sqlite)');
 
   const llm = code.retrieval?.llm;
   const expander =
     code.retrieval?.expander ?? (llm ? new LlmExpander(llm) : new HeuristicExpander());
-  const reranker = code.retrieval?.reranker ?? resolveReranker(cfg, llm, logger);
+  const rawReranker = code.retrieval?.reranker ?? resolveReranker(cfg, llm, logger);
+  const reranker = rawReranker ? meteredReranker(rawReranker, otel) : undefined;
   const countTokens = await loadTokenCounter();
 
   logger.info(
@@ -142,11 +175,14 @@ export async function buildComponents(
     fetcher,
     parsers,
     pageCache,
+    coordinator,
+    embeddingCache,
     expander,
     reranker,
     countTokens,
     sessions,
     bm25Options,
+    otel,
   };
 }
 

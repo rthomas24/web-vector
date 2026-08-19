@@ -7,7 +7,7 @@
 import { parseHTML } from 'linkedom';
 import { htmlToMarkdown } from 'mdream';
 import { markdownToText } from '../ingest/parsers.js';
-import type { ParsedDocument } from '../types.js';
+import type { CacheMode, ParsedDocument } from '../types.js';
 import { hostnameOf } from '../util/url.js';
 
 export interface PageLink {
@@ -17,7 +17,12 @@ export interface PageLink {
 
 export interface FetchOptions {
   signal?: AbortSignal;
+  /** `false` disables the page cache for this call entirely (no read, no write). */
   useCache?: boolean;
+  /** Accept cached pages at most this old (ms); see `ResearchOptions.maxAgeMs`. */
+  maxAgeMs?: number;
+  /** `default` (cache, revalidate when stale) · `bypass` · `readOnly` (never touch the network). */
+  cacheMode?: CacheMode;
   /**
    * CSS selector: convert only the matching element(s) to Markdown (bypasses Readability's
    * main-content heuristics). Ignored for non-HTML resources.

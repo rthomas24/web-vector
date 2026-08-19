@@ -79,6 +79,8 @@ export interface EmbeddingProvider {
   limits(): EmbeddingLimits;
   /** Optional warm-up (e.g. load a local model). */
   init?(): Promise<void>;
+  /** Weight/output dtype for local models (e.g. 'q8', 'fp32'); part of the persistent cache key. */
+  readonly dtype?: string;
 }
 
 // ─── Chunks & vector stores ──────────────────────────────────────────────────
@@ -162,6 +164,13 @@ export interface VectorStore {
   capabilities(): VectorStoreCapabilities;
   /** Optional: number of stored chunks (memory store). */
   size?(): number | Promise<number>;
+  /** Optional: one chunk (with vector) by id — lets the pipeline reuse vectors for MMR. */
+  get?(id: string): Chunk | undefined;
+  /**
+   * Optional: chunks of a session (or all) without vectors. Persistent stores implement this so a
+   * session's BM25 side-index and chunk map can be rebuilt after a restart.
+   */
+  listChunks?(sessionId?: string): Promise<Chunk[]>;
 }
 
 // ─── Content parsing ─────────────────────────────────────────────────────────
@@ -304,6 +313,52 @@ export interface SourceSummary {
   /** Approximate tokens of the page's Markdown (chars/4, CJK-aware) — what a full fetch would cost. */
   approxTokens?: number;
   failure?: Failure;
+  /** Page came from the page cache (fresh hit, or a stale copy confirmed by 304). */
+  fromCache?: boolean;
+  /** The cached copy was revalidated with a conditional request (304 Not Modified). */
+  revalidated?: boolean;
+}
+
+/** HTTP-level counters for one call (page fetches; searches/embeddings are counted separately). */
+export interface HttpUsage {
+  /** Network requests made for pages (including conditional revalidations). */
+  requests: number;
+  /** Response bytes read. */
+  bytes: number;
+  /** Pages served from the page cache without a request. */
+  cacheHits: number;
+  /** Conditional requests answered 304 (cached copy reused). */
+  notModified: number;
+  /** Fetches that joined an identical in-flight request instead of starting their own. */
+  coalesced: number;
+  /** URLs skipped because a recent robots/4xx failure was remembered (negative cache). */
+  negativeHits: number;
+}
+
+/**
+ * Cost/quota accounting for one call: what was actually spent on providers and the network.
+ * Also emitted as the `usage` event. `estimatedCostUsd` is only present when `telemetry.pricing`
+ * is enabled and is an ESTIMATE from a static list-price table — never a bill.
+ */
+export interface UsageStats {
+  search: { provider: string; calls: number };
+  embed: {
+    provider: string;
+    model: string;
+    /** embed() requests actually sent (cache hits do not count). */
+    requests: number;
+    /** Texts embedded (documents + queries). */
+    texts: number;
+    /** Approximate input tokens (chars / 4) — an estimate unless the provider reports usage. */
+    tokens?: number;
+    /** Chunk embeddings served from the in-memory / persistent embedding cache. */
+    cached: number;
+  };
+  rerank?: { provider: string; requests: number; documents: number };
+  http: HttpUsage;
+  estimatedCostUsd?: number;
+  /** Always set alongside `estimatedCostUsd`. */
+  pricingNote?: string;
 }
 
 export interface ResearchStats {
@@ -336,6 +391,10 @@ export interface ResearchStats {
   warnings: string[];
   /** Size of `result.markdown` when rendered (chars and approximate tokens). */
   output?: { chars: number; approxTokens: number };
+  /** HTTP counters (same object as `usage.http`). */
+  http?: HttpUsage;
+  /** Provider/network usage for this call (see `UsageStats`). */
+  usage?: UsageStats;
 }
 
 export interface ResearchResult {
@@ -401,7 +460,19 @@ export interface ResearchOptions {
   /** Search locale passthrough (ISO country / BCP-47 language) — overrides `search.country/language`. */
   country?: string;
   language?: string;
+  /**
+   * Accept cached pages at most this old (ms). Overrides `ingestion.cache.ttlMs` and any
+   * `Cache-Control: max-age` for this call; older copies are revalidated or refetched.
+   */
+  maxAgeMs?: number;
+  /**
+   * `default` (cache, revalidate when stale) · `bypass` (always fetch, still fills the cache) ·
+   * `readOnly` (serve only from cache, never touch the network — stale copies allowed).
+   */
+  cacheMode?: CacheMode;
 }
+
+export type CacheMode = 'default' | 'bypass' | 'readOnly';
 
 // ─── Logging ────────────────────────────────────────────────────────────────
 

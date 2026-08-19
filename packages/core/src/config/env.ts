@@ -30,6 +30,7 @@ export const PROVIDER_URL_ENV: Record<string, string[]> = {
   chroma: ['CHROMA_URL'],
   qdrant: ['QDRANT_URL'],
   pgvector: ['PGVECTOR_URL', 'DATABASE_URL', 'POSTGRES_URL'],
+  sqlite: ['WEBVECTOR_SQLITE_STORE'],
 };
 
 export function envKeyFor(
@@ -69,6 +70,11 @@ function list(v: string | undefined): string[] | undefined {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** `WEBVECTOR_CACHE_DIR`: a path, `auto`, or `false|off|memory|0` for memory-only. */
+function cacheDir(v: string): string | false {
+  return ['false', 'off', 'memory', '0', 'none'].includes(v.trim().toLowerCase()) ? false : v;
 }
 
 /** Read WEBVECTOR_* environment variables into a partial config. */
@@ -130,9 +136,13 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): WebVectorCo
       allowPrivateNetworks: bool(env.WEBVECTOR_ALLOW_PRIVATE_NETWORKS),
       chunkSize: num(env.WEBVECTOR_CHUNK_SIZE),
       chunkOverlap: num(env.WEBVECTOR_CHUNK_OVERLAP),
-      cache: env.WEBVECTOR_CACHE_DIR ? { dir: env.WEBVECTOR_CACHE_DIR } : undefined,
+      cache: env.WEBVECTOR_CACHE_DIR ? { dir: cacheDir(env.WEBVECTOR_CACHE_DIR) } : undefined,
     },
     output: { markdown: bool(env.WEBVECTOR_OUTPUT_MARKDOWN) },
+    telemetry: {
+      otel: bool(env.WEBVECTOR_OTEL),
+      pricing: bool(env.WEBVECTOR_PRICING),
+    },
     logging: {
       level: env.WEBVECTOR_LOG_LEVEL as 'silent' | 'error' | 'warn' | 'info' | 'debug' | undefined,
     },

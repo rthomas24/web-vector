@@ -97,6 +97,7 @@ function make(extra: ConstructorParameters<typeof WebVector>[0] = {}) {
         minChunkChars: 20,
         chunkSize: 80,
         allowPrivateNetworks: true,
+        cache: { dir: false }, // in-process only: tests must not share pages across instances
       },
       retrieval: { maxPerSource: 3, relativeCutoff: 0, mmr: false },
       logger: silentLogger,

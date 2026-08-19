@@ -2,6 +2,8 @@ import { BM25Index, type BM25Options } from '../retrieval/bm25.js';
 import { MemoryVectorStore } from '../stores/memory.js';
 import type { VectorStore } from '../types.js';
 import { LRU } from '../util/lru.js';
+import { canonicalizeUrl } from '../util/url.js';
+import { bm25FieldsFor } from './ingest-stage.js';
 
 export interface Session {
   id: string;
@@ -16,6 +18,8 @@ export interface Session {
   createdAt: number;
   lastUsed: number;
   calls: number;
+  /** Set once chunks were loaded back from a persistent store (or there was nothing to load). */
+  restored?: boolean;
 }
 
 export interface SessionRegistryOptions {
@@ -26,6 +30,11 @@ export interface SessionRegistryOptions {
   sharedStore: boolean;
   /** Options for each session's lexical index. */
   bm25?: BM25Options;
+  /**
+   * When true for a session id, evicting it from the registry keeps its rows in the shared store
+   * (persistent mode: data must survive idle periods and restarts).
+   */
+  retainOnEvict?: (id: string) => boolean;
 }
 
 /** LRU+TTL registry of research sessions. */
@@ -34,8 +43,30 @@ export class SessionRegistry {
   constructor(private readonly opts: SessionRegistryOptions) {
     this.lru = new LRU<string, Session>(opts.maxSessions, opts.ttlMs, (id, s) => {
       if (!opts.sharedStore) void s.store.clear().catch(() => {});
-      else void s.store.clear(id).catch(() => {});
+      else if (!opts.retainOnEvict?.(id)) void s.store.clear(id).catch(() => {});
     });
+  }
+
+  /**
+   * Rebuild a session's in-memory side state (chunk map, canonical URL set, BM25 index) from a
+   * persistent shared store after a restart. No-op for memory stores or already-restored sessions.
+   */
+  async restore(session: Session): Promise<number> {
+    if (session.restored || !this.opts.sharedStore || !session.store.listChunks) {
+      session.restored = true;
+      return 0;
+    }
+    session.restored = true;
+    const chunks = await session.store.listChunks(session.id);
+    let n = 0;
+    for (const ch of chunks) {
+      if (session.chunks.has(ch.id)) continue;
+      session.chunks.set(ch.id, ch);
+      if (!session.bm25.has(ch.id)) session.bm25.add(ch.id, bm25FieldsFor(ch));
+      session.urls.add(ch.metadata.canonicalUrl ?? canonicalizeUrl(ch.metadata.url));
+      n++;
+    }
+    return n;
   }
   get(id: string): Session | undefined {
     return this.lru.get(id);

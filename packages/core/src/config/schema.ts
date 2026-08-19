@@ -42,7 +42,7 @@ export const embeddingProviderNames = [
 ] as const;
 export type EmbeddingProviderName = (typeof embeddingProviderNames)[number];
 
-export const storeProviderNames = ['memory', 'chroma', 'qdrant', 'pgvector'] as const;
+export const storeProviderNames = ['memory', 'sqlite', 'chroma', 'qdrant', 'pgvector'] as const;
 export type StoreProviderName = (typeof storeProviderNames)[number];
 
 export const rerankerNames = ['cohere', 'voyage', 'jina', 'local'] as const;
@@ -89,6 +89,12 @@ export const embeddingsConfigSchema = z.object({
   device: z.string().optional(),
   allowRemoteModels: z.boolean().default(true),
   timeoutMs: z.number().int().min(1000).default(60_000),
+  /**
+   * Persist chunk embeddings (keyed by model + dimensions + dtype + content hash) in the page
+   * cache's SQLite file so re-runs and restarts never re-embed the same text. Needs a cache dir
+   * (`ingestion.cache.dir`) and `node:sqlite`; the in-process cache is always on.
+   */
+  cache: z.boolean().default(true),
   options: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -277,15 +283,39 @@ export const ingestionConfigSchema = z.object({
   cache: z
     .object({
       enabled: z.boolean().default(true),
+      /** Freshness window; past it a cached page is revalidated (ETag / Last-Modified) or refetched. 0 = never expires. */
       ttlMs: z
         .number()
         .int()
         .min(0)
         .default(15 * 60_000),
+      /** In-memory LRU capacity (pages). */
       maxPages: z.number().int().min(1).default(500),
-      dir: z.string().optional(),
+      /**
+       * On-disk layer: `'auto'` (default) → `pages.sqlite` in `$XDG_CACHE_HOME/webvector`
+       * (`~/.cache/webvector`); a directory path; `false` → memory only. Needs `node:sqlite`
+       * (Node ≥ 22.13); explicit directories fall back to one JSON file per URL without it.
+       */
+      dir: z.union([z.string(), z.literal(false)]).default('auto'),
+      /** Disk budgets (LRU eviction by last access). */
+      maxDiskPages: z.number().int().min(1).default(20_000),
+      maxDiskBytes: z
+        .number()
+        .int()
+        .min(1024 * 1024)
+        .default(1024 * 1024 * 1024),
+      /** Remember robots-blocked / 4xx URLs for this long so agent swarms don't re-hit them (0 = off). */
+      negativeTtlMs: z.number().int().min(0).max(300_000).default(15_000),
     })
-    .default({ enabled: true, ttlMs: 15 * 60_000, maxPages: 500 }),
+    .default({
+      enabled: true,
+      ttlMs: 15 * 60_000,
+      maxPages: 500,
+      dir: 'auto',
+      maxDiskPages: 20_000,
+      maxDiskBytes: 1024 * 1024 * 1024,
+      negativeTtlMs: 15_000,
+    }),
 });
 
 export const outputConfigSchema = z.object({
@@ -307,6 +337,29 @@ export const loggingConfigSchema = z.object({
   level: z.enum(['silent', 'error', 'warn', 'info', 'debug']).default('warn'),
 });
 
+const priceTableSchema = z.object({
+  embed: z.record(z.string(), z.number().min(0)).optional(),
+  search: z.record(z.string(), z.number().min(0)).optional(),
+  rerank: z.record(z.string(), z.number().min(0)).optional(),
+});
+
+/** Observability. Nothing here ever sends data anywhere by itself. */
+export const telemetryConfigSchema = z.object({
+  /**
+   * Add `stats.usage.estimatedCostUsd` from a static list-price table (an ESTIMATE, clearly
+   * labelled). `true` uses the bundled table; an object overrides entries
+   * (`{ embed: { 'openai/text-embedding-3-small': 0.02 }, search: { brave: 5 } }`).
+   */
+  pricing: z.union([z.boolean(), priceTableSchema]).default(false),
+  /**
+   * Emit OpenTelemetry spans through `@opentelemetry/api` (optional peer; a no-op without an SDK
+   * registered by the host application). Env: WEBVECTOR_OTEL=1.
+   */
+  otel: z.boolean().default(false),
+  /** Include query text / passage excerpts in span attributes (off: counts and ids only). */
+  captureContent: z.boolean().default(false),
+});
+
 export const webVectorFileConfigSchema = z.object({
   search: searchConfigSchema.default(searchConfigSchema.parse({})),
   embeddings: embeddingsConfigSchema.default(embeddingsConfigSchema.parse({})),
@@ -315,6 +368,7 @@ export const webVectorFileConfigSchema = z.object({
   ingestion: ingestionConfigSchema.default(ingestionConfigSchema.parse({})),
   output: outputConfigSchema.default(outputConfigSchema.parse({})),
   logging: loggingConfigSchema.default(loggingConfigSchema.parse({})),
+  telemetry: telemetryConfigSchema.default(telemetryConfigSchema.parse({})),
 });
 
 export type WebVectorFileConfig = z.infer<typeof webVectorFileConfigSchema>;

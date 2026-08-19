@@ -137,6 +137,7 @@ async function embedChunks(
     ch.vector = vectors[i];
     cache.set(embedder.model, ch.metadata.contentHash, 'document', vectors[i] as Float32Array);
   });
+  cache.flush(); // write-through to the persistent layer in one transaction
   stats.batches++;
 }
 

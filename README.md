@@ -175,11 +175,12 @@ Runnable versions of each are in [`examples/`](examples).
 ```bash
 npm i -g webvector-cli          # or keep using npx -y webvector-cli …
 
-webvector search "query" [-k 8] [-p 12] [--provider brave] [--embeddings openai] [--rerank local] [--json|--md] [--stats]
-webvector fetch <url> [--query "…"]     # one page as Markdown, or just the passages relevant to --query
+webvector search "query" [-k 8] [-p 12] [--provider brave] [--embeddings openai] [--rerank local] [--json|--md] [--stats] [--max-age 2h|--no-cache|--cache-only]
+webvector fetch <url> [--query "…"]     # one page as Markdown, or just the passages relevant to --query (same cache flags)
 webvector serp "query"                  # search results only
-webvector doctor [--live]               # config, dependencies, provider connectivity, active tier
-webvector init                          # writes webvector.config.yaml + .env.example
+webvector doctor [--live] [--fix] [--json]   # config, dependencies, runtime (node:sqlite / SSRF guard), cache + store paths, local model presence
+webvector cache stats|ls|clear|prune --older-than 7d   # the persistent page/embedding cache (~/.cache/webvector/pages.sqlite)
+webvector init [--yes]                  # writes webvector.config.yaml (+ .env.example); interactive on a TTY
 webvector config                        # print resolved config (secrets redacted)
 webvector providers                     # every provider and the env var it reads
 webvector mcp [--http]                  # run the MCP server
@@ -200,7 +201,7 @@ Upgrade any time: `npm i @huggingface/transformers` next to the package, or set 
 
 Precedence: **code** → **config file** → **environment variables** → **defaults**. Config files: `webvector.config.{ts,js,mjs,json,yaml,yml}`, `.webvectorrc`, or a `webvector` key in `package.json`, found by walking up from the working directory. `${VAR}` / `${VAR:-default}` inside values are filled from the environment.
 
-`webvector init` writes a commented starter; here are the knobs people actually change:
+`webvector init` writes a commented starter (with a JSON-Schema modeline for editor completions); here are the knobs people actually change:
 
 ```yaml
 search:
@@ -287,8 +288,8 @@ WebVector fetches URLs chosen by a search engine — i.e. content an attacker ca
 - **Caps** on redirects (5), response size (5 MB), per-request time (15 s) and whole-run deadline (45 s); bounded concurrency globally and per host.
 - **Etiquette**: robots.txt honoured (incl. `Crawl-delay` and [Content Signals](https://contentsignals.org) — `ai-input=no` is refused by default), identifiable User-Agent, per-host minimum interval, `Retry-After` respected; anti-bot challenge pages are recognised and never retried.
 - **Parsing without execution**: HTML is parsed with linkedom (no scripts, no sub-resource loading), PDFs with pdf.js in no-eval mode; callers only ever receive Markdown/plain text with control characters stripped.
-- **Secrets**: read from env/config, never logged; redacted in errors, in `webvector config`, and in the MCP `webvector_status` tool. Nothing is written to disk unless you enable the page cache directory.
-- **No telemetry, ever.**
+- **Secrets**: read from env/config, never logged; redacted in errors, in `webvector config`, and in the MCP `webvector_status` tool. The only files written are the page/embedding cache (`~/.cache/webvector/pages.sqlite`, set `ingestion.cache.dir: false` to keep everything in memory) and, if you choose `store.provider: sqlite`, the vector store (`~/.local/share/webvector/store.sqlite`).
+- **No telemetry, ever.** (Opt-in OpenTelemetry *spans* via `telemetry.otel` go only to an SDK *you* register — nothing is bundled or sent by WebVector.)
 - **MCP over HTTP** binds to `127.0.0.1` only, validates `Host`/`Origin` (DNS-rebinding protection), supports a bearer token, and refuses to bind elsewhere without `--allow-remote` **and** a token.
 - **DNS rebinding is closed at connect time**: the SSRF check runs inside the DNS lookup used to open the socket, so the address checked is the address dialled.
 - **DuckDuckGo note**: the keyless provider talks to DuckDuckGo's public HTML endpoints with a browser-like User-Agent (there is no official API). It is rate-limited and fragile by nature; heavy or commercial use should switch to a keyed provider (`brave`, `serper`, `tavily`). Page fetches always use the honest `WebVector/…` User-Agent.

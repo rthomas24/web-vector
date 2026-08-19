@@ -137,7 +137,9 @@ export class Fetcher {
   /**
    * Fetch a URL honouring all guards. Throws WebVectorError with a per-URL failure code.
    * URL hygiene runs first (redirect wrappers unwrapped, AMP/mobile variants folded, `#:~:text=`
-   * preserved as `textFragment`); `FetchedResource.url` is the cleaned URL.
+   * preserved as `textFragment`); `FetchedResource.url` is the cleaned URL. `init.headers` adds
+   * per-request headers (conditional revalidation: If-None-Match / If-Modified-Since); a 304 is
+   * then returned as a resource with `status: 304` and empty bytes.
    */
   async fetch(url: string, signal?: AbortSignal, init: FetchInit = {}): Promise<FetchedResource> {
     const cleaned = cleanUrl(url);
@@ -276,6 +278,20 @@ export class Fetcher {
         });
       }
 
+      if (res.status === 304 && extraHeaders) {
+        // Conditional request: the cached copy is still valid; caller reuses it.
+        await drain(res);
+        return {
+          url: startUrl,
+          finalUrl: current,
+          status: 304,
+          contentType: '',
+          bytes: new Uint8Array(),
+          ms: Date.now() - t0,
+          redirects,
+          headers: res.headers,
+        };
+      }
       if (res.status >= 300 && res.status < 400) {
         const loc = res.headers.get('location');
         await drain(res);

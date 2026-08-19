@@ -23,18 +23,20 @@ import {
   type WebVectorConfig,
   type WebVectorFileConfig,
 } from '../config/index.js';
-import { EmbeddingCache } from '../embeddings/base.js';
 import { WebVectorError } from '../errors.js';
 import {
   approxTokens,
   assessProviderContent,
   type CachedPage,
+  type CachePolicy,
   decodeBytes,
   documentFromProviderContent,
   ingestUrl,
   parseResource,
 } from '../ingest/index.js';
+import { hostOf } from '../telemetry/otel.js';
 import type {
+  CacheMode,
   Failure,
   Logger,
   ParsedDocument,
@@ -48,10 +50,12 @@ import type {
   SearchResult,
   SourceSummary,
   Stage,
+  UsageStats,
 } from '../types.js';
+import { UsageMeter } from '../usage/meter.js';
+import { estimateCostUsd, PRICING_NOTE, resolvePricing } from '../usage/pricing.js';
 import { settleWithDeadline } from '../util/concurrency.js';
 import { TypedEmitter, type WebVectorEvents } from '../util/events.js';
-import { sha256 } from '../util/hash.js';
 import { createLogger } from '../util/logger.js';
 import { canonicalizeUrl } from '../util/url.js';
 import { buildComponents, type Components } from './components.js';
@@ -87,7 +91,6 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   readonly codeConfig: WebVectorConfig;
   readonly logger: Logger;
   private components?: Promise<Components>;
-  private readonly embeddingCache = new EmbeddingCache();
   private closed = false;
 
   constructor(
@@ -131,6 +134,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const c = await this.components?.catch(() => undefined);
     c?.sessions.clear();
     await c?.sharedStore?.close?.();
+    c?.embeddingCache.flush();
+    c?.pageCache.database?.close();
     this.removeAllListeners();
   }
 
@@ -153,23 +158,15 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   }
 
   /**
-   * Fetch + parse one URL with the same guards as the pipeline. With `selector` /
-   * `excludeSelectors` / `includeLinks` the raw HTML is fetched (page cache bypassed) and the DOM
-   * is filtered before conversion; `links` is filled when requested.
+   * Fetch + parse one URL with the same guards as the pipeline (page cache with per-call policy,
+   * single-flight). With `selector` / `excludeSelectors` / `includeLinks` the raw HTML is fetched
+   * (page cache bypassed) and the DOM is filtered before conversion; `links` is filled when requested.
    */
   async fetch(url: string, opts: FetchOptions = {}): Promise<FetchedDocument> {
     const c = await this.ensure();
     const wantsRaw = !!(opts.selector || opts.excludeSelectors?.length || opts.includeLinks);
     if (!wantsRaw) {
-      const outcome = await ingestUrl(url, {
-        fetcher: c.fetcher,
-        parsers: c.parsers,
-        cache: opts.useCache === false ? undefined : c.pageCache,
-        logger: this.logger,
-        signal: opts.signal,
-        fastPaths: this.config.ingestion.fastPaths,
-        archiveFallback: this.config.ingestion.archiveFallback,
-      });
+      const outcome = await this.fetchOutcome(url, opts);
       if (!outcome.ok || !outcome.page) throw failureError(outcome.failure as Failure);
       return outcome.page.doc;
     }
@@ -212,25 +209,69 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     return out;
   }
 
+  /** ingestUrl through the page cache (per-call policy) and the single-flight coordinator. */
+  private async fetchOutcome(url: string, opts: FetchOptions) {
+    const c = await this.ensure();
+    const policy = cachePolicyOf(opts);
+    const canonical = canonicalizeUrl(url);
+    return c.coordinator.ingest(
+      canonical,
+      () =>
+        ingestUrl(url, {
+          fetcher: c.fetcher,
+          parsers: c.parsers,
+          cache: opts.useCache === false ? undefined : c.pageCache,
+          cachePolicy: policy,
+          logger: this.logger,
+          signal: opts.signal,
+          fastPaths: this.config.ingestion.fastPaths,
+          archiveFallback: this.config.ingestion.archiveFallback,
+        }),
+      { bypassNegative: policy?.mode === 'bypass' },
+    );
+  }
+
   /** Fetch one URL and return only the passages relevant to `query`. */
   async fetchAndRetrieve(
     url: string,
     query: string,
-    opts: { topK?: number; signal?: AbortSignal; explain?: boolean } = {},
+    opts: FetchOptions & { topK?: number; explain?: boolean } = {},
   ): Promise<ResearchResult> {
     const c = await this.ensure();
+    const meter = this.newMeter(c);
+    return meter.run(() => this.doFetchAndRetrieve(c, meter, url, query, opts));
+  }
+
+  private async doFetchAndRetrieve(
+    c: Components,
+    meter: UsageMeter,
+    url: string,
+    query: string,
+    opts: FetchOptions & { topK?: number; explain?: boolean },
+  ): Promise<ResearchResult> {
     const t0 = Date.now();
-    const doc = await this.fetch(url, { signal: opts.signal });
+    const outcome = await this.fetchOutcome(url, opts);
+    if (!outcome.ok || !outcome.page) {
+      const f = outcome.failure as Failure;
+      throw new WebVectorError(f.message, {
+        code: f.code as WebVectorError['code'],
+        stage: 'ingest',
+      });
+    }
+    const page = outcome.page;
+    const doc = page.doc;
+    this.countHttp(meter, outcome);
     const session = ephemeralSession(undefined, c.bm25Options);
     if (c.embedder) await session.store.init?.(c.dimensions, c.embedder.model);
-    const { chunks, stats } = await ingestDocument(c, this.embeddingCache, {
+    const { chunks, stats } = await ingestDocument(c, c.embeddingCache, {
       doc,
-      page: { pageHash: sha256(doc.markdown), fetchedAt: new Date().toISOString() },
+      page,
       query,
       session,
       chunking: this.chunkingOptions(),
       signal: opts.signal,
     });
+    meter.usage.embed.cached += stats.cached;
     const warnings: string[] = [];
     const r = await runRetrieveStage(c, this.config.retrieval, {
       session,
@@ -250,21 +291,35 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         {
           url: doc.url,
           title: doc.title,
-          status: 'ok',
+          status: outcome.cached ? 'cached' : 'ok',
           chunks: chunks.length,
           passageIndices: r.passages.map((p) => p.index),
           searchRank: 1,
           contentType: doc.contentType,
+          fetchedAt: page.fetchedAt,
+          bytes: page.bytes,
+          fromCache: !!outcome.cached,
+          revalidated: !!outcome.revalidated,
         },
       ],
       failures: [],
       stats: {
         search: { provider: 'none', attempts: [], resultCount: 0, ms: 0 },
-        ingest: { requested: 1, fetched: 1, ok: 1, failed: 0, cached: 0, bytes: 0, ms: 0 },
+        ingest: {
+          requested: 1,
+          fetched: outcome.cached ? 0 : 1,
+          ok: 1,
+          failed: 0,
+          cached: outcome.cached ? 1 : 0,
+          bytes: page.bytes,
+          ms: outcome.ms,
+        },
         embed: this.embedStats(c, stats),
         retrieve: { candidates: r.candidates, queries: 1, reranked: r.reranked, ms: 0 },
         totalMs: Date.now() - t0,
         warnings,
+        http: meter.usage.http,
+        usage: this.finishUsage(meter),
       },
     };
     result.markdown = renderMarkdown(result, this.renderOptions());
@@ -305,10 +360,43 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
       throw new WebVectorError('WebVector instance is closed.', { code: 'INTERNAL' });
     query = query.trim();
     if (!query) throw new WebVectorError('Query must not be empty.', { code: 'INVALID_CONFIG' });
-
-    const t0 = Date.now();
     const c = await this.ensure();
+    const meter = this.newMeter(c);
+    return c.otel.span(
+      'execute_tool webvector_research',
+      {
+        'gen_ai.operation.name': 'execute_tool',
+        'gen_ai.tool.name': 'webvector_research',
+        'gen_ai.tool.type': 'function',
+        'webvector.top_k': opts.topK,
+        'webvector.max_pages': opts.maxPages,
+        'webvector.session_id': opts.sessionId,
+        ...(c.otel.captureContent ? { 'webvector.query': query } : {}),
+      },
+      async (span) => {
+        const res = await meter.run(() => this.doResearch(c, meter, query, opts));
+        span.set({
+          'webvector.passages': res.passages.length,
+          'webvector.sources.ok': res.stats.ingest.ok,
+          'webvector.sources.failed': res.stats.ingest.failed,
+          'webvector.degraded': res.degraded,
+          'webvector.http.requests': res.stats.usage?.http.requests,
+          'webvector.http.cache_hits': res.stats.usage?.http.cacheHits,
+        });
+        return res;
+      },
+    );
+  }
+
+  private async doResearch(
+    c: Components,
+    meter: UsageMeter,
+    query: string,
+    opts: ResearchOptions,
+  ): Promise<ResearchResult> {
+    const t0 = Date.now();
     const cfg = this.config;
+    const cachePolicy = cachePolicyOf(opts);
     // Internal controller so the run deadline really cancels in-flight fetch/parse/embed work.
     const runAbort = new AbortController();
     const signal = opts.signal ? AbortSignal.any([opts.signal, runAbort.signal]) : runAbort.signal;
@@ -328,29 +416,46 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
 
     const session = this.resolveSession(opts.sessionId, c);
     if (c.embedder) await session.store.init?.(c.dimensions, c.embedder.model);
+    if (!session.restored && c.sharedStore && !session.id.startsWith('ephemeral-')) {
+      const n = await c.sessions.restore(session);
+      if (n)
+        this.logger.debug(`session ${session.id}: restored ${n} chunk(s) from ${c.sharedStore.id}`);
+    }
 
     // ── 1. search ────────────────────────────────────────────────────────
     const ts = Date.now();
     progress({ stage: 'search', done: 0, total: 1, message: `Searching: ${query}` });
     this.emit('search:start', { queries: [query, ...related], provider: c.search.id });
-    const searched = await runSearchStage(c, {
-      query: categoryQuery(query, opts.category),
-      related: related.map((q) => categoryQuery(q, opts.category)),
-      maxPages,
-      failures,
-      options: {
-        ...this.defaultSearchOptions(),
-        count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
-        freshness:
-          opts.freshness ?? cfg.search.freshness ?? (opts.category === 'news' ? 'week' : undefined),
-        ...(opts.country ? { country: opts.country } : {}),
-        ...(opts.language ? { language: opts.language } : {}),
-        domainsAllow: opts.domainsAllow,
-        domainsBlock: opts.domainsBlock,
-        signal,
+    const searched = await c.otel.span(
+      `search ${c.search.id}`,
+      { 'webvector.search.provider': c.search.id, 'webvector.search.queries': 1 + related.length },
+      async (span) => {
+        const out = await runSearchStage(c, {
+          query: categoryQuery(query, opts.category),
+          related: related.map((q) => categoryQuery(q, opts.category)),
+          maxPages,
+          failures,
+          options: {
+            ...this.defaultSearchOptions(),
+            count: Math.max(cfg.search.resultsPerQuery, Math.ceil(maxPages * 1.2)),
+            freshness:
+              opts.freshness ??
+              cfg.search.freshness ??
+              (opts.category === 'news' ? 'week' : undefined),
+            ...(opts.country ? { country: opts.country } : {}),
+            ...(opts.language ? { language: opts.language } : {}),
+            domainsAllow: opts.domainsAllow,
+            domainsBlock: opts.domainsBlock,
+            signal,
+          },
+        });
+        span.set({ 'webvector.search.results': out.results.length });
+        return out;
       },
-    });
+      'client',
+    );
     const results = searched.results;
+    meter.usage.search.calls += searched.attempts.length;
     const searchMs = Date.now() - ts;
     stageDone('search', searchMs);
     this.emit('search:complete', { results, ms: searchMs, provider: c.search.id });
@@ -414,7 +519,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           return;
         }
         this.emit('page:start', { url: r.url });
-        const fetched = await this.fetchPage(c, r, signal);
+        const fetched = await this.fetchPage(c, r, signal, cachePolicy, meter);
         if ('failure' in fetched) {
           failures.push(fetched.failure);
           summary.failure = fetched.failure;
@@ -422,7 +527,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           this.emit('page:error', { url: r.url, failure: fetched.failure });
           return;
         }
-        const { page, cachedHit, ms } = fetched;
+        const { page, cachedHit, revalidated, ms } = fetched;
         bytes += page.bytes;
         Object.assign(summary, {
           contentType: page.doc.contentType,
@@ -431,9 +536,11 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
           approxTokens: approxTokens(page.doc.markdown),
           title: page.doc.title || r.title,
           ms,
+          fromCache: cachedHit,
+          revalidated,
         });
 
-        const { chunks, embedded, stats } = await ingestDocument(c, this.embeddingCache, {
+        const { chunks, embedded, stats } = await ingestDocument(c, c.embeddingCache, {
           doc: { ...page.doc, url: r.url },
           page,
           result: r,
@@ -457,6 +564,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         embedTotals.cached += stats.cached;
         embedTotals.batches += stats.batches;
         embedTotals.ms += stats.ms;
+        meter.usage.embed.cached += stats.cached;
         summary.status = cachedHit ? 'cached' : 'ok';
         summary.chunks = chunks.length;
         okPages++;
@@ -552,19 +660,31 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
     const hasChunks =
       session.chunks.size > 0 || (c.sharedStore && (await session.store.size?.()) !== 0);
     if (hasChunks) {
-      const r = await runRetrieveStage(c, cfg.retrieval, {
-        session,
-        // The objective's top terms ride along as an extra low-weight list (expansionWeight);
-        // it is not searched and not reported in result.queries.
-        queries: objectiveQuery ? [...queries, objectiveQuery] : queries,
-        relatedQueries: related,
-        searchResults: results,
-        topK,
-        rerank: opts.rerank,
-        signal,
-        warnings,
-        explain: opts.explain,
-      });
+      const r = await c.otel.span(
+        'retrieval',
+        { 'webvector.retrieve.queries': queries.length, 'webvector.retrieve.top_k': topK },
+        async (span) => {
+          const out = await runRetrieveStage(c, cfg.retrieval, {
+            session,
+            // The objective's top terms ride along as an extra low-weight list (expansionWeight);
+            // it is not searched and not reported in result.queries.
+            queries: objectiveQuery ? [...queries, objectiveQuery] : queries,
+            relatedQueries: related,
+            searchResults: results,
+            topK,
+            rerank: opts.rerank,
+            signal,
+            warnings,
+            explain: opts.explain,
+          });
+          span.set({
+            'webvector.retrieve.candidates': out.candidates,
+            'webvector.retrieve.passages': out.passages.length,
+            'webvector.retrieve.reranked': out.reranked,
+          });
+          return out;
+        },
+      );
       passages = r.passages;
       candidates = r.candidates;
       reranked = r.reranked;
@@ -627,6 +747,8 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         retrieve: { candidates, queries: queries.length, reranked, ms: retrieveMs },
         totalMs: Date.now() - t0,
         warnings,
+        http: meter.usage.http,
+        usage: this.finishUsage(meter),
       },
       degraded,
       degradedReason,
@@ -653,9 +775,12 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   private async fetchPage(
     c: Components,
     r: SearchResult,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    cachePolicy: CachePolicy | undefined,
+    meter: UsageMeter,
   ): Promise<
-    { page: CachedPage; cachedHit: boolean; ms: number } | { failure: Failure; ms: number }
+    | { page: CachedPage; cachedHit: boolean; revalidated: boolean; ms: number }
+    | { failure: Failure; ms: number }
   > {
     const mode = this.config.ingestion.useProviderContent;
     const content = mode && typeof r.extra?.content === 'string' ? r.extra.content : undefined;
@@ -670,6 +795,7 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         return {
           page: documentFromProviderContent(r.url, r.title, content),
           cachedHit: false,
+          revalidated: false,
           ms: 0,
         };
       }
@@ -678,15 +804,40 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         `provider content for ${r.url} rejected (${verdict.reason}, ${verdict.chars} chars); fetching`,
       );
     }
-    const outcome = await ingestUrl(r.url, {
-      fetcher: c.fetcher,
-      parsers: c.parsers,
-      cache: c.pageCache,
-      logger: this.logger,
-      signal,
-      fastPaths: this.config.ingestion.fastPaths,
-      archiveFallback: this.config.ingestion.archiveFallback,
-    });
+    const outcome = await c.otel.span(
+      `fetch ${hostOf(r.url)}`,
+      {
+        'server.address': hostOf(r.url),
+        ...(c.otel.captureContent ? { 'url.full': r.url } : {}),
+      },
+      async (span) => {
+        const o = await c.coordinator.ingest(
+          canonicalizeUrl(r.url),
+          () =>
+            ingestUrl(r.url, {
+              fetcher: c.fetcher,
+              parsers: c.parsers,
+              cache: c.pageCache,
+              cachePolicy,
+              logger: this.logger,
+              signal,
+              fastPaths: this.config.ingestion.fastPaths,
+              archiveFallback: this.config.ingestion.archiveFallback,
+            }),
+          { bypassNegative: cachePolicy?.mode === 'bypass' },
+        );
+        span.set({
+          'webvector.fetch.cache': o.revalidated ? 'revalidated' : o.cached ? 'hit' : 'miss',
+          'webvector.fetch.coalesced': !!o.coalesced,
+          'webvector.fetch.bytes': o.page?.bytes,
+          'webvector.fetch.ok': o.ok,
+          'error.type': o.failure?.code,
+        });
+        return o;
+      },
+      'client',
+    );
+    this.countHttp(meter, outcome);
     if (!outcome.ok || !outcome.page)
       return { failure: outcome.failure as Failure, ms: outcome.ms };
     let page = outcome.page;
@@ -700,7 +851,49 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
         },
       };
     }
-    return { page, cachedHit: !!outcome.cached, ms: outcome.ms };
+    return {
+      page,
+      cachedHit: !!outcome.cached,
+      revalidated: !!outcome.revalidated,
+      ms: outcome.ms,
+    };
+  }
+
+  private newMeter(c: Components): UsageMeter {
+    return new UsageMeter({
+      search: c.search.id,
+      embedProvider: c.embedder?.id ?? 'none',
+      embedModel: c.embedder?.model ?? 'bm25',
+    });
+  }
+
+  /** Attribute one ingest outcome to the call's HTTP counters. */
+  private countHttp(meter: UsageMeter, o: Awaited<ReturnType<typeof ingestUrl>>): void {
+    const h = meter.usage.http;
+    if (o.coalesced) return; // the request belongs to the call that started it
+    if (o.revalidated) {
+      h.requests++;
+      h.notModified++;
+    } else if (o.cached) h.cacheHits++;
+    else if (o.ok || (o.failure && o.failure.code !== 'CACHE_MISS')) {
+      h.requests++;
+      if (o.page) h.bytes += o.page.bytes;
+    }
+  }
+
+  /** Finalise a call's usage: optional cost estimate, then emit `usage`. */
+  private finishUsage(meter: UsageMeter): UsageStats {
+    const u = meter.usage;
+    const pricing = this.config.telemetry.pricing;
+    if (pricing) {
+      const usd = estimateCostUsd(u, resolvePricing(pricing));
+      if (usd !== undefined) {
+        u.estimatedCostUsd = usd;
+        u.pricingNote = PRICING_NOTE;
+      }
+    }
+    this.emit('usage', u);
+    return u;
   }
 
   private resolveSession(sessionId: string | undefined, c: Components): Session {
@@ -755,6 +948,11 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
 
 function failureError(f: Failure): WebVectorError {
   return new WebVectorError(f.message, { code: f.code as WebVectorError['code'], stage: 'ingest' });
+}
+
+function cachePolicyOf(o: { maxAgeMs?: number; cacheMode?: CacheMode }): CachePolicy | undefined {
+  if (o.maxAgeMs === undefined && !o.cacheMode) return undefined;
+  return { maxAgeMs: o.maxAgeMs, mode: o.cacheMode };
 }
 
 /** Degraded output when nothing could be fetched: the search snippets themselves. */

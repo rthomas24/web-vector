@@ -4,7 +4,9 @@ Every option, with its default. Precedence: **code** (`new WebVector({...})`) �
 
 Config files are searched from the working directory: `webvector.config.{ts,js,mjs,cjs,json,yaml,yml}`, `.webvectorrc`, `.webvectorrc.{json,yaml,yml}`, or a `"webvector"` key in `package.json`. JSON/YAML files are also discovered in parent directories; JS/TS files (which are executed) only in the current directory or via an explicit path. `${VAR}` and `${VAR:-default}` inside string values are filled from the environment.
 
-`webvector init` writes a commented starter file; `webvector config` prints the resolved result (secrets redacted); `webvector doctor` validates it.
+`webvector init` writes a commented starter file (interactive on a TTY: search provider ← detected keys, embeddings tier, store, MCP client snippet; `--yes` accepts the detected defaults, `--json` writes JSON); `webvector config` prints the resolved result (secrets redacted); `webvector doctor` validates it.
+
+**Editor support (JSON Schema).** The schema is generated from the zod definitions at build time and shipped in the `webvector` package (`webvector/schema/webvector.config.json`) and at a stable URL: `https://raw.githubusercontent.com/rthomas24/web-vector/main/packages/core/schema/webvector.config.json`. JSON configs may set `"$schema"` to it (ignored at runtime); YAML files get completions with the modeline `# yaml-language-server: $schema=<url>` (both are written by `webvector init`). `webvector config --schema` prints it.
 
 ## search
 
@@ -37,6 +39,7 @@ Code-only: `search.instance` (a `SearchProvider`), `search.fallbackInstances`.
 | `cacheDir` | `~/.cache/webvector/models` | `WEBVECTOR_MODEL_CACHE` | local model files |
 | `dtype` / `device` | `q8` / `cpu` | `WEBVECTOR_EMBEDDINGS_DTYPE` / `WEBVECTOR_EMBEDDINGS_DEVICE` | local only (`fp32`, `coreml`, `cuda`…) |
 | `allowRemoteModels` | `true` | `WEBVECTOR_ALLOW_REMOTE_MODELS` | `false` = fully offline (model must be in `cacheDir`) |
+| `cache` | `true` | — | persist chunk embeddings in the page cache's `pages.sqlite` (key: model + dimensions + dtype + role + content hash) so re-runs and restarts never re-embed the same text; needs `ingestion.cache.dir` (default `auto`) and `node:sqlite`. The in-process cache is always on. Hits show up in `stats.embed.cached` / `stats.usage.embed.cached` |
 | `timeoutMs` | `60000` | — | |
 | `options` | `{}` | — | extra request fields for hosted providers |
 
@@ -46,11 +49,12 @@ Code-only: `embeddings.instance` (an `EmbeddingProvider`, e.g. from `webvector/a
 
 | key | default | env | notes |
 |---|---|---|---|
-| `provider` | `memory` | `WEBVECTOR_STORE_PROVIDER` | `memory` `chroma` `qdrant` `pgvector`; ignored in lexical mode |
-| `mode` | `ephemeral` | `WEBVECTOR_STORE_MODE` | `ephemeral` (per call) · `session` (reuse by `sessionId`, TTL) · `persistent` (external store) |
+| `provider` | `memory` | `WEBVECTOR_STORE_PROVIDER` | `memory` `sqlite` `chroma` `qdrant` `pgvector`; ignored in lexical mode. `sqlite` is the zero-dependency persistent store (see PROVIDERS.md) |
+| `mode` | `ephemeral` | `WEBVECTOR_STORE_MODE` | `ephemeral` (per call) · `session` (reuse by `sessionId`, TTL) · `persistent` (one shared session that survives restarts with `sqlite`/external stores) |
 | `collection` | `webvector` | `WEBVECTOR_STORE_COLLECTION` | table / collection name |
-| `url` / `apiKey` | — | `CHROMA_URL` `QDRANT_URL` `QDRANT_API_KEY` `DATABASE_URL` / `WEBVECTOR_STORE_URL` `WEBVECTOR_STORE_API_KEY` | |
-| `sessionTtlMs` | `1800000` (30 min) | `WEBVECTOR_SESSION_TTL_MS` | |
+| `url` / `apiKey` | — | `WEBVECTOR_SQLITE_STORE` `CHROMA_URL` `QDRANT_URL` `QDRANT_API_KEY` `DATABASE_URL` / `WEBVECTOR_STORE_URL` `WEBVECTOR_STORE_API_KEY` | for `sqlite`, `url` is a file path (default `~/.local/share/webvector/store.sqlite`, `XDG_DATA_HOME` respected) |
+| `sessionTtlMs` | `1800000` (30 min) | `WEBVECTOR_SESSION_TTL_MS` | idle sessions are dropped; persistent stores also expire their rows on disk (the `persistent` session is kept) |
+| `options.vec` | `false` | — | `sqlite` only: load the optional `sqlite-vec` extension and rank in SQL |
 | `maxSessions` | `100` | — | LRU |
 
 Code-only: `store.instance` (a `VectorStore`).
@@ -97,7 +101,10 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `chunkSize` / `chunkOverlap` | `480` / `60` | `WEBVECTOR_CHUNK_SIZE` / `WEBVECTOR_CHUNK_OVERLAP` | tokens |
 | `maxChunksPerPage` / `minChunkChars` | `200` / `100` | — | |
 | `useProviderContent` | `auto` | — | use page text returned by Tavily/Exa instead of fetching: `auto` only when it passes a quality gate (≥ 300 chars, not raw HTML, not truncated at a round provider cap such as 1000/2000/4000/8000 chars mid-sentence or a trailing ellipsis, not mostly links/nav lines) and otherwise fetches the page (`doc.parser: 'provider'` vs `'provider→fetch'`); `true` always trusts it (> 400 chars); `false` never |
-| `cache.enabled` / `cache.ttlMs` / `cache.maxPages` / `cache.dir` | `true` / `900000` / `500` / — | `WEBVECTOR_CACHE_DIR` (sets `dir`) | in-memory page cache; `dir` adds an on-disk cache |
+| `cache.enabled` / `cache.ttlMs` / `cache.maxPages` | `true` / `900000` (15 min) / `500` | — | page cache: in-process LRU (`maxPages`) in front of the disk layer; past `ttlMs` a page is revalidated (ETag / Last-Modified → 304 = hit) or refetched. `0` = never expires. A longer `Cache-Control: max-age` from the origin extends freshness |
+| `cache.dir` | `auto` | `WEBVECTOR_CACHE_DIR` (`auto`, a path, or `false`) | `auto` → `pages.sqlite` in `$XDG_CACHE_HOME/webvector` (`~/.cache/webvector`); a path → `pages.sqlite` there; `false` → memory only. Needs `node:sqlite` (Node ≥ 22.13, feature-detected); explicit dirs fall back to one JSON file per URL without it, `auto` falls back to memory. WAL + busy timeout: several processes (CLI + MCP) can share the file |
+| `cache.maxDiskPages` / `cache.maxDiskBytes` | `20000` / `1073741824` (1 GiB) | — | disk budgets; least-recently-used pages are evicted first (`webvector cache stats\|prune\|clear` to inspect) |
+| `cache.negativeTtlMs` | `15000` | — | remember robots-blocked / SSRF-blocked / 4xx URLs for this long (0 = off) |
 
 ## output / logging
 
@@ -113,6 +120,36 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 
 Code-only: `logger` (`{ debug, info, warn, error }`), `fetch` (custom fetch implementation).
 
+## telemetry
+
+Nothing here sends data anywhere by itself.
+
+| key | default | env | notes |
+|---|---|---|---|
+| `telemetry.pricing` | `false` | `WEBVECTOR_PRICING` | `true` adds `stats.usage.estimatedCostUsd` from a bundled list-price table (an **estimate**, labelled as such via `pricingNote`); an object overrides entries: `{ embed: { 'openai/text-embedding-3-small': 0.02 }, search: { brave: 5 }, rerank: { cohere: 2 } }` (USD per 1M tokens / per 1 000 calls). Table: `docs/pricing.json` |
+| `telemetry.otel` | `false` | `WEBVECTOR_OTEL` | emit OpenTelemetry spans via `@opentelemetry/api` (optional peer: `npm i @opentelemetry/api`); WebVector never registers a provider/exporter, so spans are no-ops until your app sets up an SDK (NodeSDK / NodeTracerProvider with a context manager) |
+| `telemetry.captureContent` | `false` | — | include the query (`webvector.query`) and full URLs (`url.full`) in span attributes; off = counts, hosts and ids only |
+
+Span shape (GenAI semantic conventions, still "Development" upstream): `execute_tool webvector_research` (`gen_ai.operation.name=execute_tool`, `gen_ai.tool.name`) → children `search <provider>`, `fetch <host>` (`server.address`, `webvector.fetch.cache: hit|revalidated|miss`, `error.type`), `embeddings <model>` (`gen_ai.operation.name=embeddings`, `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` ≈ chars/4), `rerank <provider>`, `retrieval` (`webvector.retrieve.*`). Query embeddings nest under `retrieval`.
+
+### `stats.usage` and the `usage` event
+
+Every `research()` / `fetchAndRetrieve()` result carries `stats.usage` (also emitted as `wv.on('usage', …)`):
+`search: { provider, calls }`, `embed: { provider, model, requests, texts, tokens (≈ chars/4), cached }`, `rerank?: { provider, requests, documents }`,
+`http: { requests, bytes, cacheHits, notModified, coalesced, negativeHits }` (also available as `stats.http`), and `estimatedCostUsd` / `pricingNote` when pricing is on.
+`sources[].fromCache` / `sources[].revalidated` say where each page came from. `webvector search --stats` prints a one-line summary.
+
 ## Per-call options (`research(query, opts)` / tool arguments)
 
-`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens`. Numeric limits are capped by the configured values above.
+`relatedQueries` (`related_queries`), `topK` (`top_k`), `maxPages` (`max_pages`), `freshness`, `domainsAllow` (`domains_allow`), `domainsBlock` (`domains_block`), `sessionId` (`session_id`), `signal`, `onProgress`, `rerank`, `markdown`, `maxOutputTokens`, `explain`. Numeric limits are capped by the configured values above.
+
+Cache policy per call (`research()`, `fetch()`, `fetchAndRetrieve()`; CLI `--max-age 2d`, `--no-cache`, `--cache-only`):
+
+| option | effect |
+|---|---|
+| `maxAgeMs` | accept cached pages at most this old — overrides `ingestion.cache.ttlMs` and any `Cache-Control: max-age`; older copies are revalidated (ETag / Last-Modified → 304 reuses the parsed page) or refetched |
+| `cacheMode: 'default'` | cache, revalidate when stale (default) |
+| `cacheMode: 'bypass'` | always fetch (still writes the fresh page and skips the negative cache) |
+| `cacheMode: 'readOnly'` | serve only from the cache, never touch the network; stale copies are fine, misses fail with `CACHE_MISS` (research degrades to search snippets) |
+
+Concurrent identical page fetches (by canonical URL) and searches (provider + query + options) are coalesced into one request (`stats.usage.http.coalesced`); robots-blocked / SSRF-blocked / 4xx URLs are remembered for `ingestion.cache.negativeTtlMs` (default 15 s) so bursts of retries cost nothing.

@@ -1,5 +1,12 @@
 import { EventEmitter } from 'node:events';
-import type { Failure, ParsedDocument, ProgressEvent, SearchResult, Stage } from '../types.js';
+import type {
+  Failure,
+  ParsedDocument,
+  ProgressEvent,
+  SearchResult,
+  Stage,
+  UsageStats,
+} from '../types.js';
 
 export interface WebVectorEvents {
   'search:start': { queries: string[]; provider: string };
@@ -12,6 +19,8 @@ export interface WebVectorEvents {
   stage: { stage: Stage; ms: number };
   progress: ProgressEvent;
   warning: { message: string };
+  /** Emitted once per research()/fetchAndRetrieve() call with the provider/network accounting. */
+  usage: UsageStats;
 }
 
 /** Typed EventEmitter wrapper. */

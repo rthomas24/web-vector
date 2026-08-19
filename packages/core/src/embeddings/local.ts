@@ -142,6 +142,10 @@ export interface LocalEmbeddingsOptions {
 export class LocalEmbeddings implements EmbeddingProvider {
   readonly id = 'local';
   readonly model: string;
+  /** Effective weight dtype (part of the persistent embedding-cache key). */
+  get dtype(): string {
+    return this.opts.dtype ?? this.preset.dtype ?? 'q8';
+  }
   private readonly preset: LocalModelPreset;
   private pipe?: Promise<any>;
   private readonly batchSize: number;

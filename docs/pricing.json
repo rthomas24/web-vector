@@ -1,0 +1,41 @@
+{
+  "$comment": "Approximate public list prices as of 2026-08 used by the opt-in cost ESTIMATE (telemetry.pricing). USD per 1M input tokens (embed) / per 1 000 calls (search, rerank). Not a bill — verify with your provider. Override any entry via telemetry.pricing: { embed: {...}, search: {...}, rerank: {...} }. Generated from packages/core/src/usage/pricing.ts by npm run build.",
+  "asOf": "2026-08",
+  "embed": {
+    "openai/text-embedding-3-small": 0.02,
+    "openai/text-embedding-3-large": 0.13,
+    "openai/text-embedding-ada-002": 0.1,
+    "voyage/voyage-3.5-lite": 0.02,
+    "voyage/voyage-3.5": 0.06,
+    "voyage/voyage-3-large": 0.18,
+    "cohere/embed-v4.0": 0.12,
+    "cohere/embed-english-v3.0": 0.1,
+    "cohere/embed-multilingual-v3.0": 0.1,
+    "mistral/mistral-embed": 0.1,
+    "jina/jina-embeddings-v3": 0.02,
+    "gemini/gemini-embedding-001": 0.15,
+    "local/*": 0,
+    "ollama/*": 0,
+    "none/*": 0
+  },
+  "search": {
+    "duckduckgo": 0,
+    "tavily-keyless": 0,
+    "wikipedia": 0,
+    "searxng": 0,
+    "brave": 5,
+    "serper": 1,
+    "serpapi": 15,
+    "tavily": 8,
+    "exa": 5,
+    "perplexity": 5,
+    "google-cse": 5
+  },
+  "rerank": {
+    "cohere": 2,
+    "voyage": 0.05,
+    "jina": 0.02,
+    "local": 0,
+    "llm": 0
+  }
+}
