@@ -112,6 +112,8 @@ export const retrievalConfigSchema = z.object({
   queryExpansion: z.boolean().default(true),
   maxExpandedQueries: z.number().int().min(0).max(10).default(4),
   hybrid: z.boolean().default(true),
+  /** `rrf` (reciprocal rank fusion, default) or `rsf` (min-max relative score fusion). */
+  fusion: z.enum(['rrf', 'rsf']).default('rrf'),
   rrfK: z.number().min(1).default(60),
   /** Weight of BM25 lists in fusion relative to the original query vector list (1.0). */
   lexicalWeight: z.number().min(0).default(0.5),
@@ -121,6 +123,13 @@ export const retrievalConfigSchema = z.object({
   mmrLambda: z.number().min(0).max(1).default(0.7),
   minScore: z.number().min(-1).max(1).nullable().default(null),
   relativeCutoff: z.number().min(0).max(1).default(0.6),
+  /**
+   * Lexical-mode analogue of `relativeCutoff`: drop chunks whose best BM25 score is below this
+   * fraction of the top hit (0 = off).
+   */
+  lexicalRelativeCutoff: z.number().min(0).max(1).default(0.3),
+  /** Cut the final list after this many score "jumps" (gap > 3× mean gap); 0 = off. */
+  autocut: z.number().int().min(0).default(0),
   nearDuplicateThreshold: z.number().min(0).max(1).default(0.9),
   rerank: z.union([z.boolean(), z.string()]).default(false),
   rerankModel: z.string().optional(),

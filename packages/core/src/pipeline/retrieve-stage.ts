@@ -11,12 +11,14 @@
 import type { WebVectorFileConfig } from '../config/index.js';
 import { WebVectorError } from '../errors.js';
 import {
+  autocut,
   dedupeChunks,
   diversifyBySource,
   minMaxNormalize,
   mmr,
   type Ranked,
   rrf,
+  scoreFusion,
 } from '../retrieval/fusion.js';
 import type { MemoryVectorStore } from '../stores/memory.js';
 import type { Passage, PassageExplain, ScoredChunk, SearchResult } from '../types.js';
@@ -152,8 +154,21 @@ export async function runRetrieveStage(
   }
   if (lists.length === 0) return { passages: [], candidates: 0, reranked: false, lexicalOnly };
 
+  // Best BM25 score per chunk relative to the top of its list (scale-free, like the cosine
+  // `relativeCutoff`; raw BM25 magnitudes vary per query).
+  const lexRel = new Map<string, number>();
+  lists.forEach((l, li) => {
+    if (listKind[li] !== 'bm25' || l.length === 0) return;
+    const top = l[0]!.score || 1;
+    for (const h of l) {
+      const r = h.score / top;
+      if ((lexRel.get(h.id) ?? 0) < r) lexRel.set(h.id, r);
+    }
+  });
+
   // ── fuse ─────────────────────────────────────────────────────────────
-  const fused = rrf(lists, { k: rc.rrfK, weights });
+  const fused =
+    rc.fusion === 'rsf' ? scoreFusion(lists, weights) : rrf(lists, { k: rc.rrfK, weights });
   const matched = new Map<string, Set<string>>();
   lists.forEach((l, li) => {
     for (const h of l) {
@@ -177,7 +192,7 @@ export async function runRetrieveStage(
   }
   const candidates = cands.length;
 
-  // ── filter: cosine cutoffs (only when vectors exist), then near-duplicates ──
+  // ── filter: cosine cutoffs (when vectors exist) or lexical relative cutoff, then near-duplicates ──
   if (!lexicalOnly && cosineBest.size) {
     const top = Math.max(...cands.map((x) => x.score));
     cands = cands.filter((x) => {
@@ -186,13 +201,27 @@ export async function runRetrieveStage(
       if (rc.minScore !== null && cos < rc.minScore) return false;
       return !(rc.relativeCutoff > 0 && top > 0 && cos < rc.relativeCutoff * top);
     });
+  } else if (rc.lexicalRelativeCutoff > 0) {
+    // Lexical mode: drop chunks whose best normalised BM25 score is far below the best hit, so a
+    // query with one good page doesn't pad top-k with noise.
+    cands = cands.filter((x) => (lexRel.get(x.id) ?? 0) >= rc.lexicalRelativeCutoff);
   }
   cands = dedupeChunks(cands, rc.nearDuplicateThreshold);
 
   // ── diversify → rerank → cut ─────────────────────────────────────────
   const poolK = Math.max(topK * 2, rc.rerankTopN);
   let pool = diversifyBySource(cands, rc.maxPerSource, poolK);
-  if (rc.mmr && queryVector && !lexicalOnly) pool = mmr(queryVector, pool, poolK, rc.mmrLambda);
+  if (rc.mmr && pool.length > 1) {
+    if (queryVector && !lexicalOnly && pool.every((p) => p.vector)) {
+      pool = mmr(queryVector, pool, poolK, rc.mmrLambda);
+    } else {
+      // Lexical MMR: relevance = min-max normalised fused score, redundancy = word-3-gram Jaccard.
+      const rel = minMaxNormalize(pool.map((p) => ({ id: p.id, score: p.fused }))).map(
+        (r) => r.score,
+      );
+      pool = mmr(undefined, pool, poolK, rc.mmrLambda, { relevance: rel });
+    }
+  }
   let reranked = false;
   if ((input.rerank ?? !!c.reranker) && c.reranker && pool.length > 1) {
     try {
@@ -220,6 +249,14 @@ export async function runRetrieveStage(
   );
   const normById = new Map(norm.map((n) => [n.id, n.score]));
   cut.sort((a, b) => (normById.get(b.id) ?? 0) - (normById.get(a.id) ?? 0));
+  if (rc.autocut > 0 && cut.length > 1) {
+    const keep = autocut(
+      cut.map((x) => normById.get(x.id) ?? 0),
+      rc.autocut,
+      { minKeep: Math.min(3, cut.length) },
+    );
+    cut.splice(keep);
+  }
 
   const poolRank = new Map(pool.map((p, i) => [p.id, i + 1]));
   const explainFor = (id: string, x: Candidate): PassageExplain => {

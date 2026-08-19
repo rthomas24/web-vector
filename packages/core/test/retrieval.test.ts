@@ -511,3 +511,36 @@ describe('BM25 fields, variants, tokenizer', () => {
     expect(ix.search('fruit')).toEqual([]);
   });
 });
+
+describe('autocut and lexical MMR', () => {
+  it('autocut cuts after a large score jump but keeps minKeep', async () => {
+    const { autocut } = await import('../src/retrieval/fusion.js');
+    expect(autocut([1, 0.98, 0.97, 0.5, 0.49, 0.48], 1)).toBe(3);
+    expect(autocut([1, 0.5, 0.49, 0.48], 1, { minKeep: 3 })).toBe(4); // jump before minKeep is ignored
+    expect(autocut([1, 0.9, 0.8, 0.7], 1)).toBe(4); // no jump
+    expect(autocut([1, 0.98, 0.97, 0.5, 0.49, 0.1], 2, { factor: 2 })).toBe(5);
+    expect(autocut([1, 0.98, 0.97, 0.5, 0.49, 0.1], 2)).toBe(6); // 3× mean gap: no jump qualifies
+  });
+  it('mmr without vectors demotes near-paraphrases using text similarity', async () => {
+    const { mmr } = await import('../src/retrieval/fusion.js');
+    const cands = [
+      {
+        id: 'a',
+        score: 1,
+        text: 'reciprocal rank fusion combines ranked lists using 1 over k plus rank',
+      },
+      {
+        id: 'b',
+        score: 0.95,
+        text: 'reciprocal rank fusion combines ranked lists using 1 over k plus rank today',
+      },
+      {
+        id: 'c',
+        score: 0.9,
+        text: 'bananas grow in warm climates and are a popular fruit worldwide',
+      },
+    ];
+    const out = mmr(undefined, cands, 2, 0.5, { relevance: [1, 0.95, 0.9] });
+    expect(out.map((c) => c.id)).toEqual(['a', 'c']);
+  });
+});

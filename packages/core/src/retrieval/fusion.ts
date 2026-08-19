@@ -53,20 +53,40 @@ export function scoreFusion(
   return [...acc].map(([id, score]) => ({ id, score })).sort((a, b) => b.score - a.score);
 }
 
-/** Maximal Marginal Relevance over candidates that carry vectors; λ=1 → pure relevance. */
-export function mmr<T extends { vector?: Float32Array; score: number }>(
+export interface MmrOptions<T> {
+  /** Relevance per candidate (same order). Defaults to cosine(query, vector) or `score`. */
+  relevance?: number[];
+  /**
+   * Redundancy between two candidates in [0, 1]. Defaults to cosine over vectors when every
+   * candidate has one, else word-3-gram Jaccard over `text` (lexical mode).
+   */
+  similarity?: (a: T, b: T) => number;
+}
+
+/**
+ * Maximal Marginal Relevance: greedily pick argmax λ·rel(i) − (1−λ)·max_j sim(i, j).
+ * Works with vectors (cosine) or without (shingle Jaccard on text). λ=1 → pure relevance.
+ */
+export function mmr<T extends { vector?: Float32Array; score: number; text?: string }>(
   queryVector: Float32Array | undefined,
   cands: T[],
   k: number,
   lambda = 0.7,
+  opts: MmrOptions<T> = {},
 ): T[] {
   if (cands.length <= k || lambda >= 1) return cands.slice(0, k);
   const withVec = cands.every((c) => c.vector);
-  if (!withVec) return cands.slice(0, k);
-  // Relevance and redundancy are both cosine similarities (same scale), so no normalisation.
-  const relN = cands.map((c) =>
-    queryVector ? dot(queryVector, c.vector as Float32Array) : c.score,
-  );
+  const sim =
+    opts.similarity ??
+    (withVec
+      ? (a: T, b: T) => dot(a.vector as Float32Array, b.vector as Float32Array)
+      : (a: T, b: T) => shingleJaccard(a.text ?? '', b.text ?? '', 3));
+  // Relevance and cosine redundancy share a scale; for lexical mode callers pass normalised scores.
+  const relN =
+    opts.relevance ??
+    cands.map((c) =>
+      withVec && queryVector ? dot(queryVector, c.vector as Float32Array) : c.score,
+    );
   const chosen: number[] = [];
   const remaining = new Set(cands.map((_, i) => i));
   while (chosen.length < k && remaining.size) {
@@ -74,11 +94,7 @@ export function mmr<T extends { vector?: Float32Array; score: number }>(
     let bestVal = Number.NEGATIVE_INFINITY;
     for (const i of remaining) {
       let red = 0;
-      for (const j of chosen)
-        red = Math.max(
-          red,
-          dot(cands[i]!.vector as Float32Array, cands[j]!.vector as Float32Array),
-        );
+      for (const j of chosen) red = Math.max(red, sim(cands[i] as T, cands[j] as T));
       const v = lambda * (relN[i] as number) - (1 - lambda) * red;
       if (v > bestVal) {
         bestVal = v;
@@ -89,6 +105,34 @@ export function mmr<T extends { vector?: Float32Array; score: number }>(
     remaining.delete(best);
   }
   return chosen.map((i) => cands[i] as T);
+}
+
+/**
+ * Cut a score-sorted list where the score curve "jumps": a gap larger than `factor` × the mean gap
+ * counts as one jump; the list is cut after `jumps` such jumps. Always keeps `minKeep` items.
+ * Returns the number of items to keep.
+ */
+export function autocut(
+  scores: number[],
+  jumps = 1,
+  opts: { factor?: number; minKeep?: number } = {},
+): number {
+  const n = scores.length;
+  const minKeep = Math.min(opts.minKeep ?? 3, n);
+  if (n <= minKeep || jumps <= 0) return n;
+  const factor = opts.factor ?? 3;
+  const gaps: number[] = [];
+  for (let i = 0; i + 1 < n; i++) gaps.push((scores[i] as number) - (scores[i + 1] as number));
+  const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+  if (!(mean > 0)) return n;
+  let seen = 0;
+  for (let i = 0; i < gaps.length; i++) {
+    if ((gaps[i] as number) > factor * mean) {
+      seen++;
+      if (seen >= jumps && i + 1 >= minKeep) return i + 1;
+    }
+  }
+  return n;
 }
 
 /** Cap chunks per source URL, then round-robin across sources preserving score order within each. */
