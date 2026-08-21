@@ -22,6 +22,8 @@ npx -y webvector-cli search "what changed in the MCP spec in 2026?"
 - Streamable HTTP — Model Context Protocol — <https://…> [1]
 ```
 
+![WebVector CLI demo](docs/webvector-demo.gif)
+
 ## Quick start: MCP server
 
 **Cursor, Claude Code, Claude Desktop, Windsurf, VS Code, Zed** — paste into your MCP config (`mcp.json` / `claude_desktop_config.json` / `.vscode/mcp.json`):
