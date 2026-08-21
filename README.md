@@ -22,6 +22,33 @@ npx -y webvector-cli search "what changed in the MCP spec in 2026?"
 - Streamable HTTP — Model Context Protocol — <https://…> [1]
 ```
 
+![WebVector CLI demo](docs/webvector-demo.gif)
+
+## Quick start: MCP server
+
+**Cursor, Claude Code, Claude Desktop, Windsurf, VS Code, Zed** — paste into your MCP config (`mcp.json` / `claude_desktop_config.json` / `.vscode/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "webvector": {
+      "command": "npx",
+      "args": ["-y", "webvector-mcp"]
+    }
+  }
+}
+```
+
+Or via Claude Code CLI:
+
+```bash
+claude mcp add webvector -- npx -y webvector-mcp
+```
+
+**What you get:** `webvector_research` (one-call web research with citations), `webvector_fetch` (read any URL), `webvector_search` (result list only), `webvector_verify` (citation checker), `webvector_status` (diagnostics). Zero config, no API keys required. Free OSS; you only pay upstream providers you opt into (Brave, Serper, OpenAI embeddings, etc. — DuckDuckGo is the default and requires no key).
+
+**Optional semantic tier:** Add local ONNX embeddings (offline) *or* set `OPENAI_API_KEY` / `VOYAGE_API_KEY` / `GEMINI_API_KEY` — ranking upgrades from BM25 to hybrid automatically.
+
 ## Run it
 
 **MCP server** (Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, Zed …):
@@ -65,6 +92,19 @@ console.log(res.evidence?.level);   // 'strong' | 'weak' | 'none' + suggestedQue
 | **Agent-ready MCP** — namespaced tools, ≤2 KB instructions, concise/detailed output, `depth` presets, `objective`, sessions, `--max-uses` / `--allowed-domains` guardrails, `research` & `verify_claim` prompts; adapters for Anthropic (`search_result` blocks), OpenAI, Vercel AI SDK, LangChain | [`packages/mcp`](packages/mcp/README.md) |
 | **Polite & safe** — robots.txt + `Content-Signal`, per-host pacing, honest UA, SSRF guard, bot-wall detection (never retried), size/time caps, no telemetry, secrets redacted | [`SECURITY.md`](SECURITY.md) |
 | **Measured** — offline eval over 32 recorded cases + 40-fixture extraction corpus run in CI; ranking changes are gated on it | `npm run eval` · [`eval/`](eval/README.md) |
+
+## Why WebVector
+
+| | **WebVector** | Firecrawl | Jina Reader | Tavily / Exa | Playwright / Browserbase | Cursor/Claude WebSearch/WebFetch |
+|---|---|---|---|---|---|---|
+| **Research pipeline** | Search + fetch full pages + rank + cited passages in one call | Manual orchestration of crawl → LLM | Single-page read or search | Search only (no full pages) or API fetch | Manual browser scripting | Search returns snippets; fetch returns full page dump |
+| **Wedge** | The finished research call, not a step | Deep site crawling (we don't) | Clean single-page markdown | Hosted search API (we can use as provider) | JS-heavy SPAs (we detect `PARSE_NEEDS_JS`, need render hook) | Built-in convenience; no ranking or citations |
+| **API keys** | None (DuckDuckGo default); opt into providers | Required | Free tier, then key | Required | Required (+ browser infra) | Built into client (key implicit) |
+| **Runs where** | Local Node process | Hosted service | Hosted service | Hosted service | Local or hosted browser | Client MCP or built-in |
+| **Output** | Ranked cited passages, evidence gate, token budgets | Raw crawled content or LLM-processed | Clean markdown of one page | Search results with snippets | Full page content + JS state | Search snippets or raw HTML/markdown |
+| **Best for** | Agents researching the live web with citations | Crawling entire sites, sitemaps, dynamic content | Reading one clean page | Hosted search when you need a key-based API | SPAs, forms, auth flows, screenshots | Quick built-in search or page fetch |
+
+**Fair comparison:** Firecrawl crawls sites (we don't); Jina Reader excels at single-page markdown (we use markdown-first content negotiation but focus on multi-page research); Tavily/Exa are hosted search we can use as providers; Playwright handles JS-heavy SPAs (we don't, unless you plug in a renderer); Cursor/Claude built-in tools are snippets-or-dump vs our ranked cited passages with evidence gating.
 
 ## Configure
 
