@@ -57,6 +57,13 @@ export interface FetchInit {
   headers?: Record<string, string>;
   /** Override the retry count for this request (fast paths use 0: try once, then fall back). */
   retries?: number;
+  /**
+   * `skip` bypasses the robots.txt check for this one request (SSRF guard, politeness queue,
+   * size caps and bot-wall detection still apply). Reserved for syndication endpoints — RSS/Atom
+   * feeds and public JSON APIs on hosts whose robots.txt addresses page crawlers, not feed
+   * readers (see `markets/sources.ts`). Default `respect`.
+   */
+  robots?: 'respect' | 'skip';
 }
 
 export interface FetchedResource {
@@ -128,6 +135,15 @@ export class Fetcher {
     }
   }
 
+  /**
+   * Raise the minimum spacing between requests to one host (never lowers it). robots.txt
+   * `Crawl-delay` uses the same mechanism; callers with their own knowledge of a host's limits
+   * (e.g. `markets/sources.ts`) declare them here instead of keeping a second queue.
+   */
+  setHostMinInterval(hostname: string, ms: number): void {
+    if (ms > 0) this.hostQueue.setMinInterval(hostname.toLowerCase(), ms);
+  }
+
   /** Raw fetch with the connect-time SSRF dispatcher attached (no redirects, no retries). */
   async guardedFetch(url: string, init: RequestInit = {}): Promise<Response> {
     const dispatcher = await this.dispatcher;
@@ -151,7 +167,7 @@ export class Fetcher {
       resolve: this.opts.resolve,
     });
     let robotsSignal: ContentSignal | undefined;
-    if (this.robots) {
+    if (this.robots && init.robots !== 'skip') {
       const { allowed, crawlDelayMs, contentSignal } = await this.robots.check(url, signal);
       const cap = this.opts.maxCrawlDelayMs ?? 10_000;
       const delay = crawlDelayMs === undefined ? 0 : Math.min(crawlDelayMs, cap);

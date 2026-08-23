@@ -122,6 +122,20 @@ Code-only: `retrieval.reranker`, `retrieval.expander`, `retrieval.llm` (`(prompt
 | `useProviderContent` | `true` | — | use page text returned by Tavily/Exa instead of fetching |
 | `cache.enabled` / `cache.ttlMs` / `cache.maxPages` / `cache.dir` | `true` / `900000` / `500` / — | `WEBVECTOR_CACHE_DIR` (sets `dir`) | in-memory page cache; `dir` adds an on-disk cache |
 
+## markets
+
+Opt-in news / SEC filings / calendar / sentiment / pulse tools (`wv.markets`, MCP `--tools markets`; see [MARKETS.md](MARKETS.md)). Independent of the research pipeline; shares the Fetcher and the page-cache database.
+
+| Key | Default | Notes |
+|---|---|---|
+| `markets.graySources` | `false` | Enable gray sources (Google News RSS, Nasdaq RSS/earnings API, Yahoo chart API) whose robots.txt/terms or browser-UA requirement argue against automated use. |
+| `markets.feedRobots` | `exempt` | `exempt`: syndication feeds on crawler-blocking hosts (Yahoo Finance RSS, Seeking Alpha symbol RSS) are fetched with the robots check skipped for that request only; `respect`: those sources are skipped. |
+| `markets.disableSources` | `[]` | Source ids to switch off (`listMarketSources()` / `wv.markets.status()`). |
+| `markets.contact` | — | Contact declared in the SEC EDGAR User-Agent (`WebVector/<ver> (<contact>)`, required by the fair-access policy). Falls back to `ingestion.contactEmail`. |
+| `markets.deadlineMs` | `12000` | Wall-clock budget for one call (all sources in parallel); slow sources are reported as `timeout`. |
+
+Env: `WEBVECTOR_MARKETS_GRAY_SOURCES`, `WEBVECTOR_MARKETS_FEED_ROBOTS`, `WEBVECTOR_MARKETS_DISABLE_SOURCES`, `WEBVECTOR_MARKETS_CONTACT`, `WEBVECTOR_MARKETS_DEADLINE_MS`.
+
 ## output / logging
 
 | key | default | env | notes |

@@ -1167,6 +1167,53 @@
         }
       },
       "description": "Observability. Nothing here sends data anywhere by itself."
+    },
+    "markets": {
+      "default": {
+        "graySources": false,
+        "feedRobots": "exempt",
+        "disableSources": [],
+        "deadlineMs": 12000
+      },
+      "type": "object",
+      "properties": {
+        "graySources": {
+          "default": false,
+          "type": "boolean",
+          "description": "Enable gray sources (Google News RSS, Nasdaq RSS/earnings API, Yahoo chart API) whose robots.txt/terms argue against automated use. Default false."
+        },
+        "feedRobots": {
+          "default": "exempt",
+          "type": "string",
+          "enum": [
+            "exempt",
+            "respect"
+          ],
+          "description": "exempt (default): syndication feeds on crawler-blocking hosts are fetched with the robots check skipped for that request; respect: those sources are skipped."
+        },
+        "disableSources": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Source ids to switch off (see listMarketSources())."
+        },
+        "contact": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120,
+          "description": "Contact declared in the SEC EDGAR User-Agent (fair-access policy); falls back to ingestion.contactEmail."
+        },
+        "deadlineMs": {
+          "default": 12000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 120000,
+          "description": "Wall-clock budget per markets call (ms)."
+        }
+      },
+      "description": "Markets tools (wv.markets / MCP --tools markets): news, SEC filings, calendar, sentiment, pulse from free keyless sources. Does not affect the research pipeline."
     }
   },
   "additionalProperties": false

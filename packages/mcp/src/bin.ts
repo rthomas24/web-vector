@@ -36,6 +36,8 @@ Usage:
   --user-location US[,en]       search country / language passthrough (env WEBVECTOR_MCP_USER_LOCATION)
   --max-deadline-ms N           cap for per-call deadline_ms
   --tools research,fetch        expose only these tools (research|fetch|search|verify|status; env WEBVECTOR_MCP_TOOLS)
+  --tools research,fetch,markets   add the markets tools: markets = news,filings,calendar,sentiment,pulse
+                                (free keyless finance sources; see docs/MARKETS.md; WEBVECTOR_MARKETS_* env)
 
 Configuration (env or webvector.config.yaml):
   WEBVECTOR_SEARCH_PROVIDER      duckduckgo (default) | brave | serper | tavily | exa | perplexity | searxng | …

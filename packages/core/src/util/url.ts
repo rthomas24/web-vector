@@ -39,6 +39,8 @@ const REDIRECTORS: { host: RegExp; path?: RegExp; params: string[] }[] = [
   { host: /^(www\.|m\.)?youtube\.com$/, path: /^\/redirect$/, params: ['q'] },
   { host: /^(www\.)?linkedin\.com$/, path: /^\/redir\/redirect$/, params: ['url'] },
   { host: /^slack-redir\.net$/, path: /^\/link$/, params: ['url'] },
+  // Bing News RSS links: /news/apiclick.aspx?ref=FexRss&aid=&tid=…&url=<target>&c=…&mkt=en-us
+  { host: /^(www\.)?bing\.com$/, path: /^\/news\/apiclick\.aspx$/, params: ['url'] },
 ];
 
 const AMP_QUERY_PARAMS = new Set(['amp', 'amp_js_v', 'amp_gsa', 'usqp', 'outputtype', 'output']);

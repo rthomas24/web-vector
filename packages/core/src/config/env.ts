@@ -146,6 +146,13 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): WebVectorCo
     logging: {
       level: env.WEBVECTOR_LOG_LEVEL as 'silent' | 'error' | 'warn' | 'info' | 'debug' | undefined,
     },
+    markets: {
+      graySources: bool(env.WEBVECTOR_MARKETS_GRAY_SOURCES),
+      feedRobots: env.WEBVECTOR_MARKETS_FEED_ROBOTS as 'exempt' | 'respect' | undefined,
+      disableSources: list(env.WEBVECTOR_MARKETS_DISABLE_SOURCES),
+      contact: env.WEBVECTOR_MARKETS_CONTACT,
+      deadlineMs: num(env.WEBVECTOR_MARKETS_DEADLINE_MS),
+    },
   };
   return stripUndefined(cfg) as WebVectorConfig;
 }

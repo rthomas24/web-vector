@@ -92,6 +92,7 @@ console.log(res.evidence?.level);   // 'strong' | 'weak' | 'none' + suggestedQue
 | **Agent-ready MCP** — namespaced tools, ≤2 KB instructions, concise/detailed output, `depth` presets, `objective`, sessions, `--max-uses` / `--allowed-domains` guardrails, `research` & `verify_claim` prompts; adapters for Anthropic (`search_result` blocks), OpenAI, Vercel AI SDK, LangChain | [`packages/mcp`](packages/mcp/README.md) |
 | **Polite & safe** — robots.txt + `Content-Signal`, per-host pacing, honest UA, SSRF guard, bot-wall detection (never retried), size/time caps, no telemetry, secrets redacted | [`SECURITY.md`](SECURITY.md) |
 | **Measured** — offline eval over 32 recorded cases + 40-fixture extraction corpus run in CI; ranking changes are gated on it | `npm run eval` · [`eval/`](eval/README.md) |
+| **Markets (opt-in)** — ticker/market news from free feeds (deduped, event-tagged), SEC EDGAR filings + full-text search, macro/Fed/earnings calendar, StockTwits + FINRA short volume, VIX/yields pulse; every source classified open/feed/gray, gray off by default | `wv.markets.news(...)` · MCP `--tools markets` · [`docs/MARKETS.md`](docs/MARKETS.md) |
 
 ## Why WebVector
 
@@ -112,7 +113,7 @@ Zero config works. Otherwise `webvector.config.yaml` (with editor autocomplete v
 
 ## Docs
 
-[Full guide](docs/GUIDE.md) · [Configuration](docs/CONFIGURATION.md) · [Providers](docs/PROVIDERS.md) · [Architecture](docs/ARCHITECTURE.md) · [MCP server](packages/mcp/README.md) · [CLI](packages/cli/README.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Eval](eval/README.md)
+[Full guide](docs/GUIDE.md) · [Configuration](docs/CONFIGURATION.md) · [Providers](docs/PROVIDERS.md) · [Markets](docs/MARKETS.md) · [Architecture](docs/ARCHITECTURE.md) · [MCP server](packages/mcp/README.md) · [CLI](packages/cli/README.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Eval](eval/README.md)
 
 ## Develop
 

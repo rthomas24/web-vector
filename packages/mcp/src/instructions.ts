@@ -49,7 +49,14 @@ export interface InstructionsOptions {
   /** Include the session sentence (default true). */
   sessions?: boolean;
   /** Which tools are exposed (sentences for missing tools are dropped). */
-  tools?: { research?: boolean; fetch?: boolean; search?: boolean; verify?: boolean };
+  tools?: {
+    research?: boolean;
+    fetch?: boolean;
+    search?: boolean;
+    verify?: boolean;
+    /** Any of the markets tools (news/filings/calendar/sentiment/pulse) — adds one routing line. */
+    markets?: boolean;
+  };
 }
 
 /** Build the server instructions for the active tier. Always ≤ MAX_INSTRUCTIONS_BYTES. */
@@ -74,6 +81,10 @@ export function buildInstructions(opts: InstructionsOptions = {}): string {
   if (t.verify)
     which.push(
       'webvector_verify before finalising an answer that cites [n] passages (flags unsupported sentences and numbers not in the source).',
+    );
+  if (t.markets)
+    which.push(
+      'Markets: webvector_news (headlines per ticker / briefing), webvector_filings (SEC EDGAR), webvector_calendar (macro/Fed/earnings), webvector_sentiment (StockTwits + short volume), webvector_pulse (VIX, yields, indices) — one targeted call, then decide; read a story/filing with webvector_fetch.',
     );
   which.push('webvector_status for config/tier debugging.');
   lines.push(`Which tool: ${which.join(' ')}`);

@@ -69,6 +69,10 @@
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
     },
+    "./markets": {
+      "types": "./dist/markets/index.d.ts",
+      "default": "./dist/markets/index.js"
+    },
     "./ai-sdk": {
       "types": "./dist/integrations/ai-sdk.d.ts",
       "default": "./dist/integrations/ai-sdk.js"

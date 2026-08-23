@@ -5,7 +5,7 @@
  * `user_location` knobs on Anthropic's and OpenAI's built-in web tools.
  */
 import { WebVectorError } from '../errors.js';
-import { hostnameOf, matchesDomain } from '../util/url.js';
+import { cleanUrl, hostnameOf, matchesDomain } from '../util/url.js';
 import type { WebFetchInput, WebResearchInput, WebSearchInput } from './tool.js';
 
 export interface UserLocation {
@@ -90,11 +90,20 @@ export class ToolGuard {
 
   /** Throws DOMAIN_NOT_ALLOWED when a URL to fetch is outside the policy. */
   assertUrlAllowed(url: string): void {
-    const host = hostnameOf(url);
     const { allowedDomains, blockedDomains } = this.opts;
-    const blocked =
-      matchesDomain(host, blockedDomains) ||
-      (allowedDomains?.length && !matchesDomain(host, allowedDomains));
+    if (!blockedDomains?.length && !allowedDomains?.length) return;
+    // Check the host as given AND the host the fetcher will actually contact after URL hygiene
+    // (redirect wrappers such as google.com/url?q= or bing.com/news/apiclick.aspx?url= are
+    // unwrapped before fetching, so the policy must apply to the unwrapped target too).
+    const hosts = new Set([hostnameOf(url), hostnameOf(cleanUrl(url).url)]);
+    let host = '';
+    const blocked = [...hosts].some((h) => {
+      host = h;
+      return (
+        matchesDomain(h, blockedDomains) ||
+        (allowedDomains?.length && !matchesDomain(h, allowedDomains))
+      );
+    });
     if (blocked) {
       throw new WebVectorError(`Fetching ${host} is not allowed by this server's domain policy.`, {
         code: DOMAIN_NOT_ALLOWED as WebVectorError['code'],

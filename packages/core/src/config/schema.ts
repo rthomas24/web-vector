@@ -485,6 +485,35 @@ export const telemetryConfigSchema = z.object({
   captureContent: z.boolean().default(false),
 });
 
+/**
+ * `markets` — news / SEC filings / calendar / sentiment / pulse tools (`wv.markets`, MCP
+ * `--tools markets`). Sources are classified open | feed | gray in `markets/sources.ts`; only
+ * gray ones need an opt-in here. Nothing in this section changes the research pipeline.
+ */
+export const marketsConfigSchema = z.object({
+  /**
+   * Enable gray sources (Google News RSS, Nasdaq RSS/earnings API, Yahoo chart API): keyless and
+   * widely used, but their robots.txt/terms or a browser-UA requirement argue against automated
+   * use. Off by default; turn on only where you accept those terms.
+   */
+  graySources: z.boolean().default(false),
+  /**
+   * Feed endpoints (Yahoo Finance RSS, Seeking Alpha symbol RSS) live on hosts whose robots.txt
+   * is a blanket Disallow aimed at page crawlers. `exempt` (default) fetches these syndication
+   * URLs with the robots check skipped for that request only; `respect` skips the sources.
+   */
+  feedRobots: z.enum(['exempt', 'respect']).default('exempt'),
+  /** Source ids to switch off (see `listMarketSources()` / `webvector_status`). */
+  disableSources: z.array(z.string()).default([]),
+  /**
+   * Contact declared in the User-Agent on SEC EDGAR requests (`WebVector/<ver> (<contact>)`) — the
+   * SEC fair-access policy requires one. Falls back to `ingestion.contactEmail`.
+   */
+  contact: z.string().min(3).max(120).optional(),
+  /** Wall-clock budget for one markets call (all sources in parallel), ms. */
+  deadlineMs: z.number().int().min(1000).max(120_000).default(12_000),
+});
+
 export const webVectorFileConfigSchema = z.object({
   search: searchConfigSchema.default(searchConfigSchema.parse({})),
   embeddings: embeddingsConfigSchema.default(embeddingsConfigSchema.parse({})),
@@ -494,6 +523,7 @@ export const webVectorFileConfigSchema = z.object({
   output: outputConfigSchema.default(outputConfigSchema.parse({})),
   logging: loggingConfigSchema.default(loggingConfigSchema.parse({})),
   telemetry: telemetryConfigSchema.default(telemetryConfigSchema.parse({})),
+  markets: marketsConfigSchema.default(marketsConfigSchema.parse({})),
 });
 
 export type WebVectorFileConfig = z.infer<typeof webVectorFileConfigSchema>;

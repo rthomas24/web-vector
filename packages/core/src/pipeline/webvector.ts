@@ -35,6 +35,7 @@ import {
   parseResource,
 } from '../ingest/index.js';
 import { RenderBudget, type RenderHook } from '../ingest/render.js';
+import { Markets } from '../markets/index.js';
 import { assessEvidence } from '../retrieval/evidence.js';
 import { sourcesFromPassages, type VerifyResult, verifyCitations } from '../retrieval/verify.js';
 import { hostOf } from '../telemetry/otel.js';
@@ -129,6 +130,28 @@ export class WebVector extends TypedEmitter<WebVectorEvents> {
   }
 
   // ─── lifecycle ─────────────────────────────────────────────────────────
+
+  /**
+   * Markets tools (news, SEC filings, calendar, sentiment, pulse) sharing this instance's
+   * Fetcher, politeness queues and SQLite cache. Lazy; independent of the research pipeline.
+   */
+  get markets(): Markets {
+    if (!this.marketsApi) {
+      this.marketsApi = new Markets({
+        fetcher: async () => (await this.ensure()).fetcher,
+        db: async () => (await this.ensure()).pageCache.database,
+        policy: this.config.markets,
+        contactEmail: this.config.ingestion.contactEmail,
+        logger: this.logger,
+        readPage: async (url, signal) => {
+          const doc = await this.fetch(url, { signal });
+          return doc.markdown;
+        },
+      });
+    }
+    return this.marketsApi;
+  }
+  private marketsApi?: Markets;
 
   /** Build providers eagerly (loads local models, connects stores). research() does this lazily. */
   async init(): Promise<void> {

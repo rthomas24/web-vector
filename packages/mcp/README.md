@@ -22,6 +22,18 @@ Claude Desktop, Cursor, Windsurf, VS Code (`.vscode/mcp.json` uses `servers`), Z
 | `webvector_verify` | before finalising an answer with `[n]` citations | `answer`, `session_id` or `passages` → verbatim / paraphrase / unsupported per sentence, numbers not in source |
 | `webvector_status` | diagnostics | — |
 
+**Markets tools (opt-in, `--tools research,fetch,markets`; see [MARKETS.md](https://github.com/rthomas24/web-vector/blob/main/docs/MARKETS.md))** — free, keyless finance sources classified open / feed / gray (gray off unless `WEBVECTOR_MARKETS_GRAY_SOURCES=1`):
+
+| Tool | Use it when | Key args |
+|---|---|---|
+| `webvector_news` | "why is X moving", what happened since the last run, a market briefing — headlines deduped across feeds, event-tagged, newest first | `symbols` (≤5) or `query`, `hours`, `limit`, `read` (bodies of the top N), `include_market` |
+| `webvector_filings` | SEC EDGAR: recent filings for a ticker (8-K items decoded, Form 4, S-3/424B…) or full-text search | `symbol` / `cik` or `query`, `forms`, `days`, `limit` |
+| `webvector_calendar` | scheduled macro prints (ET), recent Fed releases, earnings dates (gray Nasdaq source) | `days`, `impact`, `countries`, `symbols`, `include_fed` |
+| `webvector_sentiment` | StockTwits bull/bear skew + FINRA short-sale volume share | `symbol`, `top`, `short_volume` |
+| `webvector_pulse` | VIX, Treasury yields, fed funds; index/ETF quotes with the gray Yahoo source | `symbols`, `fred_series`, `basket` |
+
+Set `WEBVECTOR_CONTACT_EMAIL` (or `WEBVECTOR_MARKETS_CONTACT`) — SEC EDGAR requires a declared contact in the User-Agent.
+
 Prompts: `research(topic, focus?)` and `verify_claim(claim, context?)` (`/mcp__webvector__research …` in Claude Code). Server `instructions` (≤ 2 KB) tell the model when to use which tool and how to phrase queries for the active tier.
 
 ## What the model gets
@@ -43,7 +55,8 @@ Prompts: `research(topic, focus?)` and `verify_claim(claim, context?)` (`/mcp__w
 | `--allowed-domains a,b` / `--blocked-domains a,b` (`WEBVECTOR_MCP_ALLOWED_DOMAINS` / `…_BLOCKED_DOMAINS`) | applied to search, research and fetch |
 | `--user-location US[,en]` (`WEBVECTOR_MCP_USER_LOCATION`) | search country/language |
 | `--max-tokens`, `--fetch-max-length`, `--default-response-format`, `--structured slim\|full\|off`, `--max-deadline-ms` | output shape and budgets |
-| `--tools research,fetch` | expose a subset |
+| `--tools research,fetch` | expose a subset; add `markets` (= `news,filings,calendar,sentiment,pulse`) for the markets tools |
+| `WEBVECTOR_MARKETS_GRAY_SOURCES=1`, `WEBVECTOR_MARKETS_DISABLE_SOURCES=a,b`, `WEBVECTOR_MARKETS_CONTACT=…` | markets source policy (see MARKETS.md) |
 | `--instructions-file <path>` / `--no-instructions` | replace or drop the server instructions |
 | `--legacy-tool-names` | also register `web_research`/`web_fetch`/`web_search` (pre-0.2 names) for one release |
 | `--http [--port 3333] [--token t]`; `--host 0.0.0.0 --allow-remote --token t` | HTTP mode (loopback by default; a bearer token is required to bind elsewhere) |

@@ -67,6 +67,16 @@ export const CONFIG_DESCRIPTIONS: Record<string, string> = {
     'Remember robots-blocked / SSRF-blocked / 4xx URLs for this long (ms; 0 = off).',
   output: 'Markdown rendering of results.',
   logging: 'Log level for stderr output.',
+  markets:
+    'Markets tools (wv.markets / MCP --tools markets): news, SEC filings, calendar, sentiment, pulse from free keyless sources. Does not affect the research pipeline.',
+  'markets.graySources':
+    'Enable gray sources (Google News RSS, Nasdaq RSS/earnings API, Yahoo chart API) whose robots.txt/terms argue against automated use. Default false.',
+  'markets.feedRobots':
+    'exempt (default): syndication feeds on crawler-blocking hosts are fetched with the robots check skipped for that request; respect: those sources are skipped.',
+  'markets.disableSources': 'Source ids to switch off (see listMarketSources()).',
+  'markets.contact':
+    'Contact declared in the SEC EDGAR User-Agent (fair-access policy); falls back to ingestion.contactEmail.',
+  'markets.deadlineMs': 'Wall-clock budget per markets call (ms).',
   telemetry: 'Observability. Nothing here sends data anywhere by itself.',
   'telemetry.pricing':
     'true → stats.usage.estimatedCostUsd from a bundled list-price table (an ESTIMATE); an object overrides entries: { embed: { "openai/text-embedding-3-small": 0.02 }, search: { brave: 5 }, rerank: { cohere: 2 } }.',

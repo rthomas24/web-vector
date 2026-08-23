@@ -10,6 +10,7 @@ export default defineConfig({
     'src/ingest/index.ts',
     'src/retrieval/index.ts',
     'src/config/index.ts',
+    'src/markets/index.ts',
     'src/integrations/ai-sdk.ts',
     'src/integrations/anthropic.ts',
     'src/integrations/openai.ts',

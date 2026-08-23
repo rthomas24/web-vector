@@ -22,6 +22,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import {
   DEFAULT_FETCH_MAX_LENGTH,
   LEGACY_TOOL_NAMES,
+  type MarketsToolName,
   type ProgressEvent,
   type ResearchResult,
   type ResponseFormat,
@@ -54,6 +55,7 @@ import {
 } from 'webvector';
 import { z } from 'zod';
 import { buildInstructions, resolveTier, type Tier } from './instructions.js';
+import { expandMarketsGroup, hasMarketsTools, registerMarketsTools } from './markets.js';
 import { registerPrompts } from './prompts.js';
 import { argumentError, errorResult, NO_PASSAGES_HINT, validateDomains } from './results.js';
 
@@ -126,6 +128,9 @@ export interface CreateServerOptions {
     | 'web_research'
     | 'web_fetch'
     | 'web_search'
+    // Markets tools (opt-in; `webvector_markets` — `--tools markets` — expands to all of them).
+    | 'webvector_markets'
+    | MarketsToolName
   )[];
   /**
    * Also register the pre-0.2 tool names (`web_research`, `web_fetch`, `web_search`) as aliases of the
@@ -194,16 +199,17 @@ export function getSharedWebVector(config?: WebVectorConfig): Promise<WebVector>
  */
 export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpServer {
   const tools = new Set(
-    (
+    expandMarketsGroup(
       opts.tools ?? [
         WEB_RESEARCH_TOOL_NAME,
         WEB_FETCH_TOOL_NAME,
         WEB_SEARCH_TOOL_NAME,
         WEBVECTOR_VERIFY_TOOL_NAME,
         WEBVECTOR_STATUS_TOOL_NAME,
-      ]
+      ],
     ).map((t) => LEGACY_TOOL_NAMES[t] ?? t),
   );
+  const hasMarkets = hasMarketsTools(tools);
   const instructions =
     opts.instructions === false
       ? undefined
@@ -215,6 +221,7 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
             fetch: tools.has(WEB_FETCH_TOOL_NAME),
             search: tools.has(WEB_SEARCH_TOOL_NAME),
             verify: tools.has(WEBVECTOR_VERIFY_TOOL_NAME),
+            markets: hasMarkets,
           },
         }));
   const server = new McpServer(
@@ -663,6 +670,17 @@ export function createWebVectorMcpServer(opts: CreateServerOptions = {}): McpSer
       },
     );
   }
+
+  // Markets tools (opt-in) register after the core tools so the default tools/list is unchanged.
+  if (hasMarkets)
+    registerMarketsTools({
+      server,
+      tools,
+      wvp,
+      guard,
+      structured: structured !== 'off',
+      maxTokens: defaultMaxTokens,
+    });
 
   registerPrompts(server, tools);
 
