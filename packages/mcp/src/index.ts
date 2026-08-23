@@ -68,7 +68,7 @@ export {
 export { PROMPTS, registerPrompts } from './prompts.js';
 export { errorResult, hintFor, NO_PASSAGES_HINT, validateDomains } from './results.js';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.3.0';
 
 export type StructuredMode = 'off' | 'slim' | 'full';
 /** `_meta["anthropic/maxResultSizeChars"]` for webvector_fetch (Claude Code caps at 500k). */

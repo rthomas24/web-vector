@@ -8,12 +8,12 @@
     "source": "github",
     "subfolder": "packages/mcp"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "webvector-mcp",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },
@@ -122,6 +122,27 @@
           "isRequired": false,
           "isSecret": false,
           "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_MCP_TOOLS",
+          "description": "Tools to expose, e.g. research,fetch,markets (markets = news, filings, calendar, sentiment, pulse; default: research,fetch,search,verify,status)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_CONTACT_EMAIL",
+          "description": "Contact sent as the From: header and declared in the SEC EDGAR User-Agent (required by the SEC fair-access policy for the markets tools)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "WEBVECTOR_MARKETS_GRAY_SOURCES",
+          "description": "Enable gray markets sources (Google News RSS, Nasdaq, Yahoo chart API) whose robots/terms argue against automated use (default false)",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "boolean"
         }
       ]
     }
