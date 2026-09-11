@@ -268,6 +268,9 @@ describe('WebVector pipeline (mocked)', () => {
   it('reports corroboration across domains, boosts it only when enabled, and orders by date', async () => {
     const shared =
       'Reciprocal rank fusion sums one over k plus rank across lists; the constant k is usually sixty and it dampens the effect of high ranks.';
+    // Dated relative to now so the recency assertion below does not decay as the calendar advances
+    // (30 days old at a 180-day half-life ≈ ×1.27; a fixed date drifted under 1.05 within a year).
+    const recent = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
     server.use(
       http.get('https://rrf.example/intro', () =>
         HttpResponse.html(
@@ -276,7 +279,7 @@ describe('WebVector pipeline (mocked)', () => {
       ),
       http.get('https://fruit.example/banana', () =>
         HttpResponse.html(
-          `<!doctype html><html><head><title>Mirror</title><meta property="article:published_time" content="2025-06-01"></head><body><article><h1>Mirror</h1><p>As the docs put it: ${shared} ${'Different mirror filler words here. '.repeat(8)}</p></article></body></html>`,
+          `<!doctype html><html><head><title>Mirror</title><meta property="article:published_time" content="${recent}"></head><body><article><h1>Mirror</h1><p>As the docs put it: ${shared} ${'Different mirror filler words here. '.repeat(8)}</p></article></body></html>`,
         ),
       ),
       http.get('https://py.example/doc', () =>
@@ -301,7 +304,7 @@ describe('WebVector pipeline (mocked)', () => {
     expect(res.passages[0]!.explain).toBeUndefined();
     await wv.close();
 
-    // Recency: only with a freshness request; the 2025 mirror gets a multiplier, the 2020 page ~1.
+    // Recency: only with a freshness request; the recent mirror gets a multiplier, the 2020 page ~1.
     const wv2 = make({ retrieval: { nearDuplicateThreshold: 1, mmr: false, relativeCutoff: 0 } });
     const r2 = await wv2.research('reciprocal rank fusion constant k', {
       topK: 4,
