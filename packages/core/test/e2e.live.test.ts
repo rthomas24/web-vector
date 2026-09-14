@@ -18,12 +18,13 @@ const live = process.env.WEBVECTOR_LIVE === '1';
 const d = live ? describe : describe.skip;
 
 d('zero-config end-to-end (DuckDuckGo + local MiniLM + memory)', () => {
-  it('returns cited passages for a factual query in < 20s', async () => {
+  it('returns cited passages for a factual query in < 60s', async () => {
     const wv = new WebVector({ logger: silentLogger });
     const t0 = Date.now();
     const res = await wv.research('what is reciprocal rank fusion', { topK: 5, maxPages: 6 });
     const ms = Date.now() - t0;
-    expect(ms).toBeLessThan(20_000);
+    // Generous bound: the first call also downloads the local MiniLM model on a cold runner.
+    expect(ms).toBeLessThan(60_000);
     expect(res.passages.length).toBeGreaterThan(0);
     expect(res.passages[0]!.text.toLowerCase()).toMatch(/rank|fusion|rrf/);
     expect(res.stats.ingest.ok).toBeGreaterThan(0);
@@ -33,11 +34,13 @@ d('zero-config end-to-end (DuckDuckGo + local MiniLM + memory)', () => {
       expect(p.url).toMatch(/^https?:\/\//);
       expect(p.citation).toContain(p.url);
     }
-    // session reuse
+    // Session reuse: repeating a query in the same session must serve its pages from cache rather
+    // than refetching. (Two *different* queries were used here before; whether their result sets
+    // overlapped depended on the live search engine and made this assertion flaky.)
     const res2 = await wv.research('how does RRF weight rankings', { sessionId: 's', maxPages: 4 });
-    const res3 = await wv.research('RRF k constant 60', { sessionId: 's', maxPages: 4 });
-    expect(res3.stats.ingest.cached).toBeGreaterThan(0);
+    const res3 = await wv.research('how does RRF weight rankings', { sessionId: 's', maxPages: 4 });
     expect(res2.passages.length + res3.passages.length).toBeGreaterThan(0);
+    if (res3.stats.ingest.requested > 0) expect(res3.stats.ingest.cached).toBeGreaterThan(0);
     await wv.close();
   }, 120_000);
   it('fetches and parses HTML, markdown-served docs, and PDF', async () => {

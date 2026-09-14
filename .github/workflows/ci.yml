@@ -24,8 +24,11 @@ jobs:
       - run: npm run eval
   live:
     # Real network + local model; runs nightly and on manual dispatch.
+    # Depends on third-party services (DuckDuckGo, Wikipedia, arXiv, model CDN), so a failure here
+    # is reported on the job but does not fail the workflow — the offline `test` job is the gate.
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
